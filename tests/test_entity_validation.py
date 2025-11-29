@@ -19,7 +19,7 @@ class TestEntityValidation:
         )
         
         # Should fail because image is required for non-collections
-        assert response.status_code in [400, 422, 500]  # Validation error
+        assert response.status_code == 422  # Unprocessable Entity - validation error
     
     def test_create_collection_without_image_succeeds(self, client):
         """Test that creating a collection without an image succeeds."""
@@ -52,7 +52,7 @@ class TestEntityValidation:
             )
         
         # Should fail because collections should not have images
-        assert response.status_code in [400, 422, 500]  # Validation error
+        assert response.status_code == 422  # Unprocessable Entity - validation error
     
     def test_update_collection_with_image_fails(self, client, sample_image):
         """Test that updating a collection with an image fails."""
@@ -80,7 +80,7 @@ class TestEntityValidation:
             )
         
         # Should fail because collections should not have images
-        assert update_response.status_code in [400, 422, 500]  # Validation error
+        assert update_response.status_code == 422  # Unprocessable Entity - validation error
     
     def test_cannot_change_is_collection_flag(self, client, sample_image):
         """Test that is_collection cannot be changed after creation."""
@@ -108,7 +108,7 @@ class TestEntityValidation:
         )
         
         # Should fail because is_collection is immutable
-        assert update_response.status_code in [400, 422, 500]  # Validation error
+        assert update_response.status_code == 422  # Unprocessable Entity - validation error
     
     def test_update_non_collection_without_image_succeeds(self, client, sample_image):
         """Test that updating a non-collection without an image succeeds (image is optional for PUT)."""

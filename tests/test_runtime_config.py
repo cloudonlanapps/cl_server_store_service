@@ -151,6 +151,7 @@ class TestAdminConfigAPI:
 class TestJWTUserID:
     """Test that JWT contains user ID in sub field."""
 
+    @pytest.mark.xfail(reason="Integration test not yet implemented - requires authentication service to be running and properly configured to verify JWT contains user.id in 'sub' field")
     def test_jwt_contains_user_id(self):
         """Test that JWT payload contains user ID, not username.
 
@@ -164,6 +165,7 @@ class TestJWTUserID:
         # For now, this is a placeholder to document the requirement
         pass
 
+    @pytest.mark.xfail(reason="Test not yet implemented - requires mocked JWT with user ID to verify added_by and updated_by tracking")
     def test_media_store_receives_user_id(self):
         """Test that media_store correctly receives and uses user ID from JWT.
 

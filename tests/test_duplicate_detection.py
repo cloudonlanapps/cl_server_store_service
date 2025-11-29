@@ -8,8 +8,8 @@ import pytest
 class TestDuplicateDetection:
     """Test MD5-based duplicate detection. Returns existing data, and rejects new upload"""
 
-    def test_duplicate_upload_rejected(self, client, sample_image, clean_media_dir):
-        """Test that uploading the same file twice is rejected."""
+    def test_duplicate_upload_returns_existing_entity(self, client, sample_image, clean_media_dir):
+        """Test that uploading the same file twice returns the existing entity data."""
         # First upload - should succeed
         with open(sample_image, "rb") as f:
             response1 = client.post(
@@ -23,7 +23,7 @@ class TestDuplicateDetection:
         md5_hash = data1["md5"]
         entity_id = data1["id"]
 
-        # Second upload of same file - should be rejected
+        # Second upload of same file - should return existing entity
         with open(sample_image, "rb") as f:
             response2 = client.post(
                 "/entity/",
