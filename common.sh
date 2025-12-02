@@ -127,11 +127,8 @@ run_migrations() {
         # Ensure alembic/versions directory exists (auto-setup for fresh checkouts)
         local versions_dir="$service_path/alembic/versions"
         if [ ! -d "$versions_dir" ]; then
-            echo -e "${YELLOW}[!] Creating alembic versions directory: $versions_dir${NC}"
-            if ! mkdir -p "$versions_dir" 2>/dev/null; then
-                echo -e "${RED}[✗] Failed to create versions directory${NC}"
-                return 1
-            fi
+            echo -e "${RED}[✗] Alembic revision not found. Have you forgot to commit Alembic migrations? ${NC}"
+            return 1
         fi
 
         # Run migrations
@@ -139,6 +136,7 @@ run_migrations() {
             echo -e "${GREEN}[✓] Migrations completed${NC}"
             return 0
         else
+	    # Should we abort? For now we ignore warnings.
             echo -e "${YELLOW}[!] Migration warning (may not be critical)${NC}"
             return 0
         fi
