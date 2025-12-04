@@ -94,7 +94,7 @@ async def create_entity(
     parent_id: Optional[int] = Form(None, title="Parent Id"),
     image: Optional[UploadFile] = File(None, title="Image"),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("media_write_read")),
+    user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
 

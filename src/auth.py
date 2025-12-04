@@ -120,6 +120,7 @@ def require_permission(permission: str):
     Supports all permission types: media_store_read, media_store_write, ai_inference_support, admin.
     Checks if user has the required permission or admin status.
     In demo mode (AUTH_DISABLED=True), always allows access.
+    For media_store_read permission, checks runtime configuration to allow bypass when read auth is disabled.
 
     Usage:
         @app.get("/protected")
@@ -129,10 +130,21 @@ def require_permission(permission: str):
 
     async def permission_checker(
         current_user: Optional[dict] = Depends(get_current_user),
+        db: Session = Depends(get_db),
     ) -> Optional[dict]:
         # Demo mode: bypass permission check
         if AUTH_DISABLED:
             return current_user
+
+        # Check runtime read auth configuration for read permissions
+        if permission == "media_store_read":
+            from .config_service import ConfigService
+            config_service = ConfigService(db)
+            read_auth_enabled = config_service.get_read_auth_enabled()
+            
+            # If read auth is disabled, allow access without authentication
+            if not read_auth_enabled:
+                return current_user
 
         # No user provided but auth is required
         if current_user is None:

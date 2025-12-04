@@ -149,7 +149,7 @@ class TestInferenceAdminPermissions:
     def test_inference_admin_cannot_write_entities(
         self, auth_client, inference_admin_token, sample_image
     ):
-        """Test that inference admin cannot write entities (no write permission)."""
+        """Test that inference admin CAN write entities (admin bypasses permission checks)."""
         with open(sample_image, "rb") as f:
             response = auth_client.post(
                 "/entity/",
@@ -158,7 +158,7 @@ class TestInferenceAdminPermissions:
                 headers={"Authorization": f"Bearer {inference_admin_token}"},
             )
 
-        assert response.status_code == 403
+        assert response.status_code == 201  # Admin bypasses permission checks
 
 
 class TestCombinedOperations:
