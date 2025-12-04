@@ -492,7 +492,7 @@ Authorization: Bearer <token>
 
 #### Job: Create Job
 ```
-POST /api/v1/job/{task_type}
+POST /job/{task_type}
 ```
 
 **Request Body (multipart/form-data):**
@@ -532,7 +532,7 @@ priority: integer (optional, default: 5, range: 0-10) - Job priority level
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8001/api/v1/job/image_resize \
+curl -X POST http://localhost:8001/job/image_resize \
   -H "Authorization: Bearer $TOKEN" \
   -F "upload_files=@photo.jpg" \
   -F "priority=5"
@@ -542,7 +542,7 @@ curl -X POST http://localhost:8001/api/v1/job/image_resize \
 
 #### Job: Get Job Status
 ```
-GET /api/v1/job/{job_id}
+GET /job/{job_id}
 ```
 
 **Response (200):**
@@ -571,14 +571,14 @@ GET /api/v1/job/{job_id}
 **Example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8001/api/v1/job/550e8400-e29b-41d4-a716-446655440000
+  http://localhost:8001/job/550e8400-e29b-41d4-a716-446655440000
 ```
 
 ---
 
 #### Job: Delete Job
 ```
-DELETE /api/v1/job/{job_id}
+DELETE /job/{job_id}
 ```
 
 Deletes the job and all associated files.
@@ -594,7 +594,7 @@ No content returned on success
 
 **Example:**
 ```bash
-curl -X DELETE http://localhost:8001/api/v1/job/550e8400-e29b-41d4-a716-446655440000 \
+curl -X DELETE http://localhost:8001/job/550e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -604,7 +604,7 @@ curl -X DELETE http://localhost:8001/api/v1/job/550e8400-e29b-41d4-a716-44665544
 
 #### Admin: Get Storage Size
 ```
-GET /api/v1/admin/storage/size
+GET /job/admin/storage/size
 ```
 
 Returns total storage usage for all jobs.
@@ -625,14 +625,14 @@ Returns total storage usage for all jobs.
 **Example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8001/api/v1/admin/storage/size
+  http://localhost:8001/job/admin/storage/size
 ```
 
 ---
 
 #### Admin: Cleanup Old Jobs
 ```
-DELETE /api/v1/admin/cleanup
+DELETE /job/admin/cleanup
 ```
 
 Deletes jobs older than specified number of days.
@@ -655,7 +655,7 @@ Deletes jobs older than specified number of days.
 
 **Example:**
 ```bash
-curl -X DELETE "http://localhost:8001/api/v1/admin/cleanup?days=30" \
+curl -X DELETE "http://localhost:8001/job/admin/cleanup?days=30" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

@@ -13,7 +13,7 @@ class TestJobCreation:
     def test_create_job_with_valid_data(self, client, sample_job_data):
         """Test creating a job with valid data."""
         response = client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=sample_job_data,
         )
 
@@ -30,10 +30,12 @@ class TestJobCreation:
         assert "created_at" in data
         assert "updated_at" in data
 
-    def test_create_job_with_external_files(self, auth_client, inference_token, sample_job_data_with_external):
+    def test_create_job_with_external_files(
+        self, auth_client, inference_token, sample_job_data_with_external
+    ):
         """Test creating a job with external file references."""
         response = auth_client.post(
-            "/api/v1/job/video_analysis",
+            "/job/video_analysis",
             data=sample_job_data_with_external,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -46,10 +48,12 @@ class TestJobCreation:
         # External files should be stored
         assert data["external_files"] is not None
 
-    def test_create_high_priority_job(self, auth_client, inference_token, sample_job_data_high_priority):
+    def test_create_high_priority_job(
+        self, auth_client, inference_token, sample_job_data_high_priority
+    ):
         """Test creating a high-priority job."""
         response = auth_client.post(
-            "/api/v1/job/transcoding",
+            "/job/transcoding",
             data=sample_job_data_high_priority,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -60,19 +64,23 @@ class TestJobCreation:
         assert data["task_type"] == "transcoding"
         assert data["priority"] == 10
 
-    def test_create_job_without_authentication_fails(self, auth_client, sample_job_data):
+    def test_create_job_without_authentication_fails(
+        self, auth_client, sample_job_data
+    ):
         """Test that creating a job without authentication fails."""
         response = auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=sample_job_data,
         )
 
         assert response.status_code == 401
 
-    def test_create_job_with_wrong_permission_fails(self, auth_client, write_token, sample_job_data):
+    def test_create_job_with_wrong_permission_fails(
+        self, auth_client, write_token, sample_job_data
+    ):
         """Test that creating a job with wrong permission fails."""
         response = auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {write_token}"},
         )
@@ -88,14 +96,16 @@ class TestJobCreation:
         }
 
         response = auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=invalid_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
         assert response.status_code == 400
 
-    def test_create_job_with_invalid_json_external_files_fails(self, auth_client, inference_token):
+    def test_create_job_with_invalid_json_external_files_fails(
+        self, auth_client, inference_token
+    ):
         """Test that creating a job with invalid JSON in external_files fails."""
         invalid_data = {
             "task_type": "image_processing",
@@ -104,7 +114,7 @@ class TestJobCreation:
         }
 
         response = auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=invalid_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -119,7 +129,7 @@ class TestJobRetrieval:
         """Test retrieving a job by ID."""
         # Create a job
         create_response = auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -130,7 +140,7 @@ class TestJobRetrieval:
 
         # Retrieve the job
         get_response = auth_client.get(
-            f"/api/v1/job/{job_id}",
+            f"/job/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -144,7 +154,7 @@ class TestJobRetrieval:
     def test_get_nonexistent_job_fails(self, auth_client, inference_token):
         """Test retrieving a nonexistent job returns 404."""
         response = auth_client.get(
-            "/api/v1/job/nonexistent-job-id",
+            "/job/nonexistent-job-id",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -152,14 +162,14 @@ class TestJobRetrieval:
 
     def test_get_job_without_authentication_fails(self, auth_client):
         """Test retrieving a job without authentication fails."""
-        response = auth_client.get("/api/v1/job/some-job-id")
+        response = auth_client.get("/job/some-job-id")
 
         assert response.status_code == 401
 
     def test_get_job_with_wrong_permission_fails(self, auth_client, write_token):
         """Test retrieving a job with wrong permission fails."""
         response = auth_client.get(
-            "/api/v1/job/some-job-id",
+            "/job/some-job-id",
             headers={"Authorization": f"Bearer {write_token}"},
         )
 
@@ -173,7 +183,7 @@ class TestJobDeletion:
         """Test deleting a job by ID."""
         # Create a job
         create_response = auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -182,7 +192,7 @@ class TestJobDeletion:
 
         # Delete the job
         delete_response = auth_client.delete(
-            f"/api/v1/job/{job_id}",
+            f"/job/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -190,7 +200,7 @@ class TestJobDeletion:
 
         # Verify job is deleted
         get_response = auth_client.get(
-            f"/api/v1/job/{job_id}",
+            f"/job/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -199,7 +209,7 @@ class TestJobDeletion:
     def test_delete_nonexistent_job_fails(self, auth_client, inference_token):
         """Test deleting a nonexistent job returns 404."""
         response = auth_client.delete(
-            "/api/v1/job/nonexistent-job-id",
+            "/job/nonexistent-job-id",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -207,14 +217,14 @@ class TestJobDeletion:
 
     def test_delete_job_without_authentication_fails(self, auth_client):
         """Test deleting a job without authentication fails."""
-        response = auth_client.delete("/api/v1/job/some-job-id")
+        response = auth_client.delete("/job/some-job-id")
 
         assert response.status_code == 401
 
     def test_delete_job_with_wrong_permission_fails(self, auth_client, write_token):
         """Test deleting a job with wrong permission fails."""
         response = auth_client.delete(
-            "/api/v1/job/some-job-id",
+            "/job/some-job-id",
             headers={"Authorization": f"Bearer {write_token}"},
         )
 
@@ -224,11 +234,13 @@ class TestJobDeletion:
 class TestJobLifecycle:
     """Test the complete lifecycle of a job."""
 
-    def test_job_lifecycle_create_retrieve_delete(self, auth_client, inference_token, sample_job_data):
+    def test_job_lifecycle_create_retrieve_delete(
+        self, auth_client, inference_token, sample_job_data
+    ):
         """Test creating, retrieving, and deleting a job."""
         # Create
         create_response = auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -238,7 +250,7 @@ class TestJobLifecycle:
 
         # Retrieve
         get_response = auth_client.get(
-            f"/api/v1/job/{job_id}",
+            f"/job/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -249,7 +261,7 @@ class TestJobLifecycle:
 
         # Delete
         delete_response = auth_client.delete(
-            f"/api/v1/job/{job_id}",
+            f"/job/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -257,7 +269,7 @@ class TestJobLifecycle:
 
         # Verify deletion
         get_after_delete = auth_client.get(
-            f"/api/v1/job/{job_id}",
+            f"/job/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -269,7 +281,7 @@ class TestJobLifecycle:
 
         for i in range(3):
             response = auth_client.post(
-                "/api/v1/job/image_processing",
+                "/job/image_processing",
                 data=sample_job_data,
                 headers={"Authorization": f"Bearer {inference_token}"},
             )
@@ -280,7 +292,7 @@ class TestJobLifecycle:
         # Verify all jobs can be retrieved
         for job_id in job_ids:
             response = auth_client.get(
-                f"/api/v1/job/{job_id}",
+                f"/job/{job_id}",
                 headers={"Authorization": f"Bearer {inference_token}"},
             )
 
