@@ -7,12 +7,12 @@ import pytest
 
 
 class TestCapabilityEndpoint:
-    """Tests for /jobs/capability endpoint."""
+    """Tests for /compute/jobs/capability endpoint."""
 
     @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
     def test_get_capabilities_returns_dict(self, client):
         """Test that capability endpoint returns dict response."""
-        response = client.get("/jobs/capability")
+        response = client.get("/compute/jobs/capability")
 
         assert response.status_code == 200
         data = response.json()
@@ -21,7 +21,7 @@ class TestCapabilityEndpoint:
     @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
     def test_get_capabilities_aggregates_workers(self, client):
         """Test that capabilities are properly aggregated."""
-        response = client.get("/jobs/capability")
+        response = client.get("/compute/jobs/capability")
 
         assert response.status_code == 200
         data = response.json()
@@ -31,7 +31,7 @@ class TestCapabilityEndpoint:
     @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
     def test_get_capabilities_empty_workers(self, client):
         """Test endpoint returns empty dict when no workers."""
-        response = client.get("/jobs/capability")
+        response = client.get("/compute/jobs/capability")
 
         assert response.status_code == 200
         data = response.json()
@@ -40,7 +40,7 @@ class TestCapabilityEndpoint:
     @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
     def test_get_capabilities_multiple_types(self, client):
         """Test with multiple capability types."""
-        response = client.get("/jobs/capability")
+        response = client.get("/compute/jobs/capability")
 
         assert response.status_code == 200
         data = response.json()
@@ -49,7 +49,7 @@ class TestCapabilityEndpoint:
     @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
     def test_get_capabilities_mqtt_error_returns_empty(self, client):
         """Test that MQTT errors return empty dict gracefully."""
-        response = client.get("/jobs/capability")
+        response = client.get("/compute/jobs/capability")
 
         assert response.status_code == 200
         data = response.json()
@@ -58,7 +58,7 @@ class TestCapabilityEndpoint:
     @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
     def test_get_capabilities_no_auth_required(self, client):
         """Test that capability endpoint doesn't require authentication."""
-        response = client.get("/jobs/capability")
+        response = client.get("/compute/jobs/capability")
         assert response.status_code == 200
 
 
@@ -213,7 +213,7 @@ class TestCapabilityResponseFormat:
 
     def test_response_is_simple_dict(self, client):
         """Test that response is simple dict (not wrapped)."""
-        response = client.get("/jobs/capability")
+        response = client.get("/compute/jobs/capability")
         data = response.json()
 
         # Should be directly a dict, not wrapped
@@ -222,7 +222,7 @@ class TestCapabilityResponseFormat:
     @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
     def test_response_values_are_integers(self, client):
         """Test that all values in response are integers."""
-        response = client.get("/jobs/capability")
+        response = client.get("/compute/jobs/capability")
         data = response.json()
 
         for key, value in data.items():
@@ -231,7 +231,7 @@ class TestCapabilityResponseFormat:
 
     def test_response_includes_all_capabilities(self, client):
         """Test that response includes all discovered capabilities."""
-        response = client.get("/jobs/capability")
+        response = client.get("/compute/jobs/capability")
         data = response.json()
 
         # Verify it's a dict response

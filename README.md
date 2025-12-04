@@ -602,7 +602,7 @@ curl -X DELETE http://localhost:8001/compute/jobs/550e8400-e29b-41d4-a716-446655
 
 #### Admin: Get Storage Size
 ```
-GET /compute/jobs/admin/storage/size
+GET /admin/compute/jobs/storage/size
 ```
 
 Returns total storage usage for all jobs.
@@ -623,14 +623,14 @@ Returns total storage usage for all jobs.
 **Example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8001/compute/jobs/admin/storage/size
+  http://localhost:8001/admin/compute/jobs/storage/size
 ```
 
 ---
 
 #### Admin: Cleanup Old Jobs
 ```
-DELETE /compute/jobs/admin/cleanup
+DELETE /admin/compute/jobs/cleanup
 ```
 
 Deletes jobs older than specified number of days.
@@ -653,7 +653,7 @@ Deletes jobs older than specified number of days.
 
 **Example:**
 ```bash
-curl -X DELETE "http://localhost:8001/compute/jobs/admin/cleanup?days=30" \
+curl -X DELETE "http://localhost:8001/admin/compute/jobs/cleanup?days=30" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

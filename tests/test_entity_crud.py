@@ -132,7 +132,7 @@ class TestEntityCRUD:
         
         # Delete entity
         response = client.delete(f"/entities/{entity_id}")
-        assert response.status_code == 200
+        assert response.status_code == 204
         
         # Verify entity is GONE (Hard Delete)
         response = client.get(f"/entities/{entity_id}")
@@ -188,7 +188,7 @@ class TestEntityCRUD:
         
         # Delete all
         delete_response = client.delete("/entities/")
-        assert delete_response.status_code == 200
+        assert delete_response.status_code == 204
         
         # Verify all deleted
         get_response = client.get("/entities/")

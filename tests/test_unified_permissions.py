@@ -26,7 +26,7 @@ class TestEntityVsJobPermissions:
 
         # Should NOT allow job creation
         job_response = auth_client.post(
-            "/jobs/image_processing",
+            "/compute/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {write_token}"},
         )
@@ -39,7 +39,7 @@ class TestEntityVsJobPermissions:
         """Test that inference permission allows job operations but not entity write."""
         # Should allow job creation
         job_response = auth_client.post(
-            "/jobs/image_processing",
+            "/compute/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -71,7 +71,7 @@ class TestEntityVsJobPermissions:
 
         # Should NOT allow job creation
         job_response = auth_client.post(
-            "/jobs/image_processing",
+            "/compute/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {read_token}"},
         )
@@ -95,7 +95,7 @@ class TestEntityVsJobPermissions:
 
         # Should allow job creation (admin has both permissions)
         job_response = auth_client.post(
-            "/jobs/image_processing",
+            "/compute/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -104,7 +104,7 @@ class TestEntityVsJobPermissions:
 
         # Should allow storage size access
         storage_response = auth_client.get(
-            "/jobs/admin/storage/size",
+            "/admin/compute/jobs/storage/size",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
@@ -119,7 +119,7 @@ class TestInferenceAdminPermissions:
     ):
         """Test that inference admin can access job creation endpoint."""
         response = auth_client.post(
-            "/jobs/image_processing",
+            "/compute/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
@@ -132,7 +132,7 @@ class TestInferenceAdminPermissions:
         """Test that inference admin can access admin endpoints."""
         # Storage size
         storage_response = auth_client.get(
-            "/jobs/admin/storage/size",
+            "/admin/compute/jobs/storage/size",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -140,7 +140,7 @@ class TestInferenceAdminPermissions:
 
         # Cleanup
         cleanup_response = auth_client.delete(
-            "/jobs/admin/cleanup",
+            "/admin/compute/jobs/cleanup",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -181,7 +181,7 @@ class TestCombinedOperations:
 
         # Create job with inference token
         job_response = auth_client.post(
-            "/jobs/image_processing",
+            "/compute/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -198,7 +198,7 @@ class TestCombinedOperations:
 
         # Verify job can still be accessed with inference token
         job_get = auth_client.get(
-            f"/jobs/{job_id}",
+            f"/compute/jobs/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -226,14 +226,14 @@ class TestCombinedOperations:
         }
 
         job_response = client.post(
-            "/jobs/image_processing",
+            "/compute/jobs/image_processing",
             data=job_data,
         )
 
         assert job_response.status_code == 201
 
         # Access admin endpoint
-        storage_response = client.get("/jobs/admin/storage/size")
+        storage_response = client.get("/admin/compute/jobs/storage/size")
 
         assert storage_response.status_code == 200
 
@@ -269,7 +269,7 @@ class TestPermissionHierarchy:
 
         # Should allow job creation
         job_response = auth_client.post(
-            "/jobs/image_processing",
+            "/compute/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {multi_token}"},
         )
@@ -278,7 +278,7 @@ class TestPermissionHierarchy:
 
         # Should NOT allow admin operations (no admin status)
         admin_response = auth_client.get(
-            "/jobs/admin/storage/size",
+            "/admin/compute/jobs/storage/size",
             headers={"Authorization": f"Bearer {multi_token}"},
         )
 
@@ -297,7 +297,7 @@ class TestPermissionHierarchy:
 
         # Should allow job creation (admin override)
         job_response = auth_client.post(
-            "/jobs/image_processing",
+            "/compute/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -317,7 +317,7 @@ class TestPermissionHierarchy:
 
         # Should allow admin operations
         admin_response = auth_client.get(
-            "/jobs/admin/storage/size",
+            "/admin/compute/jobs/storage/size",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 

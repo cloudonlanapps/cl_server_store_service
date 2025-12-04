@@ -446,7 +446,7 @@ async def delete_job(
 
 
 @router.get(
-    "/compute/jobs/admin/storage/size",
+    "/admin/compute/jobs/storage/size",
     tags=["admin"],
     summary="Get Storage Size",
     description="Get total storage usage (admin only).",
@@ -465,7 +465,7 @@ async def get_storage_size(
 
 
 @router.delete(
-    "/compute/jobs/admin/cleanup",
+    "/admin/compute/jobs/cleanup",
     tags=["admin"],
     summary="Cleanup Old Jobs",
     description="Clean up jobs older than specified number of days (admin only).",
