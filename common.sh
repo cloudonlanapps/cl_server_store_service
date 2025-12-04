@@ -102,11 +102,9 @@ setup_venv() {
     if [ ! -d "$venv_path" ]; then
         echo -e "${YELLOW}[!] Virtual environment not found. Creating at: $venv_path${NC}"
         python -m venv "$venv_path"
-        source "$venv_path/bin/activate"
-        pip install -q -e "$service_path" 2>/dev/null || true
-    else
-        source "$venv_path/bin/activate"
     fi
+    source "$venv_path/bin/activate"
+    pip install -q -e "$service_path" 2>/dev/null || true
 }
 
 ################################################################################
