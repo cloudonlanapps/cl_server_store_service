@@ -470,7 +470,7 @@ async def get_job(
     summary="Delete Job",
     description="Delete job and all associated files.",
     operation_id="delete_job_api_v1_job__job_id__delete",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
 )
 async def delete_job(
     job_id: str = Path(..., title="Job ID"),
@@ -480,7 +480,7 @@ async def delete_job(
     """Delete job and all associated files."""
     job_service = service.JobService(db)
     job_service.delete_job(job_id)
-    return None
+    return {}
 
 
 @router.get(
@@ -509,7 +509,7 @@ async def get_storage_size(
     responses={200: {"model": schemas.CleanupResult, "description": "Cleanup results"}},
 )
 async def cleanup_old_jobs(
-    days: int = Query(7, ge=1, description="Delete jobs older than N days"),
+    days: int = Query(7, ge=0, description="Delete jobs older than N days"),
     db: Session = Depends(get_db),
     user: Optional[dict] = Depends(auth.require_permission("admin")),
 ) -> schemas.CleanupResult:
