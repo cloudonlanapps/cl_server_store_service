@@ -479,6 +479,31 @@ async def cleanup_old_jobs(
     return job_service.cleanup_old_jobs(days)
 
 
+@router.get(
+    "/job/capability",
+    summary="Get Worker Capabilities",
+    description="Returns available worker capabilities and their available counts",
+    response_model=dict,
+    operation_id="get_worker_capabilities",
+)
+async def get_worker_capabilities(
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get available worker capabilities and counts from connected workers.
+
+    Returns a dictionary mapping capability names to the number of available
+    (idle) workers that can handle that capability.
+
+    Example response:
+    {
+        "image_resize": 2,
+        "image_conversion": 1
+    }
+    """
+    capability_service = service.CapabilityService(db)
+    return capability_service.get_available_capabilities()
+
+
 class RootResponse(BaseModel):
     status: str
     service: str

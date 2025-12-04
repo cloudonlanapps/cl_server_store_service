@@ -33,6 +33,23 @@ AUTH_DISABLED = os.getenv("AUTH_DISABLED", "false").lower() in ("true", "1", "ye
 # Set READ_AUTH_ENABLED=true to require authentication for read APIs
 READ_AUTH_ENABLED = os.getenv("READ_AUTH_ENABLED", "false").lower() in ("true", "1", "yes")
 
-__all__ = ["CL_SERVER_DIR", "DATABASE_URL", "MEDIA_STORAGE_DIR", "PUBLIC_KEY_PATH", "AUTH_DISABLED", "READ_AUTH_ENABLED"]
+# MQTT broker configuration for worker capability discovery
+MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+CAPABILITY_TOPIC_PREFIX = os.getenv("CAPABILITY_TOPIC_PREFIX", "inference/workers")
+CAPABILITY_CACHE_TIMEOUT = int(os.getenv("CAPABILITY_CACHE_TIMEOUT", "10"))
+
+__all__ = [
+    "CL_SERVER_DIR",
+    "DATABASE_URL",
+    "MEDIA_STORAGE_DIR",
+    "PUBLIC_KEY_PATH",
+    "AUTH_DISABLED",
+    "READ_AUTH_ENABLED",
+    "MQTT_BROKER",
+    "MQTT_PORT",
+    "CAPABILITY_TOPIC_PREFIX",
+    "CAPABILITY_CACHE_TIMEOUT",
+]
 
 

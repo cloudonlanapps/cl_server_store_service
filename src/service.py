@@ -765,3 +765,33 @@ class JobService:
         self.db.commit()
 
         return schemas.CleanupResult(**cleanup_info)
+
+
+class CapabilityService:
+    """Service layer for worker capability management."""
+
+    def __init__(self, db: Session):
+        """Initialize capability service.
+
+        Args:
+            db: SQLAlchemy database session
+        """
+        self.db = db
+
+    def get_available_capabilities(self) -> dict:
+        """Get aggregated available worker capabilities from MQTT.
+
+        Returns:
+            Dict mapping capability names to available idle count
+            Example: {"image_resize": 2, "image_conversion": 1}
+        """
+        from .mqtt_client import get_mqtt_client
+
+        try:
+            mqtt_client = get_mqtt_client()
+            return mqtt_client.get_cached_capabilities()
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error retrieving worker capabilities: {e}")
+            return {}
