@@ -29,11 +29,11 @@ router = APIRouter()
 
 
 @router.get(
-    "/entity/",
+    "/entities",
     tags=["entity"],
     summary="Get Entities",
     description="Retrieves a paginated list of media entities, optionally at a specific version.",
-    operation_id="get_entities_entity__get",
+    operation_id="get_entities",
     responses={
         200: {"model": schemas.PaginatedResponse, "description": "Successful Response"}
     },
@@ -82,11 +82,11 @@ async def get_entities(
 
 
 @router.post(
-    "/entity/",
+    "/entities",
     tags=["entity"],
     summary="Create Entity",
     description="Creates a new entity.",
-    operation_id="create_entity_entity__post",
+    operation_id="create_entity",
     status_code=status.HTTP_201_CREATED,
     responses={201: {"model": schemas.Item, "description": "Successful Response"}},
 )
@@ -128,28 +128,29 @@ async def create_entity(
 
 
 @router.delete(
-    "/entity/",
+    "/entities",
     tags=["entity"],
     summary="Delete Collection",
     description="Deletes the entire collection.",
-    operation_id="delete_collection_entity__delete",
-    responses={200: {"model": None, "description": "Successful Response"}},
+    operation_id="delete_collection",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={204: {"description": "All entities deleted successfully"}},
 )
 async def delete_collection(
     db: Session = Depends(get_db),
     user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
-) -> JSONResponse:
+):
     service = EntityService(db)
     service.delete_all_entities()
-    return JSONResponse(content=None, status_code=status.HTTP_200_OK)
+    # No return statement - FastAPI will return 204 automatically
 
 
 @router.get(
-    "/entity/{entity_id}",
+    "/entities/{entity_id}",
     tags=["entity"],
     summary="Get Entity",
     description="Retrieves a specific media entity by its ID, optionally at a specific version.",
-    operation_id="get_entity_entity__entity_id__get",
+    operation_id="get_entity",
     responses={200: {"model": schemas.Item, "description": "Successful Response"}},
 )
 async def get_entity(
@@ -176,11 +177,11 @@ async def get_entity(
 
 
 @router.put(
-    "/entity/{entity_id}",
+    "/entities/{entity_id}",
     tags=["entity"],
     summary="Put Entity",
     description="Update an existing entity.",
-    operation_id="put_entity_entity__entity_id__put",
+    operation_id="put_entity",
     responses={200: {"model": schemas.Item, "description": "Successful Response"}},
 )
 async def put_entity(
@@ -227,11 +228,11 @@ async def put_entity(
 
 
 @router.patch(
-    "/entity/{entity_id}",
+    "/entities/{entity_id}",
     tags=["entity"],
     summary="Patch Entity",
     description="Partially updates an entity. Use this endpoint to soft delete (is_deleted=true) or restore (is_deleted=false) an entity.",
-    operation_id="patch_entity_entity__entity_id__patch",
+    operation_id="patch_entity",
     responses={
         200: {"model": schemas.Item, "description": "Successful Response"},
         404: {"description": "Entity not found"},
@@ -257,13 +258,14 @@ async def patch_entity(
 
 
 @router.delete(
-    "/entity/{entity_id}",
+    "/entities/{entity_id}",
     tags=["entity"],
     summary="Delete Entity",
     description="Permanently deletes an entity and its associated file (Hard Delete).",
-    operation_id="delete_entity_entity__entity_id__delete",
+    operation_id="delete_entity",
+    status_code=status.HTTP_204_NO_CONTENT,
     responses={
-        200: {"model": schemas.Item, "description": "Successful Response"},
+        204: {"description": "Entity deleted successfully"},
         404: {"description": "Entity not found"},
     },
 )
@@ -271,22 +273,22 @@ async def delete_entity(
     entity_id: int,
     db: Session = Depends(get_db),
     user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
-) -> schemas.Item:
+):
     service = EntityService(db)
     item = service.delete_entity(entity_id)
     if not item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
         )
-    return item
+    # No return statement - FastAPI will return 204 automatically
 
 
 @router.get(
-    "/entity/{entity_id}/versions",
+    "/entities/{entity_id}/versions",
     tags=["entity"],
     summary="Get Entity Versions",
     description="Retrieves all versions of a specific entity.",
-    operation_id="get_entity_versions_entity__entity_id__versions_get",
+    operation_id="get_entity_versions",
     responses={200: {"model": List[dict], "description": "Successful Response"}},
 )
 async def get_entity_versions(
@@ -379,11 +381,11 @@ async def update_read_auth_config(
 
 
 @router.post(
-    "/job/{task_type}",
+    "/compute/jobs/{task_type}",
     tags=["job"],
     summary="Create Job",
     description="Creates a new compute job.",
-    operation_id="create_job_api_v1_job__task_type__post",
+    operation_id="create_job",
     status_code=status.HTTP_201_CREATED,
     responses={201: {"model": schemas.JobResponse, "description": "Job created"}},
 )
@@ -407,11 +409,11 @@ async def create_job(
 
 
 @router.get(
-    "/job/{job_id}",
+    "/compute/jobs/{job_id}",
     tags=["job"],
     summary="Get Job Status",
     description="Get job status and results.",
-    operation_id="get_job_api_v1_job__job_id__get",
+    operation_id="get_job",
     responses={200: {"model": schemas.JobResponse, "description": "Job found"}},
 )
 async def get_job(
@@ -425,12 +427,12 @@ async def get_job(
 
 
 @router.delete(
-    "/job/{job_id}",
+    "/compute/jobs/{job_id}",
     tags=["job"],
     summary="Delete Job",
     description="Delete job and all associated files.",
-    operation_id="delete_job_api_v1_job__job_id__delete",
-    status_code=status.HTTP_200_OK,
+    operation_id="delete_job",
+    status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_job(
     job_id: str = Path(..., title="Job ID"),
@@ -440,15 +442,15 @@ async def delete_job(
     """Delete job and all associated files."""
     job_service = service.JobService(db)
     job_service.delete_job(job_id)
-    return {}
+    # No return statement - FastAPI will return 204 automatically
 
 
 @router.get(
-    "/job/admin/storage/size",
+    "/compute/jobs/admin/storage/size",
     tags=["admin"],
     summary="Get Storage Size",
     description="Get total storage usage (admin only).",
-    operation_id="get_storage_size_api_v1_admin_storage_size_get",
+    operation_id="get_storage_size",
     responses={
         200: {"model": schemas.StorageInfo, "description": "Storage information"}
     },
@@ -463,11 +465,11 @@ async def get_storage_size(
 
 
 @router.delete(
-    "/job/admin/cleanup",
+    "/compute/jobs/admin/cleanup",
     tags=["admin"],
     summary="Cleanup Old Jobs",
     description="Clean up jobs older than specified number of days (admin only).",
-    operation_id="cleanup_old_jobs_api_v1_admin_cleanup_delete",
+    operation_id="cleanup_old_jobs",
     responses={200: {"model": schemas.CleanupResult, "description": "Cleanup results"}},
 )
 async def cleanup_old_jobs(
@@ -481,7 +483,8 @@ async def cleanup_old_jobs(
 
 
 @router.get(
-    "/job/capability",
+    "/compute/capabilities",
+    tags=["compute"],
     summary="Get Worker Capabilities",
     description="Returns available worker capabilities and their available counts",
     response_model=dict,

@@ -96,7 +96,9 @@ GET /
 **Response:**
 ```json
 {
-  "message": "CoLAN server is running"
+  "status": "healthy",
+  "service": "CoLAN Store Server",
+  "version": "v1"
 }
 ```
 
@@ -459,15 +461,11 @@ DELETE /entities/collection
 
 Deletes all entities in the collection.
 
-**Response (200):**
-```json
-{
-  "message": "All entities deleted successfully"
-}
-```
+**Response (204):**
+No content returned on success
 
 **Status Codes:**
-- `200 OK` - Collection deleted successfully
+- `204 No Content` - Collection deleted successfully
 - `401 Unauthorized` - Missing or invalid token
 - `403 Forbidden` - User lacks write permission
 
@@ -492,7 +490,7 @@ Authorization: Bearer <token>
 
 #### Job: Create Job
 ```
-POST /job/{task_type}
+POST /compute/jobs/{task_type}
 ```
 
 **Request Body (multipart/form-data):**
@@ -532,7 +530,7 @@ priority: integer (optional, default: 5, range: 0-10) - Job priority level
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8001/job/image_resize \
+curl -X POST http://localhost:8001/compute/jobs/image_resize \
   -H "Authorization: Bearer $TOKEN" \
   -F "upload_files=@photo.jpg" \
   -F "priority=5"
@@ -542,7 +540,7 @@ curl -X POST http://localhost:8001/job/image_resize \
 
 #### Job: Get Job Status
 ```
-GET /job/{job_id}
+GET /compute/jobs/{job_id}
 ```
 
 **Response (200):**
@@ -571,14 +569,14 @@ GET /job/{job_id}
 **Example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8001/job/550e8400-e29b-41d4-a716-446655440000
+  http://localhost:8001/compute/jobs/550e8400-e29b-41d4-a716-446655440000
 ```
 
 ---
 
 #### Job: Delete Job
 ```
-DELETE /job/{job_id}
+DELETE /compute/jobs/{job_id}
 ```
 
 Deletes the job and all associated files.
@@ -594,7 +592,7 @@ No content returned on success
 
 **Example:**
 ```bash
-curl -X DELETE http://localhost:8001/job/550e8400-e29b-41d4-a716-446655440000 \
+curl -X DELETE http://localhost:8001/compute/jobs/550e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -604,7 +602,7 @@ curl -X DELETE http://localhost:8001/job/550e8400-e29b-41d4-a716-446655440000 \
 
 #### Admin: Get Storage Size
 ```
-GET /job/admin/storage/size
+GET /compute/jobs/admin/storage/size
 ```
 
 Returns total storage usage for all jobs.
@@ -625,14 +623,14 @@ Returns total storage usage for all jobs.
 **Example:**
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8001/job/admin/storage/size
+  http://localhost:8001/compute/jobs/admin/storage/size
 ```
 
 ---
 
 #### Admin: Cleanup Old Jobs
 ```
-DELETE /job/admin/cleanup
+DELETE /compute/jobs/admin/cleanup
 ```
 
 Deletes jobs older than specified number of days.
@@ -655,8 +653,34 @@ Deletes jobs older than specified number of days.
 
 **Example:**
 ```bash
-curl -X DELETE "http://localhost:8001/job/admin/cleanup?days=30" \
+curl -X DELETE "http://localhost:8001/compute/jobs/admin/cleanup?days=30" \
   -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+#### Job: Get Worker Capabilities
+```
+GET /compute/capabilities
+```
+
+Returns available worker capabilities and their counts. This endpoint does not require authentication.
+
+**Response (200):**
+```json
+{
+  "image_resize": 2,
+  "image_conversion": 1,
+  "video_processing": 3
+}
+```
+
+**Status Codes:**
+- `200 OK` - Capabilities retrieved successfully
+
+**Example:**
+```bash
+curl http://localhost:8001/compute/capabilities
 ```
 
 ---
@@ -665,7 +689,7 @@ curl -X DELETE "http://localhost:8001/job/admin/cleanup?days=30" \
 
 #### 10. Get Configuration
 ```
-GET /config
+GET /admin/config
 ```
 
 Returns current service configuration.
@@ -686,14 +710,14 @@ Returns current service configuration.
 
 **Example:**
 ```bash
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/config
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/admin/config
 ```
 
 ---
 
 #### 11. Update Read Authentication Config
 ```
-PUT /config/read-auth
+PUT /admin/config/read-auth
 ```
 
 **Request Body (JSON):**
@@ -719,7 +743,7 @@ PUT /config/read-auth
 
 **Example:**
 ```bash
-curl -X PUT http://localhost:8001/config/read-auth \
+curl -X PUT http://localhost:8001/admin/config/read-auth \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"enabled": true}'
