@@ -183,10 +183,10 @@ class TestFilePathField:
         stored_files = list(clean_media_dir.rglob(f"{md5}*"))
         assert len(stored_files) == 1, "File should be stored with MD5 prefix"
         
-        # Verify file path structure: YYYY/MM/DD/md5_filename
+        # Verify file path structure: store/YYYY/MM/DD/md5_filename
         rel_path = stored_files[0].relative_to(clean_media_dir)
         parts = rel_path.parts
-        assert len(parts) == 4, "Should have YYYY/MM/DD/filename structure"
+        assert len(parts) == 5, "Should have store/YYYY/MM/DD/filename structure"
 
 
 class TestUnpopulatedFields:

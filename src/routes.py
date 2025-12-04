@@ -119,7 +119,7 @@ async def create_entity(
     try:
         return service.create_entity(body, file_bytes, filename, user_id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
 
 @router.delete(
@@ -216,7 +216,7 @@ async def put_entity(
             )
         return item
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
 
 @router.patch(
@@ -413,6 +413,109 @@ async def accept_face_detection_results(
         "entity_id": entity_id,
         "message": "Face detection results received and stored",
     }
+
+
+# Job Management Endpoints (from compute service)
+
+
+@router.post(
+    "/api/v1/job/{task_type}",
+    tags=["job"],
+    summary="Create Job",
+    description="Creates a new compute job.",
+    operation_id="create_job_api_v1_job__task_type__post",
+    status_code=status.HTTP_201_CREATED,
+    responses={201: {"model": schemas.JobResponse, "description": "Job created"}},
+)
+async def create_job(
+    task_type: str = Path(..., title="Task Type"),
+    upload_files: Optional[List[UploadFile]] = File(None),
+    external_files: Optional[str] = Form(None),  # JSON array
+    priority: int = Form(5),
+    db: Session = Depends(get_db),
+    user: Optional[dict] = Depends(auth.require_permission("ai_inference_support")),
+) -> schemas.JobResponse:
+    """Create a new compute job."""
+    job_service = service.JobService(db)
+    return await job_service.create_job(
+        task_type=task_type,
+        upload_files=upload_files,
+        external_files=external_files,
+        priority=priority,
+        user=user,
+    )
+
+
+@router.get(
+    "/api/v1/job/{job_id}",
+    tags=["job"],
+    summary="Get Job Status",
+    description="Get job status and results.",
+    operation_id="get_job_api_v1_job__job_id__get",
+    responses={200: {"model": schemas.JobResponse, "description": "Job found"}},
+)
+async def get_job(
+    job_id: str = Path(..., title="Job ID"),
+    db: Session = Depends(get_db),
+    user: Optional[dict] = Depends(auth.require_permission("ai_inference_support")),
+) -> schemas.JobResponse:
+    """Get job status and results."""
+    job_service = service.JobService(db)
+    return job_service.get_job(job_id)
+
+
+@router.delete(
+    "/api/v1/job/{job_id}",
+    tags=["job"],
+    summary="Delete Job",
+    description="Delete job and all associated files.",
+    operation_id="delete_job_api_v1_job__job_id__delete",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_job(
+    job_id: str = Path(..., title="Job ID"),
+    db: Session = Depends(get_db),
+    user: Optional[dict] = Depends(auth.require_permission("ai_inference_support")),
+):
+    """Delete job and all associated files."""
+    job_service = service.JobService(db)
+    job_service.delete_job(job_id)
+    return None
+
+
+@router.get(
+    "/api/v1/admin/storage/size",
+    tags=["admin"],
+    summary="Get Storage Size",
+    description="Get total storage usage (admin only).",
+    operation_id="get_storage_size_api_v1_admin_storage_size_get",
+    responses={200: {"model": schemas.StorageInfo, "description": "Storage information"}},
+)
+async def get_storage_size(
+    db: Session = Depends(get_db),
+    user: Optional[dict] = Depends(auth.require_permission("admin")),
+) -> schemas.StorageInfo:
+    """Get total storage usage (admin only)."""
+    job_service = service.JobService(db)
+    return job_service.get_storage_size()
+
+
+@router.delete(
+    "/api/v1/admin/cleanup",
+    tags=["admin"],
+    summary="Cleanup Old Jobs",
+    description="Clean up jobs older than specified number of days (admin only).",
+    operation_id="cleanup_old_jobs_api_v1_admin_cleanup_delete",
+    responses={200: {"model": schemas.CleanupResult, "description": "Cleanup results"}},
+)
+async def cleanup_old_jobs(
+    days: int = Query(7, ge=1, description="Delete jobs older than N days"),
+    db: Session = Depends(get_db),
+    user: Optional[dict] = Depends(auth.require_permission("admin")),
+) -> schemas.CleanupResult:
+    """Clean up jobs older than specified number of days (admin only)."""
+    job_service = service.JobService(db)
+    return job_service.cleanup_old_jobs(days)
 
 
 class RootResponse(BaseModel):

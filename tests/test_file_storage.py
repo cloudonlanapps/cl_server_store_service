@@ -93,10 +93,10 @@ class TestFileStorage:
         stored_files = list(clean_media_dir.rglob("*.jpg"))
         assert len(stored_files) == len(sample_images)
         
-        # All should follow YYYY/MM/DD structure
+        # All should follow store/YYYY/MM/DD structure
         for stored_file in stored_files:
             rel_path = stored_file.relative_to(clean_media_dir)
-            assert len(rel_path.parts) == 4
+            assert len(rel_path.parts) == 5
     
     def test_file_deletion_on_entity_update(self, client, sample_images, clean_media_dir):
         """Test that old file is deleted when entity is updated with new file."""

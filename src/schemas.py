@@ -79,3 +79,33 @@ class UpdateReadAuthConfig(BaseModel):
     """Request schema for updating read auth configuration."""
     enabled: bool = Field(..., description="Whether to enable read authentication")
 
+
+# Job Management Schemas (from compute service)
+
+
+class JobResponse(BaseModel):
+    """Response schema for job information."""
+    job_id: str = Field(..., description="Unique job identifier")
+    task_type: str = Field(..., description="Type of task to execute")
+    status: str = Field(..., description="Job status (pending, processing, completed, failed)")
+    progress: int = Field(0, description="Progress percentage (0-100)", ge=0, le=100)
+    input_files: list = Field(..., description="List of input files")
+    output_files: list = Field(..., description="List of output files")
+    task_output: Optional[dict] = Field(None, description="Task output results")
+    created_at: int = Field(..., description="Job creation timestamp (milliseconds)")
+    started_at: Optional[int] = Field(None, description="Job start timestamp (milliseconds)")
+    completed_at: Optional[int] = Field(None, description="Job completion timestamp (milliseconds)")
+    error_message: Optional[str] = Field(None, description="Error message if job failed")
+
+
+class StorageInfo(BaseModel):
+    """Response schema for storage information."""
+    total_size: int = Field(..., description="Total storage usage in bytes")
+    job_count: int = Field(..., description="Number of jobs stored")
+
+
+class CleanupResult(BaseModel):
+    """Response schema for cleanup operation results."""
+    deleted_count: int = Field(..., description="Number of jobs deleted")
+    freed_space: int = Field(..., description="Space freed in bytes")
+

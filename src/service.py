@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from clmediakit import CLMetaData
+from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -511,3 +512,256 @@ class EntityService:
         """Delete all entities from the database."""
         self.db.query(Entity).delete()
         self.db.commit()
+
+
+class JobService:
+    """Service layer for job management (from compute service)."""
+
+    def __init__(self, db: Session, base_dir: Optional[str] = None):
+        """Initialize the job service.
+
+        Args:
+            db: SQLAlchemy database session
+            base_dir: Optional base directory for file storage (for testing)
+        """
+        self.db = db
+        self.file_storage = FileStorageService(base_dir=base_dir)
+
+    async def create_job(
+        self,
+        task_type: str,
+        upload_files: Optional[List] = None,
+        external_files: Optional[str] = None,
+        priority: int = 5,
+        user: Optional[Dict] = None,
+    ):
+        """Create a new compute job.
+
+        Args:
+            task_type: Type of task to execute
+            upload_files: List of uploaded files
+            external_files: JSON string of external file references
+            priority: Priority level (0-10)
+            user: Current user information
+
+        Returns:
+            JobResponse with job details
+        """
+        import json
+        import time
+        import uuid
+        from . import schemas
+        from .models import Job, QueueEntry
+
+        # Validate priority
+        if not (0 <= priority <= 10):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Priority must be between 0 and 10"
+            )
+
+        # Create job ID
+        job_id = str(uuid.uuid4())
+        current_time = int(time.time() * 1000)
+
+        # Create job directory
+        self.file_storage.create_job_directory(job_id)
+
+        # Process upload files
+        input_files_info = []
+        input_file_path = None
+        input_file_source = None
+
+        if upload_files:
+            for file in upload_files:
+                if file.filename:
+                    file_info = await self.file_storage.save_input_file(
+                        job_id, file.filename, file
+                    )
+                    input_files_info.append(file_info)
+                    if input_file_path is None:
+                        input_file_path = file_info["path"]
+                        input_file_source = "upload"
+        else:
+            pass  # No uploaded files
+
+        # Process external files
+        if external_files:
+            try:
+                ext_files = json.loads(external_files)
+                for ext_file in ext_files:
+                    ext_path = ext_file.get("path")
+                    metadata = ext_file.get("metadata", {})
+                    if ext_path:
+                        link_path = self.file_storage.create_external_symlink(
+                            job_id,
+                            ext_path,
+                            link_name=metadata.get("name"),
+                        )
+                        file_info = {
+                            "path": link_path,
+                            "metadata": metadata,
+                        }
+                        input_files_info.append(file_info)
+                        if input_file_path is None:
+                            input_file_path = link_path
+                            input_file_source = "external"
+            except json.JSONDecodeError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid external_files JSON format"
+                )
+
+        # Validate that at least one file was provided
+        if not input_files_info:
+            self.file_storage.cleanup_job(job_id)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one file (upload or external) is required"
+            )
+
+        # Create Job record
+        job = Job(
+            job_id=job_id,
+            task_type=task_type,
+            input_file_source=input_file_source or "unknown",
+            input_file_path=input_file_path or "",
+            input_files=json.dumps(input_files_info),
+            output_files="[]",
+            status="pending",
+            progress=0,
+            created_at=current_time,
+            created_by=user.get("sub") if user else None,
+        )
+
+        self.db.add(job)
+        self.db.commit()
+
+        # Create QueueEntry for priority-based processing
+        queue_entry = QueueEntry(
+            job_id=job_id,
+            priority=priority,
+            enqueued_at=current_time,
+        )
+
+        self.db.add(queue_entry)
+        self.db.commit()
+
+        return schemas.JobResponse(
+            job_id=job_id,
+            task_type=task_type,
+            status="pending",
+            progress=0,
+            input_files=input_files_info,
+            output_files=[],
+            task_output=None,
+            created_at=current_time,
+        )
+
+    def get_job(self, job_id: str):
+        """Get job status and results.
+
+        Args:
+            job_id: Unique job identifier
+
+        Returns:
+            JobResponse with job details
+
+        Raises:
+            ValueError: If job not found
+        """
+        import json
+        from . import schemas
+        from .models import Job
+
+        job = self.db.query(Job).filter_by(job_id=job_id).first()
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job {job_id} not found"
+            )
+
+        # Parse JSON fields
+        input_files = json.loads(job.input_files) if job.input_files else []
+        output_files = json.loads(job.output_files) if job.output_files else []
+        task_output = json.loads(job.task_output) if job.task_output else None
+
+        return schemas.JobResponse(
+            job_id=job.job_id,
+            task_type=job.task_type,
+            status=job.status,
+            progress=job.progress,
+            input_files=input_files,
+            output_files=output_files,
+            task_output=task_output,
+            created_at=job.created_at,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            error_message=job.error_message,
+        )
+
+    def delete_job(self, job_id: str) -> None:
+        """Delete job and all associated files.
+
+        Args:
+            job_id: Unique job identifier
+
+        Raises:
+            HTTPException: If job not found
+        """
+        from .models import Job, QueueEntry
+
+        job = self.db.query(Job).filter_by(job_id=job_id).first()
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job {job_id} not found"
+            )
+
+        # Delete job directory
+        self.file_storage.cleanup_job(job_id)
+
+        # Delete queue entry if exists
+        self.db.query(QueueEntry).filter_by(job_id=job_id).delete()
+
+        # Delete job record
+        self.db.delete(job)
+        self.db.commit()
+
+    def get_storage_size(self):
+        """Get total storage usage for all jobs.
+
+        Returns:
+            StorageInfo with storage details
+        """
+        from . import schemas
+
+        storage_info = self.file_storage.get_storage_size()
+        return schemas.StorageInfo(**storage_info)
+
+    def cleanup_old_jobs(self, days: int):
+        """Clean up jobs older than specified number of days.
+
+        Args:
+            days: Number of days threshold
+
+        Returns:
+            CleanupResult with cleanup details
+        """
+        from . import schemas
+        from .models import Job, QueueEntry
+
+        cleanup_info = self.file_storage.cleanup_old_jobs(days)
+
+        # Remove cleaned up jobs from database
+        current_time = int(datetime.now(timezone.utc).timestamp() * 1000)
+        cutoff_time = current_time - (days * 24 * 60 * 60 * 1000)
+
+        old_jobs = self.db.query(Job).filter(Job.created_at < cutoff_time).all()
+        for job in old_jobs:
+            self.db.query(QueueEntry).filter_by(job_id=job.job_id).delete()
+            self.db.delete(job)
+
+        self.db.commit()
+
+        return schemas.CleanupResult(**cleanup_info)

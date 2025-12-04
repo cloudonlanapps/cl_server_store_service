@@ -1,9 +1,10 @@
-# CL Server Store Service
+# CL Server Unified Service
 
-A FastAPI-based microservice for managing media entities with metadata extraction, versioning, and duplicate detection. This service handles media storage, collection management, and provides a comprehensive API for organizing and retrieving media files in the CL Server ecosystem.
+A FastAPI-based microservice for managing media entities and compute jobs. This service combines media entity management with metadata extraction, versioning, and duplicate detection, along with job management and task processing capabilities. It provides a comprehensive API for organizing and retrieving media files, managing compute jobs, and supporting the CL Server ecosystem.
 
 **Server Port:** 8001
 **Authentication Method:** JWT with ES256 (ECDSA) signature (optional)
+**Merged Services:** Store Service (media management) + Compute Service (job management)
 
 ## Quick Start
 
@@ -54,6 +55,7 @@ Before running `./start.sh`, set these environment variables:
 
 ## Features
 
+### Media Management
 - **Media Management**: Upload, update, and delete media files (images, videos)
 - **Collections**: Organize media into hierarchical collections
 - **Metadata Extraction**: Automatic extraction of file metadata (dimensions, duration, MIME type, etc.)
@@ -61,7 +63,24 @@ Before running `./start.sh`, set these environment variables:
 - **Duplicate Detection**: MD5-based duplicate detection
 - **Pagination**: Efficient pagination for large media libraries
 - **Search**: Query and filter media entities
-- **Flexible Authentication**: Optional JWT-based authentication with configurable read/write permissions
+
+### Job Management
+- **Job Creation**: Create compute jobs with file uploads and external file references
+- **Job Tracking**: Monitor job status and progress in real-time
+- **Job Cleanup**: Manage storage by removing old jobs automatically
+- **Priority-based Processing**: Support for job priority levels (0-10)
+- **File Management**: Organize input/output files separately per job
+
+### Security & Flexibility
+- **Flexible Authentication**: Optional JWT-based authentication with three modes:
+  - No authentication (demo mode)
+  - Write-only authentication (read operations public, write operations require token)
+  - Full authentication (all operations require token)
+- **Granular Permissions**: Support for multiple permission types:
+  - `media_store_read` - Read media entities
+  - `media_store_write` - Write/modify media entities
+  - `ai_inference_support` - Create/manage compute jobs
+  - `admin` - Administrative operations
 
 ## API Endpoints
 
@@ -455,6 +474,188 @@ Deletes all entities in the collection.
 **Example:**
 ```bash
 curl -X DELETE http://localhost:8001/entities/collection \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## Job Management Endpoints
+
+These endpoints manage compute jobs for task processing. All job endpoints require authentication with `ai_inference_support` permission.
+
+### Protected Endpoints (Require JWT Token with ai_inference_support Permission)
+
+Include the token in the `Authorization` header:
+```
+Authorization: Bearer <token>
+```
+
+#### Job: Create Job
+```
+POST /api/v1/job/{task_type}
+```
+
+**Request Body (multipart/form-data):**
+```
+upload_files: file[] (optional) - Files to upload
+external_files: JSON string (optional) - Array of external file references
+  Example: [{"path": "/path/to/file", "metadata": {"name": "file.txt"}}]
+priority: integer (optional, default: 5, range: 0-10) - Job priority level
+```
+
+**Response (201):**
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "task_type": "image_resize",
+  "status": "pending",
+  "progress": 0,
+  "input_files": [
+    {
+      "filename": "photo.jpg",
+      "path": "jobs/550e8400-e29b-41d4-a716-446655440000/input/photo.jpg",
+      "size": 2048576,
+      "hash": "abc123def456"
+    }
+  ],
+  "output_files": [],
+  "task_output": null,
+  "created_at": 1704067200000
+}
+```
+
+**Status Codes:**
+- `201 Created` - Job created successfully
+- `400 Bad Request` - Missing required files or invalid request
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - User lacks ai_inference_support permission
+
+**Example:**
+```bash
+curl -X POST http://localhost:8001/api/v1/job/image_resize \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "upload_files=@photo.jpg" \
+  -F "priority=5"
+```
+
+---
+
+#### Job: Get Job Status
+```
+GET /api/v1/job/{job_id}
+```
+
+**Response (200):**
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "task_type": "image_resize",
+  "status": "completed",
+  "progress": 100,
+  "input_files": [...],
+  "output_files": [...],
+  "task_output": {"width": 800, "height": 600},
+  "created_at": 1704067200000,
+  "started_at": 1704067210000,
+  "completed_at": 1704067250000,
+  "error_message": null
+}
+```
+
+**Status Codes:**
+- `200 OK` - Job found
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - User lacks ai_inference_support permission
+- `404 Not Found` - Job does not exist
+
+**Example:**
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8001/api/v1/job/550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+#### Job: Delete Job
+```
+DELETE /api/v1/job/{job_id}
+```
+
+Deletes the job and all associated files.
+
+**Response (204):**
+No content returned on success
+
+**Status Codes:**
+- `204 No Content` - Job deleted successfully
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - User lacks ai_inference_support permission
+- `404 Not Found` - Job does not exist
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:8001/api/v1/job/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+### Admin Job Endpoints (Require JWT Token with admin Permission)
+
+#### Admin: Get Storage Size
+```
+GET /api/v1/admin/storage/size
+```
+
+Returns total storage usage for all jobs.
+
+**Response (200):**
+```json
+{
+  "total_size": 1073741824,
+  "job_count": 42
+}
+```
+
+**Status Codes:**
+- `200 OK` - Storage info retrieved
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - User lacks admin permission
+
+**Example:**
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8001/api/v1/admin/storage/size
+```
+
+---
+
+#### Admin: Cleanup Old Jobs
+```
+DELETE /api/v1/admin/cleanup
+```
+
+Deletes jobs older than specified number of days.
+
+**Query Parameters:**
+- `days` (optional, default: 7, minimum: 1) - Delete jobs older than N days
+
+**Response (200):**
+```json
+{
+  "deleted_count": 12,
+  "freed_space": 536870912
+}
+```
+
+**Status Codes:**
+- `200 OK` - Cleanup completed
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - User lacks admin permission
+
+**Example:**
+```bash
+curl -X DELETE "http://localhost:8001/api/v1/admin/cleanup?days=30" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

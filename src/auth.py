@@ -154,7 +154,7 @@ async def get_current_user_with_read_permission(
     db: Session = Depends(get_db),
 ) -> Optional[dict]:
     """Validate that the user has read permissions.
-    
+
     In demo mode (AUTH_DISABLED=True), always allows access.
     If READ_AUTH_ENABLED (from database config) is False, allows access without authentication.
     If READ_AUTH_ENABLED is True, requires valid token with media_store_read permission or admin status.
@@ -162,17 +162,17 @@ async def get_current_user_with_read_permission(
     # Demo mode: bypass permission check
     if AUTH_DISABLED:
         return None
-    
+
     # Check database config for read auth setting
     from .config_service import ConfigService
-    
+
     config_service = ConfigService(db)
     read_auth_enabled = config_service.get_read_auth_enabled()
-    
+
     # Read auth not enabled: allow access
     if not read_auth_enabled:
         return current_user  # May be None, but that's okay
-    
+
     # Read auth enabled but no user provided
     if current_user is None:
         raise HTTPException(
@@ -180,7 +180,7 @@ async def get_current_user_with_read_permission(
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     permissions = current_user.get("permissions", [])
     if "media_store_read" not in permissions and not current_user.get("is_admin"):
         raise HTTPException(
@@ -188,4 +188,47 @@ async def get_current_user_with_read_permission(
             detail="Not enough permissions",
         )
     return current_user
+
+def require_permission(permission: str):
+    """Dependency to require a specific permission.
+
+    Supports all permission types: media_store_read, media_store_write, ai_inference_support, admin.
+    Checks if user has the required permission or admin status.
+    In demo mode (AUTH_DISABLED=True), always allows access.
+
+    Usage:
+        @app.get("/protected")
+        async def protected_endpoint(user: dict = Depends(require_permission("ai_inference_support"))):
+            return {"message": f"Hello {user.get('sub')}"}
+    """
+    async def permission_checker(
+        current_user: Optional[dict] = Depends(get_current_user)
+    ) -> Optional[dict]:
+        # Demo mode: bypass permission check
+        if AUTH_DISABLED:
+            return current_user
+
+        # No user provided but auth is required
+        if current_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Admin users bypass permission checks
+        if current_user.get("is_admin"):
+            return current_user
+
+        # Check if user has the required permission
+        user_permissions = current_user.get("permissions", [])
+        if permission not in user_permissions:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Insufficient permissions. Required: {permission}",
+            )
+
+        return current_user
+
+    return permission_checker
 

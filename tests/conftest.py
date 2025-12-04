@@ -107,7 +107,7 @@ def client(test_engine, clean_media_dir):
     from src import app
     from src.database import get_db
     from src.service import EntityService
-    from src.auth import get_current_user_with_write_permission
+    from src.auth import get_current_user_with_write_permission, get_current_user
 
     app.dependency_overrides[get_db] = override_get_db
 
@@ -115,11 +115,12 @@ def client(test_engine, clean_media_dir):
     def override_auth():
         return {
             "sub": "testuser",
-            "permissions": ["media_store_write"],
+            "permissions": ["media_store_write", "ai_inference_support"],
             "is_admin": True,
         }
 
     app.dependency_overrides[get_current_user_with_write_permission] = override_auth
+    app.dependency_overrides[get_current_user] = override_auth
 
     # Monkey patch EntityService to use test media directory
     original_init = EntityService.__init__
@@ -178,11 +179,65 @@ def sample_images(test_images_dir):
 
 
 @pytest.fixture
+def sample_job_data():
+    """Sample job data for testing job endpoints.
+
+    Returns:
+        dict: Job creation payload
+    """
+    return {
+        "task_type": "image_processing",
+        "priority": 5,
+        "external_files": '[]',
+    }
+
+
+@pytest.fixture
+def sample_job_data_with_external():
+    """Sample job data with external files reference.
+
+    Returns:
+        dict: Job creation payload with external files
+    """
+    return {
+        "task_type": "video_analysis",
+        "priority": 3,
+        "external_files": '["file1.mp4", "file2.mp4"]',
+    }
+
+
+@pytest.fixture
+def sample_job_data_high_priority():
+    """Sample high-priority job data.
+
+    Returns:
+        dict: High priority job creation payload
+    """
+    return {
+        "task_type": "transcoding",
+        "priority": 10,
+        "external_files": '[]',
+    }
+
+
+@pytest.fixture
 def file_storage_service(clean_media_dir):
     """Create a FileStorageService instance using the clean media directory."""
     from src.file_storage import FileStorageService
 
     return FileStorageService(base_dir=str(clean_media_dir))
+
+
+@pytest.fixture
+def job_service(test_db_session, file_storage_service):
+    """Create a JobService instance for testing.
+
+    Returns:
+        JobService: Service instance with test database and file storage
+    """
+    from src.service import JobService
+
+    return JobService(db=test_db_session, base_dir=str(file_storage_service.base_dir))
 
 
 @pytest.fixture(scope="function")
@@ -339,6 +394,34 @@ def read_token(jwt_token_generator):
         sub="read_user",
         permissions=["media_store_read"],
         is_admin=False
+    )
+
+
+@pytest.fixture(scope="function")
+def inference_token(jwt_token_generator):
+    """Generate a token with ai_inference_support permission for job testing.
+
+    Returns:
+        str: JWT token with ai_inference_support permission
+    """
+    return jwt_token_generator.generate_token(
+        sub="inference_user",
+        permissions=["ai_inference_support"],
+        is_admin=False
+    )
+
+
+@pytest.fixture(scope="function")
+def inference_admin_token(jwt_token_generator):
+    """Generate an admin token with ai_inference_support permission.
+
+    Returns:
+        str: JWT token with ai_inference_support and admin permissions
+    """
+    return jwt_token_generator.generate_token(
+        sub="inference_admin_user",
+        permissions=["ai_inference_support"],
+        is_admin=True
     )
 
 
