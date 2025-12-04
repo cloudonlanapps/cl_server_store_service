@@ -18,9 +18,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import auth, database, schemas, service
+from . import database
+from . import auth, schemas, service
+from . import config_service as cfg_service
 from .database import get_db
 from .service import EntityService
+
 
 router = APIRouter()
 
@@ -320,9 +323,7 @@ async def get_config(
     Requires admin access.
     """
 
-    from .config_service import ConfigService
-
-    config_service = ConfigService(db)
+    config_service = cfg_service.ConfigService(db)
 
     # Get config metadata
     metadata = config_service.get_config_metadata("read_auth_enabled")
