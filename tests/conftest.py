@@ -90,6 +90,8 @@ def test_db_session(test_engine):
 @pytest.fixture(scope="function")
 def client(test_engine, clean_media_dir):
     """Create a test client with a fresh database and test media directory."""
+    from unittest.mock import MagicMock, patch
+
     # Create session maker
     TestingSessionLocal = sessionmaker(
         autocommit=False, autoflush=False, bind=test_engine
@@ -103,48 +105,54 @@ def client(test_engine, clean_media_dir):
         finally:
             db.close()
 
-    # Import app and override dependency
-    from src import app
-    from src.database import get_db
-    from src.service import EntityService, JobService
-    from src.auth import get_current_user
+    # Mock get_mqtt_client before importing app
+    mock_mqtt_client = MagicMock()
+    mock_mqtt_client.get_cached_capabilities.return_value = {}
+    mock_mqtt_client.wait_for_capabilities.return_value = True
 
-    app.dependency_overrides[get_db] = override_get_db
+    with patch("src.mqtt_client.get_mqtt_client", return_value=mock_mqtt_client):
+        # Import app and override dependency
+        from src import app
+        from src.database import get_db
+        from src.service import EntityService, JobService
+        from src.auth import get_current_user
 
-    # Override auth dependency to bypass authentication in tests
-    def override_auth():
-        return {
-            "sub": "testuser",
-            "permissions": ["media_store_write", "ai_inference_support"],
-            "is_admin": True,
-        }
+        app.dependency_overrides[get_db] = override_get_db
 
-    app.dependency_overrides[get_current_user] = override_auth
+        # Override auth dependency to bypass authentication in tests
+        def override_auth():
+            return {
+                "sub": "testuser",
+                "permissions": ["media_store_write", "ai_inference_support"],
+                "is_admin": True,
+            }
 
-    # Monkey patch EntityService to use test media directory
-    original_entity_init = EntityService.__init__
+        app.dependency_overrides[get_current_user] = override_auth
 
-    def patched_entity_init(self, db, base_dir=None):
-        original_entity_init(self, db, base_dir=str(clean_media_dir))
+        # Monkey patch EntityService to use test media directory
+        original_entity_init = EntityService.__init__
 
-    EntityService.__init__ = patched_entity_init
+        def patched_entity_init(self, db, base_dir=None):
+            original_entity_init(self, db, base_dir=str(clean_media_dir))
 
-    # Monkey patch JobService to use test media directory
-    original_job_init = JobService.__init__
+        EntityService.__init__ = patched_entity_init
 
-    def patched_job_init(self, db, base_dir=None):
-        original_job_init(self, db, base_dir=str(clean_media_dir))
+        # Monkey patch JobService to use test media directory
+        original_job_init = JobService.__init__
 
-    JobService.__init__ = patched_job_init
+        def patched_job_init(self, db, base_dir=None):
+            original_job_init(self, db, base_dir=str(clean_media_dir))
 
-    # Create test client
-    with TestClient(app) as test_client:
-        yield test_client
+        JobService.__init__ = patched_job_init
 
-    # Cleanup
-    EntityService.__init__ = original_entity_init
-    JobService.__init__ = original_job_init
-    app.dependency_overrides.clear()
+        # Create test client
+        with TestClient(app) as test_client:
+            yield test_client
+
+        # Cleanup
+        EntityService.__init__ = original_entity_init
+        JobService.__init__ = original_job_init
+        app.dependency_overrides.clear()
 
 
 @pytest.fixture(scope="function")

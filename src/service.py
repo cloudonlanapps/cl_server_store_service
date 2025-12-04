@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from .schemas import BodyCreateEntity, BodyPatchEntity, BodyUpdateEntity, Item
 from .models import Entity
 from .file_storage import FileStorageService
+from .mqtt_client import get_mqtt_client
 
 
 class DuplicateFileError(Exception):
@@ -785,8 +786,6 @@ class CapabilityService:
             Dict mapping capability names to available idle count
             Example: {"image_resize": 2, "image_conversion": 1}
         """
-        from .mqtt_client import get_mqtt_client
-
         try:
             mqtt_client = get_mqtt_client()
             return mqtt_client.get_cached_capabilities()
