@@ -23,6 +23,7 @@ dependencies = [
     "pytest>=7.4.0",
     "httpx>=0.24.0",
     "python-jose[cryptography]>=3.3.0",
+    "paho-mqtt>=1.6.0",
 ]
 
 [tool.setuptools.packages.find]
