@@ -48,7 +48,7 @@ async def get_entities(
         None, title="Search Query", description="Optional search query"
     ),
     db: Session = Depends(get_db),
-    current_user: Optional[dict] = Depends(auth.get_current_user_with_read_permission),
+    user: Optional[dict] = Depends(auth.require_permission("media_store_read")),
 ) -> schemas.PaginatedResponse:
     service = EntityService(db)
     items, total_count = service.get_entities(
@@ -94,12 +94,12 @@ async def create_entity(
     parent_id: Optional[int] = Form(None, title="Parent Id"),
     image: Optional[UploadFile] = File(None, title="Image"),
     db: Session = Depends(get_db),
-    current_user: Optional[dict] = Depends(auth.get_current_user_with_write_permission),
+    user: Optional[dict] = Depends(auth.require_permission("media_write_read")),
 ) -> schemas.Item:
     service = EntityService(db)
 
     # Extract user_id from JWT payload (None in demo mode)
-    user_id = current_user.get("sub") if current_user else None
+    user_id = user.get("sub") if user else None
 
     # Create body object from form fields
     body = schemas.BodyCreateEntity(
@@ -119,7 +119,9 @@ async def create_entity(
     try:
         return service.create_entity(body, file_bytes, filename, user_id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        )
 
 
 @router.delete(
@@ -132,7 +134,7 @@ async def create_entity(
 )
 async def delete_collection(
     db: Session = Depends(get_db),
-    current_user: dict = Depends(auth.get_current_user_with_write_permission),
+    user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
 ) -> JSONResponse:
     service = EntityService(db)
     service.delete_all_entities()
@@ -156,7 +158,7 @@ async def get_entity(
         None, title="Content", description="Optional content query"
     ),
     db: Session = Depends(get_db),
-    current_user: Optional[dict] = Depends(auth.get_current_user_with_read_permission),
+    user: Optional[dict] = Depends(auth.require_permission("media_store_read")),
 ) -> schemas.Item:
     service = EntityService(db)
     item = service.get_entity_by_id(entity_id, version=version)
@@ -186,12 +188,12 @@ async def put_entity(
     parent_id: Optional[int] = Form(None, title="Parent Id"),
     image: Optional[UploadFile] = File(None, title="Image"),
     db: Session = Depends(get_db),
-    current_user: Optional[dict] = Depends(auth.get_current_user_with_write_permission),
+    user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
 
     # Extract user_id from JWT payload (None in demo mode)
-    user_id = current_user.get("sub") if current_user else None
+    user_id = user.get("sub") if user else None
 
     # Create body object from form fields
     body = schemas.BodyUpdateEntity(
@@ -216,7 +218,9 @@ async def put_entity(
             )
         return item
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        )
 
 
 @router.patch(
@@ -234,12 +238,12 @@ async def patch_entity(
     entity_id: int,
     body: schemas.BodyPatchEntity = Body(..., embed=True),
     db: Session = Depends(get_db),
-    current_user: Optional[dict] = Depends(auth.get_current_user_with_write_permission),
+    user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
 
     # Extract user_id from JWT payload (None in demo mode)
-    user_id = current_user.get("sub") if current_user else None
+    user_id = user.get("sub") if user else None
 
     item = service.patch_entity(entity_id, body, user_id)
     if not item:
@@ -263,7 +267,7 @@ async def patch_entity(
 async def delete_entity(
     entity_id: int,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(auth.get_current_user_with_write_permission),
+    user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
     item = service.delete_entity(entity_id)
@@ -285,7 +289,7 @@ async def delete_entity(
 async def get_entity_versions(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
-    current_user: Optional[dict] = Depends(auth.get_current_user_with_read_permission),
+    user: Optional[dict] = Depends(auth.require_permission("media_store_read")),
 ) -> List[dict]:
     service = EntityService(db)
     versions = service.get_entity_versions(entity_id)
@@ -309,17 +313,12 @@ async def get_entity_versions(
 )
 async def get_config(
     db: Session = Depends(get_db),
-    current_user: Optional[dict] = Depends(auth.get_current_user_with_write_permission),
+    user: Optional[dict] = Depends(auth.require_admin),
 ) -> schemas.ConfigResponse:
     """Get current service configuration.
 
     Requires admin access.
     """
-    # Check if user is admin
-    if not current_user or not current_user.get("is_admin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
-        )
 
     from .config_service import ConfigService
 
@@ -352,24 +351,19 @@ async def get_config(
 async def update_read_auth_config(
     config: schemas.UpdateReadAuthConfig,
     db: Session = Depends(get_db),
-    current_user: Optional[dict] = Depends(auth.get_current_user_with_write_permission),
+    user: Optional[dict] = Depends(auth.require_admin),
 ) -> dict:
     """Update read authentication configuration.
 
     Requires admin access. Changes are persistent and take effect immediately.
     """
-    # Check if user is admin
-    if not current_user or not current_user.get("is_admin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
-        )
 
     from .config_service import ConfigService
 
     config_service = ConfigService(db)
 
     # Get user ID from JWT
-    user_id = current_user.get("sub") if current_user else None
+    user_id = user.get("sub") if user else None
 
     # Update configuration
     config_service.set_read_auth_enabled(config.enabled, user_id)
@@ -380,46 +374,11 @@ async def update_read_auth_config(
     }
 
 
-@router.post(
-    "/entity/{entity_id}/face-detection-results",
-    tags=["inference"],
-    summary="Accept Face Detection Results",
-    description="Stub endpoint to accept face detection results from inference service. Data is accepted but not stored.",
-    status_code=status.HTTP_200_OK,
-)
-async def accept_face_detection_results(
-    entity_id: int = Path(..., title="Entity ID"),
-    results: dict = Body(..., title="Face Detection Results"),
-    db: Session = Depends(get_db),
-) -> dict:
-    """
-    Stub endpoint to accept face detection results from the inference service.
-
-    This is a placeholder implementation that accepts the face detection data
-    but does not store it. In future, this can be enhanced to store face
-    detection results in the media store.
-
-    Args:
-        entity_id: The ID of the media entity
-        results: Face detection results including faces, face_count, etc.
-
-    Returns:
-        Confirmation message
-    """
-    # Stub: accept and ignore the data
-    # In future, store results in media_store
-    return {
-        "status": "accepted",
-        "entity_id": entity_id,
-        "message": "Face detection results received and stored",
-    }
-
-
 # Job Management Endpoints (from compute service)
 
 
 @router.post(
-    "/api/v1/job/{task_type}",
+    "/job/{task_type}",
     tags=["job"],
     summary="Create Job",
     description="Creates a new compute job.",
@@ -447,7 +406,7 @@ async def create_job(
 
 
 @router.get(
-    "/api/v1/job/{job_id}",
+    "/job/{job_id}",
     tags=["job"],
     summary="Get Job Status",
     description="Get job status and results.",
@@ -465,7 +424,7 @@ async def get_job(
 
 
 @router.delete(
-    "/api/v1/job/{job_id}",
+    "/job/{job_id}",
     tags=["job"],
     summary="Delete Job",
     description="Delete job and all associated files.",
@@ -484,16 +443,18 @@ async def delete_job(
 
 
 @router.get(
-    "/api/v1/admin/storage/size",
+    "/job/admin/storage/size",
     tags=["admin"],
     summary="Get Storage Size",
     description="Get total storage usage (admin only).",
     operation_id="get_storage_size_api_v1_admin_storage_size_get",
-    responses={200: {"model": schemas.StorageInfo, "description": "Storage information"}},
+    responses={
+        200: {"model": schemas.StorageInfo, "description": "Storage information"}
+    },
 )
 async def get_storage_size(
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("admin")),
+    user: Optional[dict] = Depends(auth.require_admin),
 ) -> schemas.StorageInfo:
     """Get total storage usage (admin only)."""
     job_service = service.JobService(db)
@@ -501,7 +462,7 @@ async def get_storage_size(
 
 
 @router.delete(
-    "/api/v1/admin/cleanup",
+    "/job/admin/cleanup",
     tags=["admin"],
     summary="Cleanup Old Jobs",
     description="Clean up jobs older than specified number of days (admin only).",
@@ -511,7 +472,7 @@ async def get_storage_size(
 async def cleanup_old_jobs(
     days: int = Query(7, ge=0, description="Delete jobs older than N days"),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("admin")),
+    user: Optional[dict] = Depends(auth.require_admin),
 ) -> schemas.CleanupResult:
     """Clean up jobs older than specified number of days (admin only)."""
     job_service = service.JobService(db)
@@ -532,8 +493,4 @@ class RootResponse(BaseModel):
     operation_id="root_get",
 )
 async def root():
-    return RootResponse(
-        status="healthy",
-        service="CoLAN Store Server",
-        version="v1"
-    )
+    return RootResponse(status="healthy", service="CoLAN Store Server", version="v1")

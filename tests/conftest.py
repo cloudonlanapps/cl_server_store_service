@@ -107,7 +107,7 @@ def client(test_engine, clean_media_dir):
     from src import app
     from src.database import get_db
     from src.service import EntityService, JobService
-    from src.auth import get_current_user_with_write_permission, get_current_user
+    from src.auth import get_current_user
 
     app.dependency_overrides[get_db] = override_get_db
 
@@ -119,7 +119,6 @@ def client(test_engine, clean_media_dir):
             "is_admin": True,
         }
 
-    app.dependency_overrides[get_current_user_with_write_permission] = override_auth
     app.dependency_overrides[get_current_user] = override_auth
 
     # Monkey patch EntityService to use test media directory
@@ -287,6 +286,7 @@ def jwt_token_generator(key_pair):
 
     Provides a TestTokenGenerator that can create valid, expired, or invalid tokens.
     """
+
     class TestTokenGenerator:
         """Helper class to generate JWT tokens for testing."""
 
@@ -294,8 +294,9 @@ def jwt_token_generator(key_pair):
             """Initialize with private key for signing tokens."""
             self.private_key = private_key_pem
 
-        def generate_token(self, sub="testuser", permissions=None,
-                          is_admin=False, expired=False):
+        def generate_token(
+            self, sub="testuser", permissions=None, is_admin=False, expired=False
+        ):
             """Generate a JWT token with specified claims.
 
             Args:
@@ -327,8 +328,12 @@ def jwt_token_generator(key_pair):
             # Encode with ES256 algorithm
             token = jwt.encode(
                 payload,
-                self.private_key.decode() if isinstance(self.private_key, bytes) else self.private_key,
-                algorithm="ES256"
+                (
+                    self.private_key.decode()
+                    if isinstance(self.private_key, bytes)
+                    else self.private_key
+                ),
+                algorithm="ES256",
             )
             return token
 
@@ -354,11 +359,7 @@ def jwt_token_generator(key_pair):
                 "iat": datetime.utcnow(),
             }
 
-            token = jwt.encode(
-                payload,
-                wrong_key_pem.decode(),
-                algorithm="ES256"
-            )
+            token = jwt.encode(payload, wrong_key_pem.decode(), algorithm="ES256")
             return token
 
     return TestTokenGenerator(key_pair[0])
@@ -374,7 +375,7 @@ def admin_token(jwt_token_generator):
     return jwt_token_generator.generate_token(
         sub="admin_user",
         permissions=["media_store_read", "media_store_write"],
-        is_admin=True
+        is_admin=True,
     )
 
 
@@ -386,9 +387,7 @@ def write_token(jwt_token_generator):
         str: JWT token with write permission only
     """
     return jwt_token_generator.generate_token(
-        sub="write_user",
-        permissions=["media_store_write"],
-        is_admin=False
+        sub="write_user", permissions=["media_store_write"], is_admin=False
     )
 
 
@@ -400,9 +399,7 @@ def read_token(jwt_token_generator):
         str: JWT token with read permission only
     """
     return jwt_token_generator.generate_token(
-        sub="read_user",
-        permissions=["media_store_read"],
-        is_admin=False
+        sub="read_user", permissions=["media_store_read"], is_admin=False
     )
 
 
@@ -414,9 +411,7 @@ def inference_token(jwt_token_generator):
         str: JWT token with ai_inference_support permission
     """
     return jwt_token_generator.generate_token(
-        sub="inference_user",
-        permissions=["ai_inference_support"],
-        is_admin=False
+        sub="inference_user", permissions=["ai_inference_support"], is_admin=False
     )
 
 
@@ -428,9 +423,7 @@ def inference_admin_token(jwt_token_generator):
         str: JWT token with ai_inference_support and admin permissions
     """
     return jwt_token_generator.generate_token(
-        sub="inference_admin_user",
-        permissions=["ai_inference_support"],
-        is_admin=True
+        sub="inference_admin_user", permissions=["ai_inference_support"], is_admin=True
     )
 
 

@@ -571,6 +571,7 @@ class JobService:
         input_files_info = []
         input_file_path = None
         input_file_source = None
+        external_files_list = []  # Track external files for response
 
         if upload_files:
             for file in upload_files:
@@ -589,6 +590,7 @@ class JobService:
         if external_files:
             try:
                 ext_files = json.loads(external_files)
+                external_files_list = ext_files  # Store for response
                 for ext_file in ext_files:
                     ext_path = ext_file.get("path")
                     metadata = ext_file.get("metadata", {})
@@ -612,13 +614,6 @@ class JobService:
                     detail="Invalid external_files JSON format"
                 )
 
-        # Validate that at least one file was provided
-        if not input_files_info:
-            self.file_storage.cleanup_job(job_id)
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="At least one file (upload or external) is required"
-            )
 
         # Create Job record
         job = Job(
@@ -655,6 +650,7 @@ class JobService:
             progress=0,
             input_files=input_files_info,
             output_files=[],
+            external_files=external_files_list if external_files_list else None,
             task_output=None,
             created_at=current_time,
             updated_at=current_time,
@@ -695,6 +691,7 @@ class JobService:
             progress=job.progress,
             input_files=input_files,
             output_files=output_files,
+            external_files=None,
             task_output=task_output,
             created_at=job.created_at,
             updated_at=job.created_at,

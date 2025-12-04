@@ -19,6 +19,7 @@ _public_key_cache: Optional[str] = None
 _public_key_load_attempts: int = 0
 _max_load_attempts: int = 30  # Try for up to 30 seconds
 
+
 def get_public_key() -> str:
     """Load the public key from file with caching and retry logic.
 
@@ -60,7 +61,10 @@ def get_public_key() -> str:
         detail=f"Public key not found at {PUBLIC_KEY_PATH}. Is the authentication service running?",
     )
 
-async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)) -> Optional[dict]:
+
+async def get_current_user(
+    token: Optional[str] = Depends(oauth2_scheme),
+) -> Optional[dict]:
     """Validate the JWT and return the user payload.
 
     Returns None if AUTH_DISABLED is True (demo mode).
@@ -109,85 +113,6 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)) -> Opt
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-async def get_current_user_with_write_permission(
-    current_user: Optional[dict] = Depends(get_current_user)
-) -> Optional[dict]:
-    """Validate that the user has write permissions.
-
-    In demo mode (AUTH_DISABLED=True), always allows access.
-    Otherwise, requires valid token with media_store_write permission or admin status.
-    """
-    # Demo mode: bypass permission check
-    if AUTH_DISABLED:
-        return None
-
-    # Authentication required but no user provided
-    if current_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Debug: Log what we're checking
-    print(f"DEBUG get_current_user_with_write_permission: current_user = {current_user}")
-    print(f"DEBUG: current_user type = {type(current_user)}")
-    print(f"DEBUG: is_admin in current_user = {'is_admin' in current_user}")
-    print(f"DEBUG: is_admin value = {current_user.get('is_admin')}")
-
-    permissions = current_user.get("permissions", [])
-    is_admin = current_user.get("is_admin")
-    print(f"DEBUG: permissions = {permissions}, is_admin = {is_admin}")
-    print(f"DEBUG: Check result: media_store_write in permissions = {'media_store_write' in permissions}, not is_admin = {not is_admin}")
-
-    if "media_store_write" not in permissions and not current_user.get("is_admin"):
-        print(f"DEBUG: DENYING ACCESS - no write permission and not admin")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions",
-        )
-    print(f"DEBUG: ALLOWING ACCESS")
-    return current_user
-
-async def get_current_user_with_read_permission(
-    current_user: Optional[dict] = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> Optional[dict]:
-    """Validate that the user has read permissions.
-
-    In demo mode (AUTH_DISABLED=True), always allows access.
-    If READ_AUTH_ENABLED (from database config) is False, allows access without authentication.
-    If READ_AUTH_ENABLED is True, requires valid token with media_store_read permission or admin status.
-    """
-    # Demo mode: bypass permission check
-    if AUTH_DISABLED:
-        return None
-
-    # Check database config for read auth setting
-    from .config_service import ConfigService
-
-    config_service = ConfigService(db)
-    read_auth_enabled = config_service.get_read_auth_enabled()
-
-    # Read auth not enabled: allow access
-    if not read_auth_enabled:
-        return current_user  # May be None, but that's okay
-
-    # Read auth enabled but no user provided
-    if current_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    permissions = current_user.get("permissions", [])
-    if "media_store_read" not in permissions and not current_user.get("is_admin"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions",
-        )
-    return current_user
 
 def require_permission(permission: str):
     """Dependency to require a specific permission.
@@ -201,8 +126,9 @@ def require_permission(permission: str):
         async def protected_endpoint(user: dict = Depends(require_permission("ai_inference_support"))):
             return {"message": f"Hello {user.get('sub')}"}
     """
+
     async def permission_checker(
-        current_user: Optional[dict] = Depends(get_current_user)
+        current_user: Optional[dict] = Depends(get_current_user),
     ) -> Optional[dict]:
         # Demo mode: bypass permission check
         if AUTH_DISABLED:
@@ -232,3 +158,27 @@ def require_permission(permission: str):
 
     return permission_checker
 
+
+async def require_admin(
+    current_user: Optional[dict] = Depends(get_current_user),
+) -> Optional[dict]:
+    # Demo mode: bypass permission check
+    if AUTH_DISABLED:
+        return current_user
+
+    # No user provided but auth is required
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Admin users bypass permission checks
+    if not current_user.get("is_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Insufficient permissions. admin access required",
+        )
+
+    return current_user

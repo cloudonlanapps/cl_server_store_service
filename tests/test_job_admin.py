@@ -12,7 +12,7 @@ class TestStorageSizeEndpoint:
     def test_get_storage_size_returns_correct_structure(self, auth_client, inference_admin_token):
         """Test that storage size endpoint returns correct data structure."""
         response = auth_client.get(
-            "/api/v1/admin/storage/size",
+            "/job/admin/storage/size",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -31,7 +31,7 @@ class TestStorageSizeEndpoint:
         """Test that storage size increases after creating a job."""
         # Get initial storage size
         initial_response = auth_client.get(
-            "/api/v1/admin/storage/size",
+            "/job/admin/storage/size",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -39,14 +39,14 @@ class TestStorageSizeEndpoint:
 
         # Create a job
         auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
         # Get storage size after job creation
         updated_response = auth_client.get(
-            "/api/v1/admin/storage/size",
+            "/job/admin/storage/size",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -59,7 +59,7 @@ class TestStorageSizeEndpoint:
         """Test that storage size info reflects job deletion."""
         # Create a job
         create_response = auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -68,7 +68,7 @@ class TestStorageSizeEndpoint:
 
         # Get storage size after job creation
         after_create = auth_client.get(
-            "/api/v1/admin/storage/size",
+            "/job/admin/storage/size",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -76,13 +76,13 @@ class TestStorageSizeEndpoint:
 
         # Delete the job
         auth_client.delete(
-            f"/api/v1/job/{job_id}",
+            f"/job/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
         # Get storage size after job deletion
         after_delete = auth_client.get(
-            "/api/v1/admin/storage/size",
+            "/job/admin/storage/size",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -98,7 +98,7 @@ class TestCleanupEndpoint:
     def test_cleanup_with_valid_days_parameter(self, auth_client, inference_admin_token):
         """Test cleanup endpoint with valid days parameter."""
         response = auth_client.delete(
-            "/api/v1/admin/cleanup?days=7",
+            "/job/admin/cleanup?days=7",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -116,7 +116,7 @@ class TestCleanupEndpoint:
     def test_cleanup_with_default_days(self, auth_client, inference_admin_token):
         """Test cleanup endpoint with default days value."""
         response = auth_client.delete(
-            "/api/v1/admin/cleanup",
+            "/job/admin/cleanup",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -131,14 +131,14 @@ class TestCleanupEndpoint:
         """Test cleanup with days=0 parameter cleans all old jobs."""
         # Create a job
         auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
         # Cleanup with days=0 should remove all jobs
         response = auth_client.delete(
-            "/api/v1/admin/cleanup?days=0",
+            "/job/admin/cleanup?days=0",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -154,7 +154,7 @@ class TestCleanupEndpoint:
         created_jobs = []
         for i in range(3):
             response = auth_client.post(
-                "/api/v1/job/image_processing",
+                "/job/image_processing",
                 data=sample_job_data,
                 headers={"Authorization": f"Bearer {inference_token}"},
             )
@@ -162,7 +162,7 @@ class TestCleanupEndpoint:
 
         # Cleanup with days=0 to delete all
         cleanup_response = auth_client.delete(
-            "/api/v1/admin/cleanup?days=0",
+            "/job/admin/cleanup?days=0",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -175,7 +175,7 @@ class TestCleanupEndpoint:
         """Test that cleanup with large days value preserves recent jobs."""
         # Create a job
         create_response = auth_client.post(
-            "/api/v1/job/image_processing",
+            "/job/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -184,7 +184,7 @@ class TestCleanupEndpoint:
 
         # Cleanup with days=30 (recent jobs should be preserved)
         cleanup_response = auth_client.delete(
-            "/api/v1/admin/cleanup?days=30",
+            "/job/admin/cleanup?days=30",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -192,7 +192,7 @@ class TestCleanupEndpoint:
 
         # Verify the job still exists
         get_response = auth_client.get(
-            f"/api/v1/job/{job_id}",
+            f"/job/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -205,7 +205,7 @@ class TestAdminOnlyAccess:
     def test_non_admin_cannot_access_storage_size(self, auth_client, inference_token):
         """Test that non-admin users cannot access storage size endpoint."""
         response = auth_client.get(
-            "/api/v1/admin/storage/size",
+            "/job/admin/storage/size",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -214,7 +214,7 @@ class TestAdminOnlyAccess:
     def test_non_admin_cannot_cleanup(self, auth_client, inference_token):
         """Test that non-admin users cannot access cleanup endpoint."""
         response = auth_client.delete(
-            "/api/v1/admin/cleanup",
+            "/job/admin/cleanup",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -223,7 +223,7 @@ class TestAdminOnlyAccess:
     def test_read_permission_cannot_access_storage_size(self, auth_client, read_token):
         """Test that read-only users cannot access storage size endpoint."""
         response = auth_client.get(
-            "/api/v1/admin/storage/size",
+            "/job/admin/storage/size",
             headers={"Authorization": f"Bearer {read_token}"},
         )
 
@@ -232,7 +232,7 @@ class TestAdminOnlyAccess:
     def test_write_permission_cannot_access_storage_size(self, auth_client, write_token):
         """Test that write-only users cannot access storage size endpoint."""
         response = auth_client.get(
-            "/api/v1/admin/storage/size",
+            "/job/admin/storage/size",
             headers={"Authorization": f"Bearer {write_token}"},
         )
 
@@ -242,7 +242,7 @@ class TestAdminOnlyAccess:
         """Test that admin token can access all admin endpoints."""
         # Storage size
         storage_response = auth_client.get(
-            "/api/v1/admin/storage/size",
+            "/job/admin/storage/size",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -250,7 +250,7 @@ class TestAdminOnlyAccess:
 
         # Cleanup
         cleanup_response = auth_client.delete(
-            "/api/v1/admin/cleanup",
+            "/job/admin/cleanup",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 

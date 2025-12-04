@@ -92,6 +92,7 @@ class JobResponse(BaseModel):
     progress: int = Field(0, description="Progress percentage (0-100)", ge=0, le=100)
     input_files: list = Field(..., description="List of input files")
     output_files: list = Field(..., description="List of output files")
+    external_files: Optional[list] = Field(None, description="List of external file references")
     task_output: Optional[dict] = Field(None, description="Task output results")
     created_at: int = Field(..., description="Job creation timestamp (milliseconds)")
     updated_at: Optional[int] = Field(None, description="Job last update timestamp (milliseconds)")

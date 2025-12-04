@@ -46,9 +46,9 @@ class TestAuthenticationLogic:
 
         return private_pem, str(public_key_path)
 
-    def test_get_current_user_with_write_permission_allows_write_permission(self):
-        """User with media_store_write permission should be allowed."""
-        from src.auth import get_current_user_with_write_permission
+    def test_require_permission_allows_correct_permission(self):
+        """User with the required permission should be allowed."""
+        from src.auth import require_permission
         import asyncio
 
         from unittest.mock import patch
@@ -62,12 +62,13 @@ class TestAuthenticationLogic:
 
         # Should not raise exception
         with patch("src.auth.AUTH_DISABLED", False):
-            result = asyncio.run(get_current_user_with_write_permission(user))
+            permission_checker = require_permission("media_store_write")
+            result = asyncio.run(permission_checker(user))
             assert result == user
 
-    def test_get_current_user_with_write_permission_allows_admin(self):
+    def test_require_permission_allows_admin(self):
         """Admin user should be allowed even without specific permission."""
-        from src.auth import get_current_user_with_write_permission
+        from src.auth import require_permission
         import asyncio
 
         from unittest.mock import patch
@@ -75,12 +76,13 @@ class TestAuthenticationLogic:
         user = {"sub": "admin", "permissions": [], "is_admin": True}
 
         with patch("src.auth.AUTH_DISABLED", False):
-            result = asyncio.run(get_current_user_with_write_permission(user))
+            permission_checker = require_permission("media_store_write")
+            result = asyncio.run(permission_checker(user))
             assert result == user
 
-    def test_get_current_user_with_write_permission_rejects_wrong_permission(self):
-        """User with only read permission should be rejected."""
-        from src.auth import get_current_user_with_write_permission
+    def test_require_permission_rejects_wrong_permission(self):
+        """User with only read permission should be rejected when write is required."""
+        from src.auth import require_permission
         import asyncio
 
         from unittest.mock import patch
@@ -93,45 +95,32 @@ class TestAuthenticationLogic:
 
         with patch("src.auth.AUTH_DISABLED", False):
             with pytest.raises(HTTPException) as exc_info:
-                asyncio.run(get_current_user_with_write_permission(user))
+                permission_checker = require_permission("media_store_write")
+                asyncio.run(permission_checker(user))
 
             assert exc_info.value.status_code == 403
 
-    def test_get_current_user_with_write_permission_rejects_none_user(self):
+    def test_require_permission_rejects_none_user(self):
         """None user (no auth) should be rejected when auth is not disabled."""
-        from src.auth import get_current_user_with_write_permission, AUTH_DISABLED
-        import asyncio
-
-        # Only test if auth is enabled
-        if not AUTH_DISABLED:
-            with pytest.raises(HTTPException) as exc_info:
-                asyncio.run(get_current_user_with_write_permission(None))
-
-            assert exc_info.value.status_code == 401
-
-    def test_get_current_user_with_read_permission_allows_read_permission(self):
-        """User with media_store_read permission should be allowed when read auth is enabled."""
-        from src.auth import get_current_user_with_read_permission
-        from src.config_service import ConfigService
-        from unittest.mock import MagicMock
+        from src.auth import require_permission, AUTH_DISABLED
         import asyncio
 
         from unittest.mock import patch
 
-        # Clear cache
-        ConfigService._cache.clear()
-        ConfigService._cache_timestamps.clear()
+        # Only test if auth is enabled
+        with patch("src.auth.AUTH_DISABLED", False):
+            with pytest.raises(HTTPException) as exc_info:
+                permission_checker = require_permission("media_store_write")
+                asyncio.run(permission_checker(None))
 
-        # Mock DB session and ConfigService
-        mock_db = MagicMock()
-        # Mock ConfigService behavior: get_read_auth_enabled returns True
-        # Since ConfigService is instantiated inside the function, we need to mock the class
-        # or mock the db query result.
-        # Easier: mock db.query(...).filter(...).first() to return a config object
+            assert exc_info.value.status_code == 401
 
-        mock_config = MagicMock()
-        mock_config.value = "true"
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_config
+    def test_require_permission_allows_read_permission(self):
+        """User with media_store_read permission should be allowed."""
+        from src.auth import require_permission
+        import asyncio
+
+        from unittest.mock import patch
 
         user = {
             "sub": "testuser",
@@ -140,30 +129,41 @@ class TestAuthenticationLogic:
         }
 
         with patch("src.auth.AUTH_DISABLED", False):
-            result = asyncio.run(get_current_user_with_read_permission(user, mock_db))
+            permission_checker = require_permission("media_store_read")
+            result = asyncio.run(permission_checker(user))
             assert result == user
 
-    def test_get_current_user_with_read_permission_allows_none_when_disabled(self):
-        """None user should be allowed when read auth is disabled."""
-        from src.auth import get_current_user_with_read_permission
-        from src.config_service import ConfigService
-        from unittest.mock import MagicMock
+    def test_require_admin_allows_admin_user(self):
+        """Admin user should be allowed by require_admin."""
+        from src.auth import require_admin
         import asyncio
 
-        # Clear cache
-        ConfigService._cache.clear()
-        ConfigService._cache_timestamps.clear()
+        from unittest.mock import patch
 
-        # Mock DB session
-        mock_db = MagicMock()
-        # Mock ConfigService behavior: get_read_auth_enabled returns False (default or explicit)
-        mock_config = MagicMock()
-        mock_config.value = "false"
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_config
+        user = {"sub": "admin", "permissions": [], "is_admin": True}
 
-        result = asyncio.run(get_current_user_with_read_permission(None, mock_db))
-        # Should not raise exception
-        assert result is None
+        with patch("src.auth.AUTH_DISABLED", False):
+            result = asyncio.run(require_admin(user))
+            assert result == user
+
+    def test_require_admin_rejects_non_admin(self):
+        """Non-admin user should be rejected by require_admin."""
+        from src.auth import require_admin
+        import asyncio
+
+        from unittest.mock import patch
+
+        user = {
+            "sub": "testuser",
+            "permissions": ["media_store_write"],
+            "is_admin": False,
+        }
+
+        with patch("src.auth.AUTH_DISABLED", False):
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(require_admin(user))
+
+            assert exc_info.value.status_code == 403
 
 
 class TestAuthenticationModes:
@@ -184,32 +184,29 @@ class TestAuthenticationModes:
         # In test environment without env var, should be False
         assert isinstance(READ_AUTH_ENABLED, bool)
 
-    def test_demo_mode_bypasses_write_auth(self):
-        """When AUTH_DISABLED=true, write auth should be bypassed."""
-        from src.auth import get_current_user_with_write_permission, AUTH_DISABLED
+    def test_demo_mode_bypasses_permission_check(self):
+        """When AUTH_DISABLED=true, permission checks should be bypassed."""
+        from src.auth import require_permission
         import asyncio
 
-        if AUTH_DISABLED:
+        from unittest.mock import patch
+
+        with patch("src.auth.AUTH_DISABLED", True):
             # In demo mode, None user should be allowed
-            result = asyncio.run(get_current_user_with_write_permission(None))
+            permission_checker = require_permission("media_store_write")
+            result = asyncio.run(permission_checker(None))
             assert result is None
 
-    def test_demo_mode_bypasses_read_auth(self):
-        """When AUTH_DISABLED=true, read auth should be bypassed."""
-        from src.auth import get_current_user_with_read_permission, AUTH_DISABLED
-        from src.config_service import ConfigService
-        from unittest.mock import MagicMock
+    def test_demo_mode_bypasses_admin_check(self):
+        """When AUTH_DISABLED=true, admin checks should be bypassed."""
+        from src.auth import require_admin
         import asyncio
 
-        # Clear cache
-        ConfigService._cache.clear()
-        ConfigService._cache_timestamps.clear()
+        from unittest.mock import patch
 
-        if AUTH_DISABLED:
+        with patch("src.auth.AUTH_DISABLED", True):
             # In demo mode, None user should be allowed
-            # Even with mock db, it should return early
-            mock_db = MagicMock()
-            result = asyncio.run(get_current_user_with_read_permission(None, mock_db))
+            result = asyncio.run(require_admin(None))
             assert result is None
 
 
@@ -227,7 +224,7 @@ class TestJWTValidation:
         private_key_pem, public_key_path = key_pair
         token = jwt_token_generator.generate_token(
             sub="testuser",
-            permissions=["media_store_write"],
+            permissions=["media_store_read"],
             is_admin=False,
             expired=False
         )
