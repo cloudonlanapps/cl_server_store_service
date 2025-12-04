@@ -88,6 +88,7 @@ class JobResponse(BaseModel):
     job_id: str = Field(..., description="Unique job identifier")
     task_type: str = Field(..., description="Type of task to execute")
     status: str = Field(..., description="Job status (pending, processing, completed, failed)")
+    priority: int = Field(5, description="Job priority (0-10)")
     progress: int = Field(0, description="Progress percentage (0-100)", ge=0, le=100)
     input_files: list = Field(..., description="List of input files")
     output_files: list = Field(..., description="List of output files")

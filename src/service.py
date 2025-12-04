@@ -628,7 +628,7 @@ class JobService:
             input_file_path=input_file_path or "",
             input_files=json.dumps(input_files_info),
             output_files="[]",
-            status="pending",
+            status="queued",
             progress=0,
             created_at=current_time,
             created_by=user.get("sub") if user else None,
@@ -650,7 +650,8 @@ class JobService:
         return schemas.JobResponse(
             job_id=job_id,
             task_type=task_type,
-            status="pending",
+            status="queued",
+            priority=priority,
             progress=0,
             input_files=input_files_info,
             output_files=[],

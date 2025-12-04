@@ -106,7 +106,7 @@ def client(test_engine, clean_media_dir):
     # Import app and override dependency
     from src import app
     from src.database import get_db
-    from src.service import EntityService
+    from src.service import EntityService, JobService
     from src.auth import get_current_user_with_write_permission, get_current_user
 
     app.dependency_overrides[get_db] = override_get_db
@@ -123,19 +123,28 @@ def client(test_engine, clean_media_dir):
     app.dependency_overrides[get_current_user] = override_auth
 
     # Monkey patch EntityService to use test media directory
-    original_init = EntityService.__init__
+    original_entity_init = EntityService.__init__
 
-    def patched_init(self, db, base_dir=None):
-        original_init(self, db, base_dir=str(clean_media_dir))
+    def patched_entity_init(self, db, base_dir=None):
+        original_entity_init(self, db, base_dir=str(clean_media_dir))
 
-    EntityService.__init__ = patched_init
+    EntityService.__init__ = patched_entity_init
+
+    # Monkey patch JobService to use test media directory
+    original_job_init = JobService.__init__
+
+    def patched_job_init(self, db, base_dir=None):
+        original_job_init(self, db, base_dir=str(clean_media_dir))
+
+    JobService.__init__ = patched_job_init
 
     # Create test client
     with TestClient(app) as test_client:
         yield test_client
 
     # Cleanup
-    EntityService.__init__ = original_init
+    EntityService.__init__ = original_entity_init
+    JobService.__init__ = original_job_init
     app.dependency_overrides.clear()
 
 
@@ -188,7 +197,7 @@ def sample_job_data():
     return {
         "task_type": "image_processing",
         "priority": 5,
-        "external_files": '[]',
+        "external_files": '[{"path": "/tmp/test_file.jpg", "metadata": {"name": "test_file.jpg"}}]',
     }
 
 
@@ -202,7 +211,7 @@ def sample_job_data_with_external():
     return {
         "task_type": "video_analysis",
         "priority": 3,
-        "external_files": '["file1.mp4", "file2.mp4"]',
+        "external_files": '[{"path": "/tmp/file1.mp4", "metadata": {"name": "file1.mp4"}}, {"path": "/tmp/file2.mp4", "metadata": {"name": "file2.mp4"}}]',
     }
 
 
@@ -216,7 +225,7 @@ def sample_job_data_high_priority():
     return {
         "task_type": "transcoding",
         "priority": 10,
-        "external_files": '[]',
+        "external_files": '[{"path": "/tmp/high_priority_file.mp4", "metadata": {"name": "high_priority_file.mp4"}}]',
     }
 
 
@@ -433,14 +442,22 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     Uses the key_pair fixture to set up proper JWT validation.
     """
     import sys
+    import importlib
 
     # Set PUBLIC_KEY_PATH environment variable for JWT validation
     _, public_key_path = key_pair
     monkeypatch.setenv("PUBLIC_KEY_PATH", public_key_path)
 
-    # Clear auth module's public key cache to force reload from new path
+    # Update auth module's PUBLIC_KEY_PATH and clear cache
     if "src.auth" in sys.modules:
         auth_module = sys.modules["src.auth"]
+        # Reload config to pick up new environment variable
+        if "src.config" in sys.modules:
+            config_module = sys.modules["src.config"]
+            importlib.reload(config_module)
+            # Update auth module's reference to PUBLIC_KEY_PATH
+            auth_module.PUBLIC_KEY_PATH = config_module.PUBLIC_KEY_PATH
+
         auth_module._public_key_cache = None
         auth_module._public_key_load_attempts = 0
 
@@ -460,22 +477,31 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     # Import app
     from src import app
     from src.database import get_db
-    from src.service import EntityService
+    from src.service import EntityService, JobService
 
     app.dependency_overrides[get_db] = override_get_db
 
     # Monkey patch EntityService to use test media directory
-    original_init = EntityService.__init__
+    original_entity_init = EntityService.__init__
 
-    def patched_init(self, db, base_dir=None):
-        original_init(self, db, base_dir=str(clean_media_dir))
+    def patched_entity_init(self, db, base_dir=None):
+        original_entity_init(self, db, base_dir=str(clean_media_dir))
 
-    EntityService.__init__ = patched_init
+    EntityService.__init__ = patched_entity_init
+
+    # Monkey patch JobService to use test media directory
+    original_job_init = JobService.__init__
+
+    def patched_job_init(self, db, base_dir=None):
+        original_job_init(self, db, base_dir=str(clean_media_dir))
+
+    JobService.__init__ = patched_job_init
 
     # Create test client
     with TestClient(app) as test_client:
         yield test_client
 
     # Cleanup
-    EntityService.__init__ = original_init
+    EntityService.__init__ = original_entity_init
+    JobService.__init__ = original_job_init
     app.dependency_overrides.clear()
