@@ -657,6 +657,7 @@ class JobService:
             output_files=[],
             task_output=None,
             created_at=current_time,
+            updated_at=current_time,
         )
 
     def get_job(self, job_id: str):
@@ -696,6 +697,7 @@ class JobService:
             output_files=output_files,
             task_output=task_output,
             created_at=job.created_at,
+            updated_at=job.created_at,
             started_at=job.started_at,
             completed_at=job.completed_at,
             error_message=job.error_message,

@@ -94,6 +94,7 @@ class JobResponse(BaseModel):
     output_files: list = Field(..., description="List of output files")
     task_output: Optional[dict] = Field(None, description="Task output results")
     created_at: int = Field(..., description="Job creation timestamp (milliseconds)")
+    updated_at: Optional[int] = Field(None, description="Job last update timestamp (milliseconds)")
     started_at: Optional[int] = Field(None, description="Job start timestamp (milliseconds)")
     completed_at: Optional[int] = Field(None, description="Job completion timestamp (milliseconds)")
     error_message: Optional[str] = Field(None, description="Error message if job failed")
