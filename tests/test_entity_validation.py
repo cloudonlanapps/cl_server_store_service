@@ -11,7 +11,7 @@ class TestEntityValidation:
     def test_create_non_collection_without_image_fails(self, client):
         """Test that creating a non-collection without an image fails."""
         response = client.post(
-            "/entity/",
+            "/entities/",
             data={
                 "is_collection": "false",
                 "label": "Non-collection without image"
@@ -24,7 +24,7 @@ class TestEntityValidation:
     def test_create_collection_without_image_succeeds(self, client):
         """Test that creating a collection without an image succeeds."""
         response = client.post(
-            "/entity/",
+            "/entities/",
             data={
                 "is_collection": "true",
                 "label": "Collection without image",
@@ -43,7 +43,7 @@ class TestEntityValidation:
         """Test that creating a collection with an image fails."""
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "true",
@@ -58,7 +58,7 @@ class TestEntityValidation:
         """Test that updating a collection with an image fails."""
         # Create a collection
         create_response = client.post(
-            "/entity/",
+            "/entities/",
             data={
                 "is_collection": "true",
                 "label": "Test Collection"
@@ -71,7 +71,7 @@ class TestEntityValidation:
         # Try to update with an image (should fail)
         with open(sample_image, "rb") as f:
             update_response = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "true",
@@ -87,7 +87,7 @@ class TestEntityValidation:
         # Create a non-collection
         with open(sample_image, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -100,7 +100,7 @@ class TestEntityValidation:
         
         # Try to change to collection (should fail)
         update_response = client.put(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             data={
                 "is_collection": "true",  # Trying to change
                 "label": "Now a collection"
@@ -115,7 +115,7 @@ class TestEntityValidation:
         # Create a non-collection with image
         with open(sample_image, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -129,7 +129,7 @@ class TestEntityValidation:
         
         # Update without image (should succeed)
         update_response = client.put(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             data={
                 "is_collection": "false",
                 "label": "Updated Label",

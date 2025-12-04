@@ -15,7 +15,7 @@ class TestFileUpload:
         """Test uploading an image and extracting metadata."""
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -51,7 +51,7 @@ class TestFileUpload:
         for image_path in sample_images:
             with open(image_path, "rb") as f:
                 response = client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image_path.name, f, "image/jpeg")},
                     data={
                         "is_collection": "false",
@@ -68,7 +68,7 @@ class TestFileUpload:
         assert len(media_files) == len(sample_images)
         
         # Verify we can retrieve all entities
-        response = client.get("/entity/?page_size=100")
+        response = client.get("/entities/?page_size=100")
         assert response.status_code == 200
         data = response.json()
         assert len(data["items"]) == len(sample_images)
@@ -76,7 +76,7 @@ class TestFileUpload:
     def test_upload_without_file(self, client):
         """Test creating a collection without a file."""
         response = client.post(
-            "/entity/",
+            "/entities/",
             data={
                 "is_collection": "true",
                 "label": "Test Collection",
@@ -96,7 +96,7 @@ class TestFileUpload:
         
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Metadata test"}
             )

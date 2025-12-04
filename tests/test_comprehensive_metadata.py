@@ -25,7 +25,7 @@ class TestAllImagesMetadata:
         
         with open(image_path, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (image_path.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -60,7 +60,7 @@ class TestTimestampFields:
         """Test that added_date is a valid ISO-8601 timestamp."""
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Timestamp test"}
             )
@@ -82,7 +82,7 @@ class TestTimestampFields:
         # Create entity
         with open(sample_image, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Original"}
             )
@@ -92,7 +92,7 @@ class TestTimestampFields:
         # Update entity
         with open(sample_image, "rb") as f:
             update_response = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Updated"}
             )
@@ -113,7 +113,7 @@ class TestTimestampFields:
         # Create entity
         with open(sample_image, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Original"}
             )
@@ -128,7 +128,7 @@ class TestTimestampFields:
         # Update entity
         with open(sample_image, "rb") as f:
             update_response = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Updated"}
             )
@@ -142,7 +142,7 @@ class TestTimestampFields:
         """Test that create_date is extracted from EXIF data if available."""
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "EXIF test"}
             )
@@ -168,7 +168,7 @@ class TestFilePathField:
         """Test that file_path is stored in database (not returned in API)."""
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "File path test"}
             )
@@ -196,7 +196,7 @@ class TestUnpopulatedFields:
         """Test that duration is None for image files."""
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Duration test"}
             )
@@ -211,7 +211,7 @@ class TestUnpopulatedFields:
         """Test type and extension fields (may not be populated by clmediakit)."""
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Type test"}
             )

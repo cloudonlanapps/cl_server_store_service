@@ -174,7 +174,7 @@ class TestJWTUserID:
         # Create an entity using this token
         with open(sample_image, "rb") as f:
             response = auth_client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "User ID Test Entity"},
                 headers={"Authorization": f"Bearer {token}"},
@@ -201,7 +201,7 @@ class TestReadAuthBehaviorWithConfig:
         config_service.set_read_auth_enabled(False)
 
         # Try to access read endpoint without auth
-        response = client.get("/entity/")
+        response = client.get("/entities/")
         # Should succeed (200) or return empty list, not 401/403
         assert response.status_code != 401
         assert response.status_code != 403
@@ -213,7 +213,7 @@ class TestReadAuthBehaviorWithConfig:
         config_service.set_read_auth_enabled(True)
 
         # Try to access read endpoint without auth
-        response = client.get("/entity/")
+        response = client.get("/entities/")
         # Should return 401 (unauthorized)
         # Note: This might fail if AUTH_DISABLED env var is set
         # TODO: Mock environment variables for this test

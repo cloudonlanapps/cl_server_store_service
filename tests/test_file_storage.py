@@ -12,7 +12,7 @@ class TestFileStorage:
         """Test that files are stored in YYYY/MM/DD structure."""
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Storage Test"}
             )
@@ -56,7 +56,7 @@ class TestFileStorage:
         """Test that filenames use MD5 as name."""
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "MD5 Name Test"}
             )
@@ -83,7 +83,7 @@ class TestFileStorage:
         for image_path in sample_images:
             with open(image_path, "rb") as f:
                 response = client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image_path.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Test {image_path.name}"}
                 )
@@ -108,7 +108,7 @@ class TestFileStorage:
         # Upload first image
         with open(image1, "rb") as f:
             response1 = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (image1.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Original"}
             )
@@ -125,7 +125,7 @@ class TestFileStorage:
         # Update with second image
         with open(image2, "rb") as f:
             response2 = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 files={"image": (image2.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Updated"}
             )

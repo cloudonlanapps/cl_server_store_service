@@ -16,7 +16,7 @@ class TestEntityVsJobPermissions:
         # Should allow entity creation
         with open(sample_image, "rb") as f:
             entity_response = auth_client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test Entity"},
                 headers={"Authorization": f"Bearer {write_token}"},
@@ -26,7 +26,7 @@ class TestEntityVsJobPermissions:
 
         # Should NOT allow job creation
         job_response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {write_token}"},
         )
@@ -39,7 +39,7 @@ class TestEntityVsJobPermissions:
         """Test that inference permission allows job operations but not entity write."""
         # Should allow job creation
         job_response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -49,7 +49,7 @@ class TestEntityVsJobPermissions:
         # Should NOT allow entity creation
         with open(sample_image, "rb") as f:
             entity_response = auth_client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test Entity"},
                 headers={"Authorization": f"Bearer {inference_token}"},
@@ -63,7 +63,7 @@ class TestEntityVsJobPermissions:
         """Test that read permission allows entity read but not write or job operations."""
         # Should allow entity read (empty collection is ok)
         entity_list_response = auth_client.get(
-            "/entity/",
+            "/entities/",
             headers={"Authorization": f"Bearer {read_token}"},
         )
 
@@ -71,7 +71,7 @@ class TestEntityVsJobPermissions:
 
         # Should NOT allow job creation
         job_response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {read_token}"},
         )
@@ -85,7 +85,7 @@ class TestEntityVsJobPermissions:
         # Should allow entity creation
         with open(sample_image, "rb") as f:
             entity_response = auth_client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test Entity"},
                 headers={"Authorization": f"Bearer {admin_token}"},
@@ -95,7 +95,7 @@ class TestEntityVsJobPermissions:
 
         # Should allow job creation (admin has both permissions)
         job_response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -104,7 +104,7 @@ class TestEntityVsJobPermissions:
 
         # Should allow storage size access
         storage_response = auth_client.get(
-            "/job/admin/storage/size",
+            "/jobs/admin/storage/size",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
@@ -119,7 +119,7 @@ class TestInferenceAdminPermissions:
     ):
         """Test that inference admin can access job creation endpoint."""
         response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
@@ -132,7 +132,7 @@ class TestInferenceAdminPermissions:
         """Test that inference admin can access admin endpoints."""
         # Storage size
         storage_response = auth_client.get(
-            "/job/admin/storage/size",
+            "/jobs/admin/storage/size",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -140,7 +140,7 @@ class TestInferenceAdminPermissions:
 
         # Cleanup
         cleanup_response = auth_client.delete(
-            "/job/admin/cleanup",
+            "/jobs/admin/cleanup",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -152,7 +152,7 @@ class TestInferenceAdminPermissions:
         """Test that inference admin CAN write entities (admin bypasses permission checks)."""
         with open(sample_image, "rb") as f:
             response = auth_client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test Entity"},
                 headers={"Authorization": f"Bearer {inference_admin_token}"},
@@ -171,7 +171,7 @@ class TestCombinedOperations:
         # Create entity with write token
         with open(sample_image, "rb") as f:
             entity_response = auth_client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test Entity"},
                 headers={"Authorization": f"Bearer {write_token}"},
@@ -181,7 +181,7 @@ class TestCombinedOperations:
 
         # Create job with inference token
         job_response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -190,7 +190,7 @@ class TestCombinedOperations:
 
         # Verify entity can still be accessed with write token
         entity_get = auth_client.get(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             headers={"Authorization": f"Bearer {write_token}"},
         )
 
@@ -198,7 +198,7 @@ class TestCombinedOperations:
 
         # Verify job can still be accessed with inference token
         job_get = auth_client.get(
-            f"/job/{job_id}",
+            f"/jobs/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -211,7 +211,7 @@ class TestCombinedOperations:
         # Create entity
         with open(sample_image, "rb") as f:
             entity_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Demo Entity"},
             )
@@ -226,14 +226,14 @@ class TestCombinedOperations:
         }
 
         job_response = client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=job_data,
         )
 
         assert job_response.status_code == 201
 
         # Access admin endpoint
-        storage_response = client.get("/job/admin/storage/size")
+        storage_response = client.get("/jobs/admin/storage/size")
 
         assert storage_response.status_code == 200
 
@@ -259,7 +259,7 @@ class TestPermissionHierarchy:
         # Should allow entity write
         with open(sample_image, "rb") as f:
             entity_response = auth_client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Multi Entity"},
                 headers={"Authorization": f"Bearer {multi_token}"},
@@ -269,7 +269,7 @@ class TestPermissionHierarchy:
 
         # Should allow job creation
         job_response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {multi_token}"},
         )
@@ -278,7 +278,7 @@ class TestPermissionHierarchy:
 
         # Should NOT allow admin operations (no admin status)
         admin_response = auth_client.get(
-            "/job/admin/storage/size",
+            "/jobs/admin/storage/size",
             headers={"Authorization": f"Bearer {multi_token}"},
         )
 
@@ -297,7 +297,7 @@ class TestPermissionHierarchy:
 
         # Should allow job creation (admin override)
         job_response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -307,7 +307,7 @@ class TestPermissionHierarchy:
         # Should allow entity write (admin override)
         with open(sample_image, "rb") as f:
             entity_response = auth_client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Admin Entity"},
                 headers={"Authorization": f"Bearer {admin_token}"},
@@ -317,7 +317,7 @@ class TestPermissionHierarchy:
 
         # Should allow admin operations
         admin_response = auth_client.get(
-            "/job/admin/storage/size",
+            "/jobs/admin/storage/size",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 

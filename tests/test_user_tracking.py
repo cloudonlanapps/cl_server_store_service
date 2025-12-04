@@ -11,7 +11,7 @@ class TestUserTracking:
         with open(sample_image, "rb") as f:
             files = {"image": f}
             response = client.post(
-                "/entity/",
+                "/entities/",
                 data={"label": "test entity", "is_collection": "false"},
                 files=files
             )
@@ -26,7 +26,7 @@ class TestUserTracking:
         with open(sample_image, "rb") as f:
             files = {"image": f}
             response = client.post(
-                "/entity/",
+                "/entities/",
                 data={"label": "initial label", "is_collection": "false"},
                 files=files
             )
@@ -40,7 +40,7 @@ class TestUserTracking:
         with open(sample_image, "rb") as f:
             files = {"image": f}
             response = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 data={"label": "updated label", "is_collection": "false"},
                 files=files
             )
@@ -59,7 +59,7 @@ class TestUserTracking:
         with open(sample_image, "rb") as f:
             files = {"image": f}
             response = client.post(
-                "/entity/",
+                "/entities/",
                 data={"label": "initial label", "is_collection": "false"},
                 files=files
             )
@@ -71,7 +71,7 @@ class TestUserTracking:
 
         # Patch the entity
         response = client.patch(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             json={"body": {"label": "patched label"}}
         )
 
@@ -89,7 +89,7 @@ class TestUserTracking:
         with open(sample_image, "rb") as f:
             files = {"image": f}
             response = client.post(
-                "/entity/",
+                "/entities/",
                 data={"label": "v1", "is_collection": "false"},
                 files=files
             )
@@ -101,13 +101,13 @@ class TestUserTracking:
 
         # Patch multiple times
         response = client.patch(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             json={"body": {"label": "v2"}}
         )
         assert response.status_code == 200
 
         response = client.patch(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             json={"body": {"label": "v3"}}
         )
         assert response.status_code == 200
@@ -124,7 +124,7 @@ class TestUserTracking:
         with open(sample_image, "rb") as f:
             files = {"image": f}
             response = client.post(
-                "/entity/",
+                "/entities/",
                 data={"label": "v1", "is_collection": "false"},
                 files=files
             )
@@ -135,13 +135,13 @@ class TestUserTracking:
 
         # Update the entity
         response = client.patch(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             json={"body": {"label": "v2"}}
         )
         assert response.status_code == 200
 
         # Get version history
-        response = client.get(f"/entity/{entity_id}/versions")
+        response = client.get(f"/entities/{entity_id}/versions")
 
         assert response.status_code == 200
         versions = response.json()

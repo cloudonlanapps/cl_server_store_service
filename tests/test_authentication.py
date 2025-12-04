@@ -232,7 +232,7 @@ class TestJWTValidation:
         # Mock the public key path to use test key
         with patch("src.auth.PUBLIC_KEY_PATH", public_key_path):
             headers = {"Authorization": f"Bearer {token}"}
-            response = auth_client.get("/entity/", headers=headers)
+            response = auth_client.get("/entities/", headers=headers)
 
             # Token should be decoded successfully
             # Response should NOT be 401 (unauthorized)
@@ -254,7 +254,7 @@ class TestJWTValidation:
 
         with patch("src.auth.PUBLIC_KEY_PATH", public_key_path):
             headers = {"Authorization": f"Bearer {token}"}
-            response = auth_client.get("/entity/", headers=headers)
+            response = auth_client.get("/entities/", headers=headers)
 
             # Expired token should be rejected with 401
             assert response.status_code == 401
@@ -278,7 +278,7 @@ class TestJWTValidation:
         with patch("src.auth.PUBLIC_KEY_PATH", public_key_path):
             for invalid_token in invalid_tokens:
                 headers = {"Authorization": f"Bearer {invalid_token}"}
-                response = auth_client.get("/entity/", headers=headers)
+                response = auth_client.get("/entities/", headers=headers)
 
                 # All invalid tokens should return 401
                 assert response.status_code == 401, (

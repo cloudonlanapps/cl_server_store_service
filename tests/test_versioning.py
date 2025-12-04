@@ -12,7 +12,7 @@ class TestEntityVersioning:
         """Test that creating an entity creates version 1."""
         with open(sample_image, "rb") as f:
             response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -25,7 +25,7 @@ class TestEntityVersioning:
         entity_id = response.json()["id"]
         
         # Query version 1 explicitly
-        version_response = client.get(f"/entity/{entity_id}?version=1")
+        version_response = client.get(f"/entities/{entity_id}?version=1")
         assert version_response.status_code == 200
         data = version_response.json()
         assert data["label"] == "Original Version"
@@ -41,7 +41,7 @@ class TestEntityVersioning:
         # Create entity (version 1)
         with open(image1, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (image1.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -57,7 +57,7 @@ class TestEntityVersioning:
         # Update entity (creates version 2)
         with open(image2, "rb") as f:
             update_response = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 files={"image": (image2.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -70,7 +70,7 @@ class TestEntityVersioning:
         version2_md5 = update_response.json()["md5"]
         
         # Verify version 1 still exists with original data
-        v1_response = client.get(f"/entity/{entity_id}?version=1")
+        v1_response = client.get(f"/entities/{entity_id}?version=1")
         assert v1_response.status_code == 200
         v1_data = v1_response.json()
         assert v1_data["label"] == "Version 1"
@@ -78,7 +78,7 @@ class TestEntityVersioning:
         assert v1_data["md5"] == version1_md5
         
         # Verify version 2 has new data
-        v2_response = client.get(f"/entity/{entity_id}?version=2")
+        v2_response = client.get(f"/entities/{entity_id}?version=2")
         assert v2_response.status_code == 200
         v2_data = v2_response.json()
         assert v2_data["label"] == "Version 2"
@@ -91,7 +91,7 @@ class TestEntityVersioning:
         # Create entity
         with open(sample_image, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -103,7 +103,7 @@ class TestEntityVersioning:
         
         # Update entity (metadata only)
         update_response = client.put(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             data={
                 "is_collection": "false",
                 "label": "Version 2 - Latest"
@@ -113,7 +113,7 @@ class TestEntityVersioning:
         assert update_response.status_code == 200
         
         # Query without version should return latest
-        latest_response = client.get(f"/entity/{entity_id}")
+        latest_response = client.get(f"/entities/{entity_id}")
         assert latest_response.status_code == 200
         latest_data = latest_response.json()
         assert latest_data["label"] == "Version 2 - Latest"
@@ -123,7 +123,7 @@ class TestEntityVersioning:
         # Create entity
         with open(sample_image, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -136,7 +136,7 @@ class TestEntityVersioning:
         # Update twice to create versions 2 and 3
         for i in range(2, 4):
             client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 data={
                     "is_collection": "false",
                     "label": f"Version {i}"
@@ -144,7 +144,7 @@ class TestEntityVersioning:
             )
         
         # List all versions
-        versions_response = client.get(f"/entity/{entity_id}/versions")
+        versions_response = client.get(f"/entities/{entity_id}/versions")
         assert versions_response.status_code == 200
         versions = versions_response.json()
         
@@ -161,7 +161,7 @@ class TestEntityVersioning:
         # Create entity
         with open(sample_image, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -174,7 +174,7 @@ class TestEntityVersioning:
         
         # Patch entity (should create version 2)
         patch_response = client.patch(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             json={
                 "body": {
                     "label": "Patched Label"
@@ -185,12 +185,12 @@ class TestEntityVersioning:
         assert patch_response.status_code == 200
         
         # Verify version 1 has original label
-        v1_response = client.get(f"/entity/{entity_id}?version=1")
+        v1_response = client.get(f"/entities/{entity_id}?version=1")
         assert v1_response.status_code == 200
         assert v1_response.json()["label"] == "Original"
         
         # Verify latest version has patched label
-        latest_response = client.get(f"/entity/{entity_id}")
+        latest_response = client.get(f"/entities/{entity_id}")
         assert latest_response.status_code == 200
         assert latest_response.json()["label"] == "Patched Label"
         # Description should remain unchanged
@@ -201,7 +201,7 @@ class TestEntityVersioning:
         # Create entity (only version 1 exists)
         with open(sample_image, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -212,7 +212,7 @@ class TestEntityVersioning:
         entity_id = create_response.json()["id"]
         
         # Try to query version 99 (doesn't exist)
-        response = client.get(f"/entity/{entity_id}?version=99")
+        response = client.get(f"/entities/{entity_id}?version=99")
         assert response.status_code == 404
         assert "version" in response.json()["detail"].lower()
     
@@ -220,7 +220,7 @@ class TestEntityVersioning:
         """Test that collections are also versioned."""
         # Create collection
         create_response = client.post(
-            "/entity/",
+            "/entities/",
             data={
                 "is_collection": "true",
                 "label": "Collection V1",
@@ -233,7 +233,7 @@ class TestEntityVersioning:
         
         # Update collection
         update_response = client.put(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             data={
                 "is_collection": "true",
                 "label": "Collection V2",
@@ -244,11 +244,11 @@ class TestEntityVersioning:
         assert update_response.status_code == 200
         
         # Verify version 1
-        v1_response = client.get(f"/entity/{entity_id}?version=1")
+        v1_response = client.get(f"/entities/{entity_id}?version=1")
         assert v1_response.status_code == 200
         assert v1_response.json()["label"] == "Collection V1"
         
         # Verify version 2
-        v2_response = client.get(f"/entity/{entity_id}?version=2")
+        v2_response = client.get(f"/entities/{entity_id}?version=2")
         assert v2_response.status_code == 200
         assert v2_response.json()["label"] == "Collection V2"

@@ -13,7 +13,7 @@ class TestDuplicateDetection:
         # First upload - should succeed
         with open(sample_image, "rb") as f:
             response1 = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "First upload"},
             )
@@ -26,7 +26,7 @@ class TestDuplicateDetection:
         # Second upload of same file - should return existing entity
         with open(sample_image, "rb") as f:
             response2 = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Duplicate upload"},
             )
@@ -42,7 +42,7 @@ class TestDuplicateDetection:
         for image_path in sample_images:
             with open(image_path, "rb") as f:
                 response = client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image_path.name, f, "image/jpeg")},
                     data={
                         "is_collection": "false",
@@ -69,7 +69,7 @@ class TestDuplicateDetection:
         # Upload first image
         with open(image1, "rb") as f:
             response1 = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (image1.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "First"},
             )
@@ -80,7 +80,7 @@ class TestDuplicateDetection:
         # Upload second image
         with open(image2, "rb") as f:
             response2 = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (image2.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Second"},
             )
@@ -92,7 +92,7 @@ class TestDuplicateDetection:
         # Try to update entity1 with image2 (should be rejected)
         with open(image2, "rb") as f:
             response3 = client.put(
-                f"/entity/{entity1_id}",
+                f"/entities/{entity1_id}",
                 files={"image": (image2.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Updated"},
             )
@@ -108,7 +108,7 @@ class TestDuplicateDetection:
         # Upload image
         with open(sample_image, "rb") as f:
             response1 = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Original"},
             )
@@ -120,7 +120,7 @@ class TestDuplicateDetection:
         # Update same entity with same file (should succeed)
         with open(sample_image, "rb") as f:
             response2 = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Updated"},
             )

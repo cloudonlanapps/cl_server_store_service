@@ -6,7 +6,7 @@ import pytest
 
 
 class TestPagination:
-    """Test pagination for GET /entity/ endpoint."""
+    """Test pagination for GET /entities/ endpoint."""
     
     def test_pagination_first_page(self, client, sample_images):
         """Test that first page returns correct items with versioning enabled."""
@@ -15,7 +15,7 @@ class TestPagination:
         for i, image in enumerate(sample_images[:15]):
             with open(image, "rb") as f:
                 response = client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={
                         "is_collection": "false",
@@ -26,7 +26,7 @@ class TestPagination:
             created_ids.append(response.json()["id"])
         
         # Get first page with page_size=10
-        response = client.get("/entity/?page=1&page_size=10")
+        response = client.get("/entities/?page=1&page_size=10")
         assert response.status_code == 200
         
         data = response.json()
@@ -51,17 +51,17 @@ class TestPagination:
         for i, image in enumerate(sample_images[:15]):
             with open(image, "rb") as f:
                 client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Entity {i+1}"}
                 )
         
         # Get first page
-        page1_response = client.get("/entity/?page=1&page_size=10")
+        page1_response = client.get("/entities/?page=1&page_size=10")
         page1_ids = {item["id"] for item in page1_response.json()["items"]}
         
         # Get second page
-        page2_response = client.get("/entity/?page=2&page_size=10")
+        page2_response = client.get("/entities/?page=2&page_size=10")
         assert page2_response.status_code == 200
         
         data = page2_response.json()
@@ -83,20 +83,20 @@ class TestPagination:
         for i, image in enumerate(sample_images[:20]):
             with open(image, "rb") as f:
                 client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Entity {i+1}"}
                 )
         
         # Test page_size=5
-        response = client.get("/entity/?page=1&page_size=5")
+        response = client.get("/entities/?page=1&page_size=5")
         assert response.status_code == 200
         data = response.json()
         assert len(data["items"]) == 5
         assert data["pagination"]["total_pages"] == 4
         
         # Test page_size=25 (should return all 20)
-        response = client.get("/entity/?page=1&page_size=25")
+        response = client.get("/entities/?page=1&page_size=25")
         assert response.status_code == 200
         data = response.json()
         assert len(data["items"]) == 20
@@ -108,12 +108,12 @@ class TestPagination:
         for i, image in enumerate(sample_images[:23]):
             with open(image, "rb") as f:
                 client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Entity {i+1}"}
                 )
         
-        response = client.get("/entity/?page=2&page_size=10")
+        response = client.get("/entities/?page=2&page_size=10")
         assert response.status_code == 200
         
         pagination = response.json()["pagination"]
@@ -130,13 +130,13 @@ class TestPagination:
         for i, image in enumerate(sample_images[:23]):
             with open(image, "rb") as f:
                 client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Entity {i+1}"}
                 )
         
         # Get last page (page 3)
-        response = client.get("/entity/?page=3&page_size=10")
+        response = client.get("/entities/?page=3&page_size=10")
         assert response.status_code == 200
         
         data = response.json()
@@ -152,13 +152,13 @@ class TestPagination:
         for i, image in enumerate(sample_images[:10]):
             with open(image, "rb") as f:
                 client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Entity {i+1}"}
                 )
         
         # Request page 10 (beyond total)
-        response = client.get("/entity/?page=10&page_size=10")
+        response = client.get("/entities/?page=10&page_size=10")
         assert response.status_code == 200
         
         data = response.json()
@@ -177,7 +177,7 @@ class TestPaginationWithVersioning:
         for i, image in enumerate(sample_images[:10]):
             with open(image, "rb") as f:
                 response = client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Original {i+1}"}
                 )
@@ -186,12 +186,12 @@ class TestPaginationWithVersioning:
         # Update first 5 entities to create version 2
         for entity_id in entity_ids[:5]:
             client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 data={"is_collection": "false", "label": f"Updated {entity_id}"}
             )
         
         # Query all entities at version 1 (original state)
-        response = client.get("/entity/?page=1&page_size=10&version=1")
+        response = client.get("/entities/?page=1&page_size=10&version=1")
         assert response.status_code == 200
         
         data = response.json()
@@ -208,7 +208,7 @@ class TestPaginationWithVersioning:
         for i, image in enumerate(sample_images[:15]):
             with open(image, "rb") as f:
                 client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"V1 Entity {i+1}"}
                 )
@@ -216,20 +216,20 @@ class TestPaginationWithVersioning:
         # Update all entities
         for i in range(1, 16):
             client.put(
-                f"/entity/{i}",
+                f"/entities/{i}",
                 data={"is_collection": "false", "label": f"V2 Entity {i}"}
             )
         
         # Get page 1 at version 1
-        page1 = client.get("/entity/?page=1&page_size=10&version=1")
+        page1 = client.get("/entities/?page=1&page_size=10&version=1")
         assert all("V1" in item["label"] for item in page1.json()["items"])
         
         # Get page 2 at version 1
-        page2 = client.get("/entity/?page=2&page_size=10&version=1")
+        page2 = client.get("/entities/?page=2&page_size=10&version=1")
         assert all("V1" in item["label"] for item in page2.json()["items"])
         
         # Get page 1 at version 2 (latest)
-        page1_v2 = client.get("/entity/?page=1&page_size=10&version=2")
+        page1_v2 = client.get("/entities/?page=1&page_size=10&version=2")
         assert all("V2" in item["label"] for item in page1_v2.json()["items"])
     
     def test_pagination_version_nonexistent(self, client, sample_images):
@@ -238,7 +238,7 @@ class TestPaginationWithVersioning:
         for i, image in enumerate(sample_images[:10]):
             with open(image, "rb") as f:
                 client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Entity {i+1}"}
                 )
@@ -246,12 +246,12 @@ class TestPaginationWithVersioning:
         # Update only first 5 entities (they have version 2)
         for i in range(1, 6):
             client.put(
-                f"/entity/{i}",
+                f"/entities/{i}",
                 data={"is_collection": "false", "label": f"Updated {i}"}
             )
         
         # Query version 2 - should only return 5 items (entities 1-5)
-        response = client.get("/entity/?page=1&page_size=10&version=2")
+        response = client.get("/entities/?page=1&page_size=10&version=2")
         assert response.status_code == 200
         
         data = response.json()
@@ -267,7 +267,7 @@ class TestPaginationWithVersioning:
             original_labels.append(label)
             with open(image, "rb") as f:
                 client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": label}
                 )
@@ -275,12 +275,12 @@ class TestPaginationWithVersioning:
         # Update all entities with new labels
         for i in range(1, 11):
             client.put(
-                f"/entity/{i}",
+                f"/entities/{i}",
                 data={"is_collection": "false", "label": f"Updated Label {i}"}
             )
         
         # Query version 1 - should have original labels
-        response = client.get("/entity/?page=1&page_size=10&version=1")
+        response = client.get("/entities/?page=1&page_size=10&version=1")
         items = response.json()["items"]
         
         for i, item in enumerate(items):
@@ -293,7 +293,7 @@ class TestPaginationEdgeCases:
     
     def test_pagination_empty_database(self, client):
         """Test pagination with no entities."""
-        response = client.get("/entity/?page=1&page_size=10")
+        response = client.get("/entities/?page=1&page_size=10")
         assert response.status_code == 200
         
         data = response.json()
@@ -305,23 +305,23 @@ class TestPaginationEdgeCases:
     
     def test_pagination_invalid_page_zero(self, client):
         """Test that page=0 is rejected."""
-        response = client.get("/entity/?page=0&page_size=10")
+        response = client.get("/entities/?page=0&page_size=10")
         # Should return validation error (422)
         assert response.status_code == 422
     
     def test_pagination_invalid_page_negative(self, client):
         """Test that negative page is rejected."""
-        response = client.get("/entity/?page=-1&page_size=10")
+        response = client.get("/entities/?page=-1&page_size=10")
         assert response.status_code == 422
     
     def test_pagination_invalid_page_size_zero(self, client):
         """Test that page_size=0 is rejected."""
-        response = client.get("/entity/?page=1&page_size=0")
+        response = client.get("/entities/?page=1&page_size=0")
         assert response.status_code == 422
     
     def test_pagination_max_page_size(self, client):
         """Test that page_size > 100 is rejected."""
-        response = client.get("/entity/?page=1&page_size=101")
+        response = client.get("/entities/?page=1&page_size=101")
         # Should return validation error
         assert response.status_code == 422
     
@@ -331,12 +331,12 @@ class TestPaginationEdgeCases:
         for i, image in enumerate(sample_images[:17]):
             with open(image, "rb") as f:
                 client.post(
-                    "/entity/",
+                    "/entities/",
                     files={"image": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Entity {i+1}"}
                 )
         
         # Query with different page sizes
         for page_size in [5, 10, 20]:
-            response = client.get(f"/entity/?page=1&page_size={page_size}")
+            response = client.get(f"/entities/?page=1&page_size={page_size}")
             assert response.json()["pagination"]["total_items"] == 17

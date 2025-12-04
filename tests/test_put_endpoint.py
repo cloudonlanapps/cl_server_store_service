@@ -18,7 +18,7 @@ class TestPutEndpoint:
         # Create entity with first image
         with open(image1, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (image1.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -41,7 +41,7 @@ class TestPutEndpoint:
         # Update with second image
         with open(image2, "rb") as f:
             update_response = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 files={"image": (image2.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -83,7 +83,7 @@ class TestPutEndpoint:
         # Create entity
         with open(image1, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (image1.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test"}
             )
@@ -93,7 +93,7 @@ class TestPutEndpoint:
         # Update with second image
         with open(image2, "rb") as f:
             update_response = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 files={"image": (image2.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Updated"}
             )
@@ -113,7 +113,7 @@ class TestPutEndpoint:
         # Create entity with image
         with open(sample_image, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test"}
             )
@@ -122,7 +122,7 @@ class TestPutEndpoint:
         
         # Update without file (should succeed - image is optional for PUT on non-collections)
         update_response = client.put(
-            f"/entity/{entity_id}",
+            f"/entities/{entity_id}",
             data={
                 "is_collection": "false",
                 "label": "Updated without file"
@@ -146,7 +146,7 @@ class TestPutEndpoint:
         # Create entity
         with open(image1, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (image1.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Original"}
             )
@@ -156,7 +156,7 @@ class TestPutEndpoint:
         # Update with different image
         with open(image2, "rb") as f:
             update_response = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 files={"image": (image2.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
@@ -187,7 +187,7 @@ class TestPutEndpoint:
         # Create entity
         with open(sample_image, "rb") as f:
             create_response = client.post(
-                "/entity/",
+                "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Original"}
             )
@@ -198,7 +198,7 @@ class TestPutEndpoint:
         # Update with same file
         with open(sample_image, "rb") as f:
             update_response = client.put(
-                f"/entity/{entity_id}",
+                f"/entities/{entity_id}",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Updated"}
             )

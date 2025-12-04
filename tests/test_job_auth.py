@@ -12,7 +12,7 @@ class TestJobAuthenticationRequired:
     def test_create_job_without_token_returns_401(self, auth_client, sample_job_data):
         """Test that creating a job without token returns 401."""
         response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
         )
 
@@ -20,20 +20,20 @@ class TestJobAuthenticationRequired:
 
     def test_get_job_without_token_returns_401(self, auth_client):
         """Test that getting a job without token returns 401."""
-        response = auth_client.get("/job/test-job-id")
+        response = auth_client.get("/jobs/test-job-id")
 
         assert response.status_code == 401
 
     def test_delete_job_without_token_returns_401(self, auth_client):
         """Test that deleting a job without token returns 401."""
-        response = auth_client.delete("/job/test-job-id")
+        response = auth_client.delete("/jobs/test-job-id")
 
         assert response.status_code == 401
 
     def test_invalid_token_returns_401(self, auth_client, sample_job_data):
         """Test that invalid token returns 401."""
         response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": "Bearer invalid.token.here"},
         )
@@ -49,7 +49,7 @@ class TestJobPermissionRequired:
     ):
         """Test that write permission is insufficient for job creation."""
         response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {write_token}"},
         )
@@ -61,7 +61,7 @@ class TestJobPermissionRequired:
     ):
         """Test that read permission is insufficient for job creation."""
         response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {read_token}"},
         )
@@ -71,7 +71,7 @@ class TestJobPermissionRequired:
     def test_get_job_with_write_permission_fails(self, auth_client, write_token):
         """Test that write permission is insufficient for job retrieval."""
         response = auth_client.get(
-            "/job/test-job-id",
+            "/jobs/test-job-id",
             headers={"Authorization": f"Bearer {write_token}"},
         )
 
@@ -80,7 +80,7 @@ class TestJobPermissionRequired:
     def test_get_job_with_read_permission_fails(self, auth_client, read_token):
         """Test that read permission is insufficient for job retrieval."""
         response = auth_client.get(
-            "/job/test-job-id",
+            "/jobs/test-job-id",
             headers={"Authorization": f"Bearer {read_token}"},
         )
 
@@ -89,7 +89,7 @@ class TestJobPermissionRequired:
     def test_delete_job_with_write_permission_fails(self, auth_client, write_token):
         """Test that write permission is insufficient for job deletion."""
         response = auth_client.delete(
-            "/job/test-job-id",
+            "/jobs/test-job-id",
             headers={"Authorization": f"Bearer {write_token}"},
         )
 
@@ -98,7 +98,7 @@ class TestJobPermissionRequired:
     def test_delete_job_with_read_permission_fails(self, auth_client, read_token):
         """Test that read permission is insufficient for job deletion."""
         response = auth_client.delete(
-            "/job/test-job-id",
+            "/jobs/test-job-id",
             headers={"Authorization": f"Bearer {read_token}"},
         )
 
@@ -113,7 +113,7 @@ class TestJobInferencePermission:
     ):
         """Test that ai_inference_support permission allows job creation."""
         response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -126,7 +126,7 @@ class TestJobInferencePermission:
         """Test that ai_inference_support permission allows job retrieval."""
         # Create a job first
         create_response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -135,7 +135,7 @@ class TestJobInferencePermission:
 
         # Retrieve the job
         get_response = auth_client.get(
-            f"/job/{job_id}",
+            f"/jobs/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -147,7 +147,7 @@ class TestJobInferencePermission:
         """Test that ai_inference_support permission allows job deletion."""
         # Create a job first
         create_response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {inference_token}"},
         )
@@ -156,7 +156,7 @@ class TestJobInferencePermission:
 
         # Delete the job
         delete_response = auth_client.delete(
-            f"/job/{job_id}",
+            f"/jobs/{job_id}",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -169,7 +169,7 @@ class TestAdminPermission:
     def test_get_storage_size_without_admin_fails(self, auth_client, inference_token):
         """Test that non-admin cannot access storage size endpoint."""
         response = auth_client.get(
-            "/job/admin/storage/size",
+            "/jobs/admin/storage/size",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -178,7 +178,7 @@ class TestAdminPermission:
     def test_cleanup_jobs_without_admin_fails(self, auth_client, inference_token):
         """Test that non-admin cannot access cleanup endpoint."""
         response = auth_client.delete(
-            "/job/admin/cleanup",
+            "/jobs/admin/cleanup",
             headers={"Authorization": f"Bearer {inference_token}"},
         )
 
@@ -189,7 +189,7 @@ class TestAdminPermission:
     ):
         """Test that admin can access storage size endpoint."""
         response = auth_client.get(
-            "/job/admin/storage/size",
+            "/jobs/admin/storage/size",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -205,7 +205,7 @@ class TestAdminPermission:
     def test_cleanup_jobs_with_admin_succeeds(self, auth_client, inference_admin_token):
         """Test that admin can access cleanup endpoint."""
         response = auth_client.delete(
-            "/job/admin/cleanup?days=1",
+            "/jobs/admin/cleanup?days=1",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
@@ -229,7 +229,7 @@ class TestTokenValidation:
         )
 
         response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {expired_token}"},
         )
@@ -243,7 +243,7 @@ class TestTokenValidation:
         wrong_token = jwt_token_generator.generate_invalid_token_wrong_key()
 
         response = auth_client.post(
-            "/job/image_processing",
+            "/jobs/image_processing",
             data=sample_job_data,
             headers={"Authorization": f"Bearer {wrong_token}"},
         )
