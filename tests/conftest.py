@@ -108,9 +108,10 @@ def client(test_engine, clean_media_dir):
     # Mock get_mqtt_client before importing app
     mock_mqtt_client = MagicMock()
     mock_mqtt_client.get_cached_capabilities.return_value = {}
+    mock_mqtt_client.capabilities_cache = {}  # Empty cache = 0 workers
     mock_mqtt_client.wait_for_capabilities.return_value = True
 
-    with patch("src.mqtt_client.get_mqtt_client", return_value=mock_mqtt_client):
+    with patch("src.mqtt_client._mqtt_client_instance", mock_mqtt_client):
         # Import app and override dependency
         from src import app
         from src.database import get_db

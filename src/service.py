@@ -794,3 +794,18 @@ class CapabilityService:
             logger = logging.getLogger(__name__)
             logger.error(f"Error retrieving worker capabilities: {e}")
             return {}
+
+    def get_worker_count(self) -> int:
+        """Get total number of connected workers.
+
+        Returns:
+            Number of unique workers in the capability cache
+        """
+        try:
+            mqtt_client = get_mqtt_client()
+            return len(mqtt_client.capabilities_cache)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error retrieving worker count: {e}")
+            return 0

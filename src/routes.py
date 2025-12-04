@@ -495,17 +495,26 @@ async def get_worker_capabilities(
 ) -> dict:
     """Get available worker capabilities and counts from connected workers.
 
-    Returns a dictionary mapping capability names to the number of available
-    (idle) workers that can handle that capability.
+    Returns a dictionary with:
+    - num_workers: Total number of connected workers (0 if none available)
+    - capabilities: Dictionary mapping capability names to available worker counts
 
     Example response:
     {
-        "image_resize": 2,
-        "image_conversion": 1
+        "num_workers": 3,
+        "capabilities": {
+            "image_resize": 2,
+            "image_conversion": 1
+        }
     }
     """
     capability_service = service.CapabilityService(db)
-    return capability_service.get_available_capabilities()
+    capabilities = capability_service.get_available_capabilities()
+    num_workers = capability_service.get_worker_count()
+    return {
+        "num_workers": num_workers,
+        "capabilities": capabilities,
+    }
 
 
 class RootResponse(BaseModel):

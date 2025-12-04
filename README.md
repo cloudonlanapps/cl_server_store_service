@@ -669,11 +669,17 @@ Returns available worker capabilities and their counts. This endpoint does not r
 **Response (200):**
 ```json
 {
-  "image_resize": 2,
-  "image_conversion": 1,
-  "video_processing": 3
+  "num_workers": 6,
+  "capabilities": {
+    "image_resize": 2,
+    "image_conversion": 1,
+    "video_processing": 3
+  }
 }
 ```
+
+- `num_workers`: Number of unique connected workers (0 if none available)
+- `capabilities`: Dictionary mapping capability names to available idle worker counts
 
 **Status Codes:**
 - `200 OK` - Capabilities retrieved successfully

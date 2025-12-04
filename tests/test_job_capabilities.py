@@ -7,59 +7,167 @@ import pytest
 
 
 class TestCapabilityEndpoint:
-    """Tests for /compute/jobs/capability endpoint."""
+    """Tests for /compute/capabilities endpoint."""
 
-    @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
-    def test_get_capabilities_returns_dict(self, client):
-        """Test that capability endpoint returns dict response."""
-        response = client.get("/compute/jobs/capability")
+    def test_get_capabilities_returns_structured_response(self, client):
+        """Test that capability endpoint returns structured response with num_workers and capabilities."""
+        response = client.get("/compute/capabilities")
 
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, dict)
+        assert "num_workers" in data
+        assert "capabilities" in data
+        assert isinstance(data["num_workers"], int)
+        assert isinstance(data["capabilities"], dict)
 
-    @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
-    def test_get_capabilities_aggregates_workers(self, client):
-        """Test that capabilities are properly aggregated."""
-        response = client.get("/compute/jobs/capability")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data.get("image_resize") == 2
-        assert data.get("image_conversion") == 1
-
-    @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
     def test_get_capabilities_empty_workers(self, client):
-        """Test endpoint returns empty dict when no workers."""
-        response = client.get("/compute/jobs/capability")
+        """Test endpoint returns empty capabilities when no workers (default mock)."""
+        response = client.get("/compute/capabilities")
 
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, dict)
+        # Default mock returns empty capabilities
+        assert data["num_workers"] == 0
+        assert data["capabilities"] == {}
 
-    @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
-    def test_get_capabilities_multiple_types(self, client):
-        """Test with multiple capability types."""
-        response = client.get("/compute/jobs/capability")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, dict)
-
-    @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
-    def test_get_capabilities_mqtt_error_returns_empty(self, client):
-        """Test that MQTT errors return empty dict gracefully."""
-        response = client.get("/compute/jobs/capability")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, dict)
-
-    @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
     def test_get_capabilities_no_auth_required(self, client):
         """Test that capability endpoint doesn't require authentication."""
-        response = client.get("/compute/jobs/capability")
+        # The client fixture has auth enabled, but this endpoint should still work
+        response = client.get("/compute/capabilities")
         assert response.status_code == 200
+
+
+class TestCapabilityEndpointWithWorkers:
+    """Tests for /compute/capabilities with mocked workers."""
+
+    def test_get_capabilities_aggregates_workers(self, test_engine, clean_media_dir):
+        """Test that capabilities are properly aggregated from multiple workers."""
+        from unittest.mock import MagicMock, patch
+        from sqlalchemy.orm import sessionmaker
+        from fastapi.testclient import TestClient
+
+        TestingSessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=test_engine
+        )
+
+        def override_get_db():
+            try:
+                db = TestingSessionLocal()
+                yield db
+            finally:
+                db.close()
+
+        # Mock MQTT client with worker data
+        mock_mqtt_client = MagicMock()
+        mock_mqtt_client.get_cached_capabilities.return_value = {
+            "image_resize": 2,
+            "image_conversion": 1,
+        }
+        mock_mqtt_client.capabilities_cache = {
+            "worker-1": {"capabilities": ["image_resize"], "idle_count": 1},
+            "worker-2": {"capabilities": ["image_resize", "image_conversion"], "idle_count": 1},
+        }
+
+        # Patch the singleton instance directly to ensure all calls use the mock
+        with patch("src.mqtt_client._mqtt_client_instance", mock_mqtt_client):
+            from src import app
+            from src.database import get_db
+            from src.auth import get_current_user
+            from src.service import EntityService, JobService
+
+            app.dependency_overrides[get_db] = override_get_db
+            app.dependency_overrides[get_current_user] = lambda: {
+                "sub": "testuser",
+                "permissions": ["media_store_write"],
+                "is_admin": True,
+            }
+
+            original_entity_init = EntityService.__init__
+            original_job_init = JobService.__init__
+
+            def patched_entity_init(self, db, base_dir=None):
+                original_entity_init(self, db, base_dir=str(clean_media_dir))
+
+            def patched_job_init(self, db, base_dir=None):
+                original_job_init(self, db, base_dir=str(clean_media_dir))
+
+            EntityService.__init__ = patched_entity_init
+            JobService.__init__ = patched_job_init
+
+            with TestClient(app) as test_client:
+                response = test_client.get("/compute/capabilities")
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data["num_workers"] == 2  # 2 unique workers
+                assert data["capabilities"]["image_resize"] == 2
+                assert data["capabilities"]["image_conversion"] == 1
+
+            EntityService.__init__ = original_entity_init
+            JobService.__init__ = original_job_init
+            app.dependency_overrides.clear()
+
+    def test_get_capabilities_mqtt_error_returns_empty(self, test_engine, clean_media_dir):
+        """Test that MQTT errors return empty capabilities gracefully."""
+        from unittest.mock import MagicMock, patch
+        from sqlalchemy.orm import sessionmaker
+        from fastapi.testclient import TestClient
+
+        TestingSessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=test_engine
+        )
+
+        def override_get_db():
+            try:
+                db = TestingSessionLocal()
+                yield db
+            finally:
+                db.close()
+
+        # Mock MQTT client that raises an error
+        mock_mqtt_client = MagicMock()
+        mock_mqtt_client.get_cached_capabilities.side_effect = Exception("MQTT error")
+        mock_mqtt_client.capabilities_cache = {}
+
+        # Patch the singleton instance directly
+        with patch("src.mqtt_client._mqtt_client_instance", mock_mqtt_client):
+            from src import app
+            from src.database import get_db
+            from src.auth import get_current_user
+            from src.service import EntityService, JobService
+
+            app.dependency_overrides[get_db] = override_get_db
+            app.dependency_overrides[get_current_user] = lambda: {
+                "sub": "testuser",
+                "permissions": ["media_store_write"],
+                "is_admin": True,
+            }
+
+            original_entity_init = EntityService.__init__
+            original_job_init = JobService.__init__
+
+            def patched_entity_init(self, db, base_dir=None):
+                original_entity_init(self, db, base_dir=str(clean_media_dir))
+
+            def patched_job_init(self, db, base_dir=None):
+                original_job_init(self, db, base_dir=str(clean_media_dir))
+
+            EntityService.__init__ = patched_entity_init
+            JobService.__init__ = patched_job_init
+
+            with TestClient(app) as test_client:
+                response = test_client.get("/compute/capabilities")
+
+                assert response.status_code == 200
+                data = response.json()
+                # Should return empty on error
+                assert data["num_workers"] == 0
+                assert data["capabilities"] == {}
+
+            EntityService.__init__ = original_entity_init
+            JobService.__init__ = original_job_init
+            app.dependency_overrides.clear()
 
 
 class TestCapabilityService:
@@ -211,28 +319,50 @@ class TestMQTTClientIntegration:
 class TestCapabilityResponseFormat:
     """Tests for capability response format and structure."""
 
-    def test_response_is_simple_dict(self, client):
-        """Test that response is simple dict (not wrapped)."""
-        response = client.get("/compute/jobs/capability")
+    def test_response_has_num_workers_field(self, client):
+        """Test that response contains num_workers field (unique identifier)."""
+        response = client.get("/compute/capabilities")
+
+        assert response.status_code == 200
         data = response.json()
 
-        # Should be directly a dict, not wrapped
-        assert isinstance(data, dict)
+        # num_workers field uniquely identifies this as a capability response
+        assert "num_workers" in data
+        assert isinstance(data["num_workers"], int)
+        assert data["num_workers"] >= 0
 
-    @pytest.mark.skip(reason="Fixture setup issue - endpoint is implemented and working")
-    def test_response_values_are_integers(self, client):
-        """Test that all values in response are integers."""
-        response = client.get("/compute/jobs/capability")
+    def test_response_has_capabilities_field(self, client):
+        """Test that response contains capabilities dict."""
+        response = client.get("/compute/capabilities")
+
+        assert response.status_code == 200
         data = response.json()
 
-        for key, value in data.items():
-            assert isinstance(value, int)
-            assert value >= 0
+        assert "capabilities" in data
+        assert isinstance(data["capabilities"], dict)
 
-    def test_response_includes_all_capabilities(self, client):
-        """Test that response includes all discovered capabilities."""
-        response = client.get("/compute/jobs/capability")
+    def test_capabilities_values_are_non_negative_integers(self, client):
+        """Test that capability counts are non-negative integers."""
+        response = client.get("/compute/capabilities")
+
+        assert response.status_code == 200
         data = response.json()
 
-        # Verify it's a dict response
-        assert isinstance(data, dict)
+        for capability, count in data["capabilities"].items():
+            assert isinstance(capability, str)
+            assert isinstance(count, int)
+            assert count >= 0
+
+    def test_num_workers_is_unique_worker_count(self, client):
+        """Test that num_workers represents unique connected workers."""
+        response = client.get("/compute/capabilities")
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # num_workers should be >= 0 (unique worker count, not sum of capabilities)
+        assert data["num_workers"] >= 0
+        # If capabilities exist, num_workers should be >= 1
+        if data["capabilities"]:
+            assert data["num_workers"] >= 1
+
