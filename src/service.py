@@ -653,8 +653,7 @@ class JobService:
             )
 
         # Parse JSON fields
-        input_files = json.loads(job.input_files) if job.input_files else []
-        output_files = json.loads(job.output_files) if job.output_files else []
+        params = json.loads(job.params) if job.params else {}
         task_output = json.loads(job.task_output) if job.task_output else None
 
         return schemas.JobResponse(
@@ -662,9 +661,7 @@ class JobService:
             task_type=job.task_type,
             status=job.status,
             progress=job.progress,
-            input_files=input_files,
-            output_files=output_files,
-            external_files=None,
+            params=params,
             task_output=task_output,
             created_at=job.created_at,
             updated_at=job.created_at,
@@ -672,6 +669,7 @@ class JobService:
             completed_at=job.completed_at,
             error_message=job.error_message,
         )
+
 
     def delete_job(self, job_id: str) -> None:
         """Delete job and all associated files.

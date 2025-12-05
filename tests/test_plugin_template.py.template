@@ -1,0 +1,388 @@
+"""
+Template for plugin route tests.
+
+Copy this file and replace the placeholders to create tests for a new plugin.
+
+USAGE:
+    1. Copy this file to test_plugin_<plugin_name>.py
+    2. Replace all occurrences of:
+       - {{PLUGIN_NAME}} with the plugin name (e.g., "watermark")
+       - {{TASK_TYPE}} with the task type (e.g., "watermark")
+       - {{ENDPOINT}} with the endpoint path (e.g., "/compute/jobs/watermark")
+       - {{REQUIRED_PARAMS}} with required form parameters
+       - {{OPTIONAL_PARAMS}} with optional form parameters
+       - {{INVALID_PARAM_CASE}} with a validation error case
+    3. Update sample_image_file fixture if needed (e.g., for video plugins)
+    4. Add format-specific tests if applicable
+
+This template covers:
+- Job creation (valid data, validation errors)
+- Job retrieval (GET)
+- Job deletion (DELETE)
+- Authentication (401 without token)
+- Authorization (403 with wrong permission)
+- Job lifecycle
+- Token validation (expired, invalid signature)
+"""
+
+import io
+import pytest
+from PIL import Image
+
+
+# =============================================================================
+# CONFIGURATION - Replace these with your plugin's values
+# =============================================================================
+
+PLUGIN_NAME = "{{PLUGIN_NAME}}"  # e.g., "watermark"
+TASK_TYPE = "{{TASK_TYPE}}"       # e.g., "watermark"
+ENDPOINT = "{{ENDPOINT}}"         # e.g., "/compute/jobs/watermark"
+
+# Form data for valid job creation
+VALID_JOB_DATA = {
+    # Replace with your plugin's required parameters
+    "priority": 5,
+    # "param1": "value1",
+    # "param2": 100,
+}
+
+# Form data that should cause a validation error (422)
+INVALID_JOB_DATA = {
+    # Replace with invalid parameter values
+    "priority": 15,  # Invalid: max is 10
+}
+
+# Required parameter to omit for missing field test
+REQUIRED_PARAM_TO_OMIT = "priority"  # Replace with a required field
+
+
+# =============================================================================
+# FIXTURES
+# =============================================================================
+
+
+@pytest.fixture
+def sample_image_file():
+    """Create a simple test image in memory.
+    
+    Modify this fixture if your plugin requires a different file type.
+    """
+    img = Image.new('RGB', (100, 100), color='red')
+    img_bytes = io.BytesIO()
+    img.save(img_bytes, format='PNG')
+    img_bytes.seek(0)
+    return img_bytes
+
+
+# =============================================================================
+# JOB CREATION TESTS
+# =============================================================================
+
+
+class TestPluginJobCreation:
+    """Test {{TASK_TYPE}} job creation functionality."""
+
+    def test_create_job_with_valid_data(self, client, sample_image_file):
+        """Test creating a job with valid data."""
+        response = client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "job_id" in data
+        assert data["status"] == "queued"
+        assert data["job_id"] is not None
+
+    def test_create_job_with_high_priority(self, client, sample_image_file):
+        """Test creating a job with high priority."""
+        data = {**VALID_JOB_DATA, "priority": 10}
+        response = client.post(
+            ENDPOINT,
+            data=data,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+        )
+
+        assert response.status_code == 200
+
+    def test_create_job_invalid_priority(self, client, sample_image_file):
+        """Test that creating a job with invalid priority fails."""
+        data = {**VALID_JOB_DATA, "priority": 15}  # Invalid: max is 10
+        response = client.post(
+            ENDPOINT,
+            data=data,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+        )
+
+        assert response.status_code == 422
+
+    def test_create_job_missing_file(self, client):
+        """Test that creating a job without file fails."""
+        response = client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+        )
+
+        assert response.status_code == 422
+
+    # Add more validation tests specific to your plugin here
+    # def test_create_job_invalid_{{param}}(self, client, sample_image_file):
+    #     """Test that creating a job with invalid {{param}} fails."""
+    #     pass
+
+
+# =============================================================================
+# JOB RETRIEVAL TESTS
+# =============================================================================
+
+
+class TestPluginJobRetrieval:
+    """Test {{TASK_TYPE}} job retrieval functionality."""
+
+    def test_get_job_by_id(self, client, sample_image_file):
+        """Test retrieving a job by ID."""
+        # Create job
+        create_response = client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+        )
+
+        assert create_response.status_code == 200
+        job_id = create_response.json()["job_id"]
+
+        # Retrieve job
+        get_response = client.get(f"/compute/jobs/{job_id}")
+
+        assert get_response.status_code == 200
+        job = get_response.json()
+        assert job["job_id"] == job_id
+        assert job["task_type"] == TASK_TYPE
+        assert job["status"] == "queued"
+
+    def test_get_nonexistent_job(self, client):
+        """Test retrieving a nonexistent job returns 404."""
+        response = client.get("/compute/jobs/nonexistent-job-id")
+
+        assert response.status_code == 404
+
+
+# =============================================================================
+# JOB DELETION TESTS
+# =============================================================================
+
+
+class TestPluginJobDeletion:
+    """Test {{TASK_TYPE}} job deletion functionality."""
+
+    def test_delete_job_by_id(self, client, sample_image_file):
+        """Test deleting a job by ID."""
+        # Create job
+        create_response = client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+        )
+
+        job_id = create_response.json()["job_id"]
+
+        # Delete job
+        delete_response = client.delete(f"/compute/jobs/{job_id}")
+
+        assert delete_response.status_code == 204
+
+        # Verify job is deleted
+        get_response = client.get(f"/compute/jobs/{job_id}")
+        assert get_response.status_code == 404
+
+    def test_delete_nonexistent_job(self, client):
+        """Test deleting a nonexistent job returns 404."""
+        response = client.delete("/compute/jobs/nonexistent-job-id")
+
+        assert response.status_code == 404
+
+
+# =============================================================================
+# JOB LIFECYCLE TESTS
+# =============================================================================
+
+
+class TestPluginJobLifecycle:
+    """Test complete job lifecycle for {{TASK_TYPE}}."""
+
+    def test_create_retrieve_delete_lifecycle(self, client, sample_image_file):
+        """Test creating, retrieving, and deleting a job."""
+        # Create
+        create_response = client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+        )
+
+        assert create_response.status_code == 200
+        job_id = create_response.json()["job_id"]
+
+        # Retrieve
+        get_response = client.get(f"/compute/jobs/{job_id}")
+        assert get_response.status_code == 200
+        assert get_response.json()["status"] == "queued"
+
+        # Delete
+        delete_response = client.delete(f"/compute/jobs/{job_id}")
+        assert delete_response.status_code == 204
+
+        # Verify deletion
+        get_after_delete = client.get(f"/compute/jobs/{job_id}")
+        assert get_after_delete.status_code == 404
+
+
+# =============================================================================
+# AUTHENTICATION TESTS
+# =============================================================================
+
+
+class TestPluginAuthentication:
+    """Test authentication requirements for {{TASK_TYPE}} endpoints."""
+
+    def test_create_job_without_token_returns_401(self, auth_client, sample_image_file):
+        """Test that creating a job without token returns 401."""
+        response = auth_client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+        )
+
+        assert response.status_code == 401
+
+    def test_get_job_without_token_returns_401(self, auth_client):
+        """Test that getting a job without token returns 401."""
+        response = auth_client.get("/compute/jobs/test-job-id")
+
+        assert response.status_code == 401
+
+    def test_delete_job_without_token_returns_401(self, auth_client):
+        """Test that deleting a job without token returns 401."""
+        response = auth_client.delete("/compute/jobs/test-job-id")
+
+        assert response.status_code == 401
+
+    def test_invalid_token_returns_401(self, auth_client, sample_image_file):
+        """Test that invalid token returns 401."""
+        response = auth_client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+            headers={"Authorization": "Bearer invalid.token.here"},
+        )
+
+        assert response.status_code == 401
+
+
+# =============================================================================
+# AUTHORIZATION TESTS
+# =============================================================================
+
+
+class TestPluginAuthorization:
+    """Test authorization requirements for {{TASK_TYPE}} endpoints."""
+
+    def test_create_job_with_write_permission_fails(
+        self, auth_client, write_token, sample_image_file
+    ):
+        """Test that write permission is insufficient for job creation."""
+        response = auth_client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+            headers={"Authorization": f"Bearer {write_token}"},
+        )
+
+        assert response.status_code == 403
+
+    def test_create_job_with_read_permission_fails(
+        self, auth_client, read_token, sample_image_file
+    ):
+        """Test that read permission is insufficient for job creation."""
+        response = auth_client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+            headers={"Authorization": f"Bearer {read_token}"},
+        )
+
+        assert response.status_code == 403
+
+    def test_get_job_with_wrong_permission_fails(self, auth_client, write_token):
+        """Test that wrong permission fails for job retrieval."""
+        response = auth_client.get(
+            "/compute/jobs/some-job-id",
+            headers={"Authorization": f"Bearer {write_token}"},
+        )
+
+        assert response.status_code == 403
+
+    def test_delete_job_with_wrong_permission_fails(self, auth_client, write_token):
+        """Test that wrong permission fails for job deletion."""
+        response = auth_client.delete(
+            "/compute/jobs/some-job-id",
+            headers={"Authorization": f"Bearer {write_token}"},
+        )
+
+        assert response.status_code == 403
+
+    def test_create_job_with_inference_permission_succeeds(
+        self, auth_client, inference_token, sample_image_file
+    ):
+        """Test that ai_inference_support permission allows job creation."""
+        response = auth_client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+            headers={"Authorization": f"Bearer {inference_token}"},
+        )
+
+        assert response.status_code == 200
+
+
+# =============================================================================
+# TOKEN VALIDATION TESTS
+# =============================================================================
+
+
+class TestPluginTokenValidation:
+    """Test JWT token validation for {{TASK_TYPE}} endpoints."""
+
+    def test_expired_token_returns_401(
+        self, auth_client, jwt_token_generator, sample_image_file
+    ):
+        """Test that expired token returns 401."""
+        expired_token = jwt_token_generator.generate_token(
+            sub="testuser", permissions=["ai_inference_support"], expired=True
+        )
+
+        response = auth_client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+            headers={"Authorization": f"Bearer {expired_token}"},
+        )
+
+        assert response.status_code == 401
+
+    def test_token_with_wrong_signature_returns_401(
+        self, auth_client, jwt_token_generator, sample_image_file
+    ):
+        """Test that token with wrong signature returns 401."""
+        wrong_token = jwt_token_generator.generate_invalid_token_wrong_key()
+
+        response = auth_client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+            headers={"Authorization": f"Bearer {wrong_token}"},
+        )
+
+        assert response.status_code == 401

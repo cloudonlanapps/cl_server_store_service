@@ -1,198 +1,258 @@
-# Tests for CL Server Store Service
+# Test Suite Documentation
 
-This directory contains the test suite for the media store microservice. The tests are written using `pytest` and cover file upload, metadata extraction, versioning, authentication, duplicate detection, and CRUD operations.
-
-## Prerequisites
-
-Ensure you have Python 3.9+ installed.
-
-### Setting up the Environment
-
-If you don't have a virtual environment set up yet, follow these steps:
-
-1.  **Create a virtual environment:**
-    ```bash
-    python3 -m venv venv
-    ```
-
-2.  **Activate the virtual environment:**
-    - On macOS/Linux:
-        ```bash
-        source venv/bin/activate
-        ```
-    - On Windows:
-        ```bash
-        .\venv\Scripts\activate
-        ```
-
-3.  **Install dependencies and the package in editable mode:**
-    This ensures that the `src` package is available to the tests.
-    ```bash
-    pip install -e .
-    ```
-    This command installs the dependencies listed in `pyproject.toml` (including `pytest`, `httpx`, `python-jose`, etc.) and installs the current package in editable mode.
-
-## Running Tests
-
-Make sure your virtual environment is activated.
-
-### Run All Tests
-
-To run the entire test suite:
-
-```bash
-pytest
-```
-
-### Run Specific Test Files
-
-To run tests from a specific file:
-
-```bash
-pytest tests/test_authentication.py
-pytest tests/test_entity_crud.py
-pytest tests/test_pagination.py
-pytest tests/test_versioning.py
-pytest tests/test_file_upload.py
-pytest tests/test_duplicate_detection.py
-pytest tests/test_admin_endpoints.py
-pytest tests/test_health_check.py
-```
-
-### Run Individual Tests
-
-To run a specific test function:
-
-```bash
-pytest tests/test_entity_crud.py::TestEntityCRUD::test_create_collection
-pytest tests/test_authentication.py::TestJWTValidation::test_valid_token_is_decoded
-```
-
-### Run Tests with Verbose Output
-
-For more detailed output:
-
-```bash
-pytest -v
-```
-
-### Run Tests with Coverage Report
-
-To see test coverage:
-
-```bash
-pytest --cov=src --cov-report=html
-```
+This directory contains tests for the cl_server_store_service.
 
 ## Test Structure
 
-The tests are organized into the following files:
+```
+tests/
+├── conftest.py                      # Shared fixtures
+├── test_config.py                   # Test configuration
+├── test_plugin_template.py.template # Template for new plugin tests
+├── test_plugin_image_resize.py      # Image resize plugin tests
+├── test_plugin_image_conversion.py  # Image conversion plugin tests
+├── test_plugin_routes.py            # Plugin discovery tests
+├── test_job_auth.py                 # [SKIPPED] Legacy auth tests
+├── test_job_crud.py                 # [SKIPPED] Legacy CRUD tests
+└── README.md                        # This file
+```
 
-| File | Description |
-|------|-------------|
-| `tests/conftest.py` | Pytest fixtures for database sessions, test client, JWT token generation, and test media files. Provides both `client` (auth bypassed) and `auth_client` (full auth) fixtures. |
-| `tests/test_authentication.py` | Tests for authentication logic, JWT token validation (ES256), permission checks, and authentication modes (AUTH_DISABLED, READ_AUTH_ENABLED). |
-| `tests/test_admin_endpoints.py` | Tests for admin configuration endpoints (GET/PUT /admin/config) with JWT authentication and permission validation. |
-| `tests/test_entity_crud.py` | Tests for entity CRUD operations (Create, Read, Update, Delete), soft delete/restore, and hierarchy management. |
-| `tests/test_pagination.py` | Tests for pagination functionality with versioning support, including edge cases and metadata accuracy. |
-| `tests/test_versioning.py` | Tests for entity versioning using SQLAlchemy-Continuum, including version creation, querying, and history tracking. |
-| `tests/test_file_upload.py` | Tests for file upload functionality with metadata extraction (MD5, dimensions, MIME type, EXIF data). |
-| `tests/test_file_storage.py` | Tests for file storage organization (YYYY/MM/DD structure), MD5-based naming, and file deletion on updates. |
-| `tests/test_duplicate_detection.py` | Tests for MD5-based duplicate detection, ensuring duplicate files return existing entities. |
-| `tests/test_comprehensive_metadata.py` | Comprehensive metadata extraction tests for all test images, including timestamps and file paths. |
-| `tests/test_entity_validation.py` | Tests for entity validation rules (collections vs non-collections, required fields, immutable fields). |
-| `tests/test_put_endpoint.py` | Tests for PUT endpoint file replacement, metadata extraction, and update behavior. |
-| `tests/test_user_tracking.py` | Tests for user tracking fields (added_by, updated_by) across create, update, and version history. |
-| `tests/test_runtime_config.py` | Tests for runtime configuration API, ConfigService caching, and read authentication behavior. |
-| `tests/test_health_check.py` | Tests for health check endpoint (GET /) returning service status and version. |
-| `tests/test_config.py` | Test configuration module providing centralized paths and test file loading from test_files.txt. |
-| `tests/test_media_files.py` | Helper module for loading test media files from the images directory. |
+## Running Tests
 
-## Test Configuration
+```bash
+# Run all tests
+pytest tests/ -v
 
-The test configuration is defined in `pyproject.toml` under `[tool.pytest.ini_options]`:
-- **Test Paths**: `tests`
-- **Python Files**: `test_*.py`
-- **Addopts**: `-v --tb=short` (Verbose output, short traceback)
+# Run specific plugin tests
+pytest tests/test_plugin_image_resize.py -v
+pytest tests/test_plugin_image_conversion.py -v
 
-### Test Fixtures
+# Run with coverage
+pytest tests/ --cov=src --cov-report=term-missing
 
-Key fixtures available in `conftest.py`:
+# Run only authentication tests
+pytest tests/ -v -k "Authentication"
 
-- **`client`**: TestClient with authentication bypassed (for testing business logic)
-- **`auth_client`**: TestClient with full authentication (for testing auth flows)
-- **`test_engine`**: In-memory SQLite database engine with versioning support
-- **`test_db_session`**: Database session for direct database operations
-- **`clean_media_dir`**: Temporary media directory cleaned before/after each test
-- **`sample_image`**: Single test image file path
-- **`sample_images`**: Multiple test image file paths (up to 30)
-- **`jwt_token_generator`**: Helper for generating JWT tokens with configurable claims
-- **`admin_token`**: Valid admin JWT token
-- **`write_token`**: Valid write-only JWT token
-- **`read_token`**: Valid read-only JWT token
-- **`key_pair`**: ES256 key pair for JWT signing/validation
+# Run only authorization tests
+pytest tests/ -v -k "Authorization"
+```
 
-### Test Images
+## Test Categories
 
-Test images are loaded from `test_files.txt`, which contains relative paths to image files. The test suite expects images to be available in the `../images` directory (sibling to the store service directory).
+Each plugin test file contains the following test categories:
 
-If test images are not available, tests requiring images will be skipped with an appropriate message.
+| Category | Description | Fixture Used |
+|----------|-------------|--------------|
+| **JobCreation** | Valid/invalid job creation | `client` |
+| **JobRetrieval** | GET job by ID | `client` |
+| **JobDeletion** | DELETE job | `client` |
+| **JobLifecycle** | Create → Get → Delete | `client` |
+| **Authentication** | 401 without token | `auth_client` |
+| **Authorization** | 403 with wrong permission | `auth_client` |
+| **TokenValidation** | Expired/invalid tokens | `auth_client` |
 
-## Coverage Areas
+## Fixtures
 
-The test suite provides comprehensive coverage for:
+### `client` (conftest.py)
 
-✅ **Authentication & Authorization**
-- JWT token validation with ES256 algorithm
-- Permission-based access control (read, write, admin)
-- Authentication modes and configuration
+Test client with authentication **bypassed**. Use for functional tests.
 
-✅ **Entity Management**
-- CRUD operations for entities and collections
-- Soft delete and restore functionality
-- Hierarchy management (parent-child relationships)
+```python
+def test_something(self, client):
+    response = client.post("/compute/jobs/image_resize", ...)
+    assert response.status_code == 200
+```
 
-✅ **File Handling**
-- File upload with automatic metadata extraction
-- File storage organization (YYYY/MM/DD structure)
-- MD5-based duplicate detection
-- File replacement on updates
+### `auth_client` (conftest.py)
 
-✅ **Versioning**
-- Automatic version creation on updates
-- Version history tracking
-- Querying specific versions
+Test client with authentication **enabled**. Use for auth/permission tests.
 
-✅ **Metadata Extraction**
-- Image dimensions, file size, MIME type
-- EXIF data extraction (create date, camera info)
-- MD5 hash calculation
+```python
+def test_requires_token(self, auth_client):
+    response = auth_client.post("/compute/jobs/image_resize", ...)
+    assert response.status_code == 401  # No token
+```
 
-✅ **Pagination**
-- Page-based navigation
-- Custom page sizes
-- Pagination with versioning support
+### Token Fixtures
 
-✅ **User Tracking**
-- added_by and updated_by fields
-- User tracking across versions
+| Fixture | Permission | Admin |
+|---------|-----------|-------|
+| `inference_token` | `ai_inference_support` | No |
+| `inference_admin_token` | `ai_inference_support` | Yes |
+| `write_token` | `media_store_write` | No |
+| `read_token` | `media_store_read` | No |
+| `admin_token` | `media_store_read`, `media_store_write` | Yes |
 
-✅ **Configuration**
-- Runtime configuration management
-- Read authentication toggle
-- Configuration persistence
+## Creating Tests for a New Plugin
 
-## Known Limitations
+### Step 1: Copy the Template
 
-⚠️ **Minor Issues**:
-- `test_runtime_config.py` contains placeholder tests for JWT user ID validation (marked with `pass`)
-- Some validation tests use broad error code expectations `[400, 422, 500]` instead of specific codes
-- Limited coverage for video file handling (tests are primarily image-focused)
-- No tests for concurrent access or race conditions
+```bash
+cp tests/test_plugin_template.py.template tests/test_plugin_<plugin_name>.py
+```
 
-## Notes
+### Step 2: Replace Placeholders
 
-- Tests use an in-memory SQLite database for isolation
-- Each test gets a fresh database and clean media directory
-- Test artifacts are stored in `../test_artifacts/cl_server` (outside the project directory)
-- The `CL_SERVER_DIR` environment variable is overridden during tests to prevent contamination of production data
+Edit the new file and replace:
+
+| Placeholder | Replace With | Example |
+|-------------|-------------|---------|
+| `{{PLUGIN_NAME}}` | Plugin name | `watermark` |
+| `{{TASK_TYPE}}` | Task type string | `watermark` |
+| `{{ENDPOINT}}` | API endpoint | `/compute/jobs/watermark` |
+
+### Step 3: Update Configuration
+
+At the top of the file, update:
+
+```python
+PLUGIN_NAME = "watermark"
+TASK_TYPE = "watermark"
+ENDPOINT = "/compute/jobs/watermark"
+
+VALID_JOB_DATA = {
+    "priority": 5,
+    "watermark_text": "Sample",
+    "position": "bottom-right",
+    "opacity": 0.5,
+}
+
+INVALID_JOB_DATA = {
+    "priority": 15,  # Invalid
+}
+```
+
+### Step 4: Add Plugin-Specific Tests
+
+Add tests for plugin-specific validation:
+
+```python
+def test_create_job_invalid_opacity(self, client, sample_image_file):
+    """Test that creating a job with invalid opacity fails."""
+    response = client.post(
+        ENDPOINT,
+        data={
+            **VALID_JOB_DATA,
+            "opacity": 1.5,  # Invalid: max is 1.0
+        },
+        files={"file": ("test.png", sample_image_file, "image/png")},
+    )
+    assert response.status_code == 422
+```
+
+### Step 5: Modify Fixtures If Needed
+
+If your plugin doesn't use images, update `sample_image_file`:
+
+```python
+@pytest.fixture
+def sample_video_file(self):
+    """Create a test video file."""
+    # Return video bytes...
+```
+
+## Example: Complete Watermark Plugin Test
+
+```python
+"""Tests for watermark plugin route."""
+
+import io
+import pytest
+from PIL import Image
+
+PLUGIN_NAME = "watermark"
+TASK_TYPE = "watermark"
+ENDPOINT = "/compute/jobs/watermark"
+
+VALID_JOB_DATA = {
+    "priority": 5,
+    "watermark_text": "Copyright 2024",
+    "position": "bottom-right",
+    "opacity": 0.5,
+}
+
+
+@pytest.fixture
+def sample_image_file():
+    img = Image.new('RGB', (100, 100), color='red')
+    img_bytes = io.BytesIO()
+    img.save(img_bytes, format='PNG')
+    img_bytes.seek(0)
+    return img_bytes
+
+
+class TestWatermarkJobCreation:
+    def test_create_job_with_valid_data(self, client, sample_image_file):
+        response = client.post(
+            ENDPOINT,
+            data=VALID_JOB_DATA,
+            files={"file": ("test.png", sample_image_file, "image/png")},
+        )
+        assert response.status_code == 200
+
+    def test_create_job_invalid_position(self, client, sample_image_file):
+        response = client.post(
+            ENDPOINT,
+            data={**VALID_JOB_DATA, "position": "invalid"},
+            files={"file": ("test.png", sample_image_file, "image/png")},
+        )
+        assert response.status_code == 422
+
+    def test_create_job_invalid_opacity(self, client, sample_image_file):
+        response = client.post(
+            ENDPOINT,
+            data={**VALID_JOB_DATA, "opacity": 1.5},
+            files={"file": ("test.png", sample_image_file, "image/png")},
+        )
+        assert response.status_code == 422
+
+
+# ... continue with other test classes from template
+```
+
+## Skipped Tests
+
+The following test files are skipped because they test the removed generic endpoint:
+
+- `test_job_auth.py` - Tests `/compute/jobs/{task_type}` (removed)
+- `test_job_crud.py` - Tests `/compute/jobs/{task_type}` (removed)
+
+These endpoints have been replaced by plugin-specific routes (e.g., `/compute/jobs/image_resize`).
+
+The functionality is now covered by:
+- `test_plugin_image_resize.py`
+- `test_plugin_image_conversion.py`
+
+## Test Coverage Checklist
+
+For each plugin, ensure the following are tested:
+
+### Creation Tests
+- [ ] Valid data → 200
+- [ ] All optional parameters
+- [ ] Each required parameter missing → 422
+- [ ] Each parameter with invalid value → 422
+- [ ] Missing file → 422
+- [ ] Invalid priority → 422
+
+### Retrieval Tests
+- [ ] Get by ID → 200
+- [ ] Nonexistent ID → 404
+
+### Deletion Tests
+- [ ] Delete by ID → 204
+- [ ] Verify deletion → 404
+- [ ] Nonexistent ID → 404
+
+### Lifecycle Tests
+- [ ] Create → Get → Delete → Verify
+
+### Authentication Tests
+- [ ] No token → 401
+- [ ] Invalid token → 401
+- [ ] Expired token → 401
+- [ ] Wrong signature → 401
+
+### Authorization Tests
+- [ ] Wrong permission → 403
+- [ ] Correct permission → 200

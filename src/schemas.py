@@ -81,24 +81,23 @@ class UpdateReadAuthConfig(BaseModel):
 
 
 # Job Management Schemas (from compute service)
+# Import base Job schema from library for consistency
+from cl_media_tools.common.schemas import Job as BaseJob
 
 
-class JobResponse(BaseModel):
-    """Response schema for job information."""
-    job_id: str = Field(..., description="Unique job identifier")
-    task_type: str = Field(..., description="Type of task to execute")
-    status: str = Field(..., description="Job status (pending, processing, completed, failed)")
+class JobResponse(BaseJob):
+    """Response schema for job information.
+    
+    Extends the library's Job schema with service-specific fields
+    for timestamps and priority.
+    """
     priority: int = Field(5, description="Job priority (0-10)")
-    progress: int = Field(0, description="Progress percentage (0-100)", ge=0, le=100)
-    input_files: list = Field(..., description="List of input files")
-    output_files: list = Field(..., description="List of output files")
-    external_files: Optional[list] = Field(None, description="List of external file references")
-    task_output: Optional[dict] = Field(None, description="Task output results")
     created_at: int = Field(..., description="Job creation timestamp (milliseconds)")
     updated_at: Optional[int] = Field(None, description="Job last update timestamp (milliseconds)")
     started_at: Optional[int] = Field(None, description="Job start timestamp (milliseconds)")
     completed_at: Optional[int] = Field(None, description="Job completion timestamp (milliseconds)")
-    error_message: Optional[str] = Field(None, description="Error message if job failed")
+
+
 
 
 class StorageInfo(BaseModel):

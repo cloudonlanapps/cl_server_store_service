@@ -380,34 +380,6 @@ async def update_read_auth_config(
 # Job Management Endpoints (from compute service)
 
 
-@router.post(
-    "/compute/jobs/{task_type}",
-    tags=["job"],
-    summary="Create Job",
-    description="Creates a new compute job.",
-    operation_id="create_job",
-    status_code=status.HTTP_201_CREATED,
-    responses={201: {"model": schemas.JobResponse, "description": "Job created"}},
-)
-async def create_job(
-    task_type: str = Path(..., title="Task Type"),
-    upload_files: Optional[List[UploadFile]] = File(None),
-    external_files: Optional[str] = Form(None),  # JSON array
-    priority: int = Form(5),
-    db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("ai_inference_support")),
-) -> schemas.JobResponse:
-    """Create a new compute job."""
-    job_service = service.JobService(db)
-    return await job_service.create_job(
-        task_type=task_type,
-        upload_files=upload_files,
-        external_files=external_files,
-        priority=priority,
-        user=user,
-    )
-
-
 @router.get(
     "/compute/jobs/{job_id}",
     tags=["job"],

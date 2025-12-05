@@ -113,7 +113,7 @@ def client(test_engine, clean_media_dir):
 
     with patch("src.mqtt_client._mqtt_client_instance", mock_mqtt_client):
         # Import app and override dependency
-        from src import app
+        from src import app, repository_adapter
         from src.database import get_db
         from src.service import EntityService, JobService
         from src.auth import get_current_user
@@ -129,6 +129,11 @@ def client(test_engine, clean_media_dir):
             }
 
         app.dependency_overrides[get_current_user] = override_auth
+
+        # CRITICAL: Patch the repository adapter to use test session factory
+        # The plugin routes use this adapter, which was created with production SessionLocal
+        original_session_factory = repository_adapter.session_factory
+        repository_adapter.session_factory = TestingSessionLocal
 
         # Monkey patch EntityService to use test media directory
         original_entity_init = EntityService.__init__
@@ -151,6 +156,7 @@ def client(test_engine, clean_media_dir):
             yield test_client
 
         # Cleanup
+        repository_adapter.session_factory = original_session_factory
         EntityService.__init__ = original_entity_init
         JobService.__init__ = original_job_init
         app.dependency_overrides.clear()
@@ -445,6 +451,7 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     """
     import sys
     import importlib
+    from unittest.mock import MagicMock, patch
 
     # Set PUBLIC_KEY_PATH environment variable for JWT validation
     _, public_key_path = key_pair
@@ -476,34 +483,56 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
         finally:
             db.close()
 
-    # Import app
-    from src import app
-    from src.database import get_db
-    from src.service import EntityService, JobService
+    # Mock get_mqtt_client before importing app
+    mock_mqtt_client = MagicMock()
+    mock_mqtt_client.get_cached_capabilities.return_value = {}
+    mock_mqtt_client.capabilities_cache = {}
+    mock_mqtt_client.wait_for_capabilities.return_value = True
 
-    app.dependency_overrides[get_db] = override_get_db
+    with patch("src.mqtt_client._mqtt_client_instance", mock_mqtt_client):
+        # Import app
+        from src import app, repository_adapter
+        from src.database import get_db
+        from src.service import EntityService, JobService
+        from src.auth import get_current_user
 
-    # Monkey patch EntityService to use test media directory
-    original_entity_init = EntityService.__init__
+        # CRITICAL: Clear any existing auth override from previous tests
+        # This ensures auth tests actually test authentication, not bypassed auth
+        if get_current_user in app.dependency_overrides:
+            del app.dependency_overrides[get_current_user]
 
-    def patched_entity_init(self, db, base_dir=None):
-        original_entity_init(self, db, base_dir=str(clean_media_dir))
+        app.dependency_overrides[get_db] = override_get_db
 
-    EntityService.__init__ = patched_entity_init
 
-    # Monkey patch JobService to use test media directory
-    original_job_init = JobService.__init__
+        # CRITICAL: Patch the repository adapter to use test session factory
+        # The plugin routes use this adapter, which was created with production SessionLocal
+        original_session_factory = repository_adapter.session_factory
+        repository_adapter.session_factory = TestingSessionLocal
 
-    def patched_job_init(self, db, base_dir=None):
-        original_job_init(self, db, base_dir=str(clean_media_dir))
+        # Monkey patch EntityService to use test media directory
+        original_entity_init = EntityService.__init__
 
-    JobService.__init__ = patched_job_init
+        def patched_entity_init(self, db, base_dir=None):
+            original_entity_init(self, db, base_dir=str(clean_media_dir))
 
-    # Create test client
-    with TestClient(app) as test_client:
-        yield test_client
+        EntityService.__init__ = patched_entity_init
 
-    # Cleanup
-    EntityService.__init__ = original_entity_init
-    JobService.__init__ = original_job_init
-    app.dependency_overrides.clear()
+        # Monkey patch JobService to use test media directory
+        original_job_init = JobService.__init__
+
+        def patched_job_init(self, db, base_dir=None):
+            original_job_init(self, db, base_dir=str(clean_media_dir))
+
+        JobService.__init__ = patched_job_init
+
+        # Create test client
+        with TestClient(app) as test_client:
+            yield test_client
+
+        # Cleanup
+        repository_adapter.session_factory = original_session_factory
+        EntityService.__init__ = original_entity_init
+        JobService.__init__ = original_job_init
+        app.dependency_overrides.clear()
+
+

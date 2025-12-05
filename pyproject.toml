@@ -24,7 +24,8 @@ dependencies = [
     "httpx>=0.24.0",
     "python-jose[cryptography]>=3.3.0",
     "paho-mqtt>=1.6.0",
-    "cl-server-shared",
+    "cl-server-shared @ git+https://github.com/cloudonlanapps/cl_server_shared.git",
+    "cl-media-tools[master] @ git+https://github.com/cloudonlanapps/cl_media_tools.git",
 ]
 
 [tool.setuptools.packages.find]

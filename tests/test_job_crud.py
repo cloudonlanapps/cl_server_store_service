@@ -1,10 +1,22 @@
 """
 Tests for job CRUD operations.
 Tests basic creation, retrieval, and deletion of jobs.
+
+NOTE: These tests use the old generic job creation endpoint which has been
+replaced by task-specific plugin routes. See test_plugin_routes.py for tests
+using the new plugin system.
+
+The tests here are marked as skipped since the endpoint they test no longer exists.
 """
 
 import json
 import pytest
+
+# Skip all tests in this module that use the removed generic endpoint
+pytestmark = pytest.mark.skip(
+    reason="Tests use removed generic /compute/jobs/{task_type} endpoint. "
+    "See test_plugin_routes.py for plugin-based tests."
+)
 
 
 class TestJobCreation:
