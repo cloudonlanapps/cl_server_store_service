@@ -240,7 +240,7 @@ def sample_job_data_high_priority():
 @pytest.fixture
 def file_storage_service(clean_media_dir):
     """Create a FileStorageService instance using the clean media directory."""
-    from src.file_storage import FileStorageService
+    from cl_server_shared.file_storage import FileStorageService
 
     return FileStorageService(base_dir=str(clean_media_dir))
 
@@ -454,8 +454,8 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     if "src.auth" in sys.modules:
         auth_module = sys.modules["src.auth"]
         # Reload config to pick up new environment variable
-        if "src.config" in sys.modules:
-            config_module = sys.modules["src.config"]
+        if "cl_server_shared.config" in sys.modules:
+            config_module = sys.modules["cl_server_shared.config"]
             importlib.reload(config_module)
             # Update auth module's reference to PUBLIC_KEY_PATH
             auth_module.PUBLIC_KEY_PATH = config_module.PUBLIC_KEY_PATH

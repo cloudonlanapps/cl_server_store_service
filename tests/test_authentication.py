@@ -171,7 +171,7 @@ class TestAuthenticationModes:
 
     def test_auth_disabled_flag_defaults_to_false(self):
         """AUTH_DISABLED should default to false."""
-        from src.config import AUTH_DISABLED
+        from cl_server_shared.config import AUTH_DISABLED
 
         # In test environment without env var, should be False
         # (This may vary based on test setup)
@@ -179,7 +179,7 @@ class TestAuthenticationModes:
 
     def test_read_auth_enabled_flag_defaults_to_false(self):
         """READ_AUTH_ENABLED should default to false."""
-        from src.config import READ_AUTH_ENABLED
+        from cl_server_shared.config import READ_AUTH_ENABLED
 
         # In test environment without env var, should be False
         assert isinstance(READ_AUTH_ENABLED, bool)
@@ -217,7 +217,9 @@ class TestJWTValidation:
     ensuring the full dependency injection chain and authentication flow works.
     """
 
-    def test_valid_token_is_decoded(self, auth_client, jwt_token_generator, key_pair, monkeypatch):
+    def test_valid_token_is_decoded(
+        self, auth_client, jwt_token_generator, key_pair, monkeypatch
+    ):
         """Valid JWT token should be decoded successfully."""
         from unittest.mock import patch
 
@@ -226,7 +228,7 @@ class TestJWTValidation:
             sub="testuser",
             permissions=["media_store_read"],
             is_admin=False,
-            expired=False
+            expired=False,
         )
 
         # Mock the public key path to use test key
@@ -236,11 +238,15 @@ class TestJWTValidation:
 
             # Token should be decoded successfully
             # Response should NOT be 401 (unauthorized)
-            assert response.status_code != 401, f"Token validation failed: {response.json()}"
+            assert (
+                response.status_code != 401
+            ), f"Token validation failed: {response.json()}"
             # Should be 200 (success) or 400 (validation error), not 401 (auth error)
             assert response.status_code in [200, 400]
 
-    def test_expired_token_is_rejected(self, auth_client, jwt_token_generator, key_pair):
+    def test_expired_token_is_rejected(
+        self, auth_client, jwt_token_generator, key_pair
+    ):
         """Expired JWT token should be rejected with 401."""
         from unittest.mock import patch
 
@@ -249,7 +255,7 @@ class TestJWTValidation:
             sub="testuser",
             permissions=["media_store_write"],
             is_admin=False,
-            expired=True  # Token is expired
+            expired=True,  # Token is expired
         )
 
         with patch("src.auth.PUBLIC_KEY_PATH", public_key_path):
@@ -260,7 +266,9 @@ class TestJWTValidation:
             assert response.status_code == 401
             assert "invalid" in response.json().get("detail", "").lower()
 
-    def test_invalid_token_format_is_rejected(self, auth_client, jwt_token_generator, key_pair):
+    def test_invalid_token_format_is_rejected(
+        self, auth_client, jwt_token_generator, key_pair
+    ):
         """Malformed tokens and tokens with wrong signatures should be rejected."""
         from unittest.mock import patch
 
@@ -268,10 +276,10 @@ class TestJWTValidation:
 
         # Create multiple invalid tokens to test
         invalid_tokens = [
-            "not.a.valid.token",              # Wrong format (too few parts)
-            "invalid_format",                  # Not JWT format at all
-            "a.b",                            # Missing signature part
-            "!!!.!!!.!!!",                    # Invalid base64
+            "not.a.valid.token",  # Wrong format (too few parts)
+            "invalid_format",  # Not JWT format at all
+            "a.b",  # Missing signature part
+            "!!!.!!!.!!!",  # Invalid base64
             jwt_token_generator.generate_invalid_token_wrong_key(),  # Valid format but wrong signature
         ]
 
@@ -281,6 +289,6 @@ class TestJWTValidation:
                 response = auth_client.get("/entities/", headers=headers)
 
                 # All invalid tokens should return 401
-                assert response.status_code == 401, (
-                    f"Token '{invalid_token[:20]}...' should be rejected but got {response.status_code}"
-                )
+                assert (
+                    response.status_code == 401
+                ), f"Token '{invalid_token[:20]}...' should be rejected but got {response.status_code}"

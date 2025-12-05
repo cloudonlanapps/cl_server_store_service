@@ -16,7 +16,7 @@ from src import app
 @pytest.fixture(scope="function")
 def db_session(test_db_session):
     """Create a fresh database for each test.
-    
+
     Wraps the conftest.py test_db_session but adds config cache clearing.
     """
     # Clear config cache before test
@@ -130,25 +130,23 @@ class TestJWTUserID:
         # Generate a token with a specific user ID
         user_id = "user_12345"
         token = jwt_token_generator.generate_token(
-            sub=user_id,
-            permissions=["media_store_read"],
-            is_admin=False
+            sub=user_id, permissions=["media_store_read"], is_admin=False
         )
-        
+
         # Decode the token to verify structure (simulating what auth middleware does)
         # We use the same verify logic as the application
         from jose import jwt
-        from src.config import PUBLIC_KEY_PATH
-        
-        # In tests, we might not have the actual public key file, but we can verify 
+        from cl_server_shared.config import PUBLIC_KEY_PATH
+
+        # In tests, we might not have the actual public key file, but we can verify
         # the token structure and that our generator puts the ID in the right place.
         # The jwt_token_generator fixture uses a test key pair.
-        
+
         # Verify the token payload contains the user ID in 'sub'
         # This confirms our assumption about where the user ID lives
         payload = jwt.get_unverified_claims(token)
         assert payload["sub"] == user_id
-        
+
         # Also verify that our auth logic would accept this
         # We can't easily call get_current_user directly without mocking Depends,
         # but we can verify the token is valid for our test environment
@@ -168,9 +166,9 @@ class TestJWTUserID:
         token = jwt_token_generator.generate_token(
             sub=user_id,
             permissions=["media_store_write", "media_store_read"],
-            is_admin=False
+            is_admin=False,
         )
-        
+
         # Create an entity using this token
         with open(sample_image, "rb") as f:
             response = auth_client.post(
@@ -179,14 +177,15 @@ class TestJWTUserID:
                 data={"is_collection": "false", "label": "User ID Test Entity"},
                 headers={"Authorization": f"Bearer {token}"},
             )
-            
+
         assert response.status_code == 201
         entity_id = response.json()["id"]
-        
+
         # Verify directly in database that added_by was set correctly
         from src.models import Entity
+
         entity = db_session.query(Entity).filter(Entity.id == entity_id).first()
-        
+
         assert entity is not None
         assert entity.added_by == user_id
 

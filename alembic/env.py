@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 make_versioned(user_cls=None)
 
 from src.models import Base
-from src.config import DATABASE_URL
+from cl_server_shared.config import STORE_DATABASE_URL
 
 # Configure mappers after models are imported
 configure_mappers()
@@ -28,7 +28,7 @@ configure_mappers()
 config = context.config
 
 # Set the database URL from config
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+config.set_main_option("sqlalchemy.url", STORE_DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -85,9 +85,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
