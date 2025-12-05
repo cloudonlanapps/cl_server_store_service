@@ -64,14 +64,17 @@ class TestFileUpload:
             uploaded_ids.append(data["id"])
         
         # Verify all files were saved
-        media_files = list(clean_media_dir.rglob("*.jpg"))
-        assert len(media_files) == len(sample_images)
+        media_files = [f for f in clean_media_dir.rglob("*") if f.is_file()]
+        # We check against unique IDs because duplicate files (same MD5) 
+        # will result in the same entity ID and no new file storage
+        unique_ids = set(uploaded_ids)
+        assert len(media_files) == len(unique_ids)
         
         # Verify we can retrieve all entities
         response = client.get("/entities/?page_size=100")
         assert response.status_code == 200
         data = response.json()
-        assert len(data["items"]) == len(sample_images)
+        assert len(data["items"]) == len(unique_ids)
     
     def test_upload_without_file(self, client):
         """Test creating a collection without a file."""
