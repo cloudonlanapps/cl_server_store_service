@@ -1,8 +1,8 @@
-"""initial
+"""reset_and_standardize_job_schema
 
-Revision ID: 1fadc3d0714e
+Revision ID: 2cdb67716137
 Revises: 
-Create Date: 2025-12-04 10:13:06.907583
+Create Date: 2025-12-05 11:21:52.265647
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '1fadc3d0714e'
+revision: str = '2cdb67716137'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -79,10 +79,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('job_id', sa.String(), nullable=False),
     sa.Column('task_type', sa.String(), nullable=False),
-    sa.Column('input_file_source', sa.String(), nullable=False),
-    sa.Column('input_file_path', sa.String(), nullable=False),
-    sa.Column('input_files', sa.Text(), nullable=False),
-    sa.Column('output_files', sa.Text(), nullable=False),
+    sa.Column('params', sa.Text(), nullable=False),
     sa.Column('status', sa.String(), nullable=False),
     sa.Column('progress', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.BigInteger(), nullable=False),
@@ -121,17 +118,6 @@ def upgrade() -> None:
     sa.Column('issued_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-
-    # Enable WAL mode for concurrent multi-process access
-    # WAL (Write-Ahead Logging) allows multiple readers and a single writer
-    op.execute("PRAGMA journal_mode=WAL")
-    op.execute("PRAGMA synchronous=NORMAL")
-    op.execute("PRAGMA cache_size=-64000")
-    op.execute("PRAGMA temp_store=MEMORY")
-    op.execute("PRAGMA mmap_size=30000000000")
-    op.execute("PRAGMA wal_autocheckpoint=1000")
-    op.execute("PRAGMA busy_timeout=10000")
-    op.execute("PRAGMA foreign_keys=ON")
     # ### end Alembic commands ###
 
 

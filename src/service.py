@@ -541,8 +541,7 @@ class JobService:
     async def create_job(
         self,
         task_type: str,
-        upload_files: Optional[List] = None,
-        external_files: Optional[str] = None,
+        params: Dict,
         priority: int = 5,
         user: Optional[Dict] = None,
     ):
@@ -550,8 +549,7 @@ class JobService:
 
         Args:
             task_type: Type of task to execute
-            upload_files: List of uploaded files
-            external_files: JSON string of external file references
+            params: Job parameters (input_paths, output_paths, etc.)
             priority: Priority level (0-10)
             user: Current user information
 
@@ -563,6 +561,7 @@ class JobService:
         import uuid
         from . import schemas
         from .models import Job, QueueEntry
+        from cl_server_shared import ComputeJobParams, ImageResizeParams, ImageConversionParams
 
         # Validate priority
         if not (0 <= priority <= 10):
@@ -578,62 +577,27 @@ class JobService:
         # Create job directory
         self.file_storage.create_job_directory(job_id)
 
-        # Process upload files
-        input_files_info = []
-        input_file_path = None
-        input_file_source = None
-        external_files_list = []  # Track external files for response
-
-        if upload_files:
-            for file in upload_files:
-                if file.filename:
-                    file_info = await self.file_storage.save_input_file(
-                        job_id, file.filename, file
-                    )
-                    input_files_info.append(file_info)
-                    if input_file_path is None:
-                        input_file_path = file_info["path"]
-                        input_file_source = "upload"
-        else:
-            pass  # No uploaded files
-
-        # Process external files
-        if external_files:
-            try:
-                ext_files = json.loads(external_files)
-                external_files_list = ext_files  # Store for response
-                for ext_file in ext_files:
-                    ext_path = ext_file.get("path")
-                    metadata = ext_file.get("metadata", {})
-                    if ext_path:
-                        link_path = self.file_storage.create_external_symlink(
-                            job_id,
-                            ext_path,
-                            link_name=metadata.get("name"),
-                        )
-                        file_info = {
-                            "path": link_path,
-                            "metadata": metadata,
-                        }
-                        input_files_info.append(file_info)
-                        if input_file_path is None:
-                            input_file_path = link_path
-                            input_file_source = "external"
-            except json.JSONDecodeError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid external_files JSON format"
-                )
-
+        # Validate and serialize params
+        try:
+            if task_type == "image_resize":
+                job_params = ImageResizeParams(**params)
+            elif task_type == "image_conversion":
+                job_params = ImageConversionParams(**params)
+            else:
+                job_params = ComputeJobParams(**params)
+            
+            params_json = job_params.model_dump_json()
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid parameters: {str(e)}"
+            )
 
         # Create Job record
         job = Job(
             job_id=job_id,
             task_type=task_type,
-            input_file_source=input_file_source or "unknown",
-            input_file_path=input_file_path or "",
-            input_files=json.dumps(input_files_info),
-            output_files="[]",
+            params=params_json,
             status="queued",
             progress=0,
             created_at=current_time,
@@ -659,9 +623,7 @@ class JobService:
             status="queued",
             priority=priority,
             progress=0,
-            input_files=input_files_info,
-            output_files=[],
-            external_files=external_files_list if external_files_list else None,
+            params=json.loads(params_json),
             task_output=None,
             created_at=current_time,
             updated_at=current_time,
