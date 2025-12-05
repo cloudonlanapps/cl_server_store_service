@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import tempfile
+import contextlib
+import io
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -65,8 +67,9 @@ class EntityService:
         try:
             # Extract metadata using CLMetaData
             try:
-                cl_metadata = CLMetaData.from_media(tmp_path)
-                metadata = cl_metadata.to_dict()
+                with contextlib.redirect_stdout(io.StringIO()):
+                    cl_metadata = CLMetaData.from_media(tmp_path)
+                    metadata = cl_metadata.to_dict()
             except Exception as e:
                 # If CLMetaData fails (e.g., invalid image), return minimal metadata with file size
                 import hashlib
@@ -192,7 +195,7 @@ class EntityService:
         
         # Apply pagination
         offset = (page - 1) * page_size
-        query = query.offset(offset).limit(page_size)
+        query = query.order_by(Entity.id.asc()).offset(offset).limit(page_size)
         
         entities = query.all()
         
