@@ -9,7 +9,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from .config import PUBLIC_KEY_PATH, AUTH_DISABLED, READ_AUTH_ENABLED
+from cl_server_shared.config import PUBLIC_KEY_PATH, AUTH_DISABLED, READ_AUTH_ENABLED
 from .database import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", auto_error=False)

@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 from .schemas import BodyCreateEntity, BodyPatchEntity, BodyUpdateEntity, Item
 from .models import Entity
-from .file_storage import FileStorageService
+from cl_server_shared import FileStorageService
+from cl_server_shared.config import MEDIA_STORAGE_DIR, COMPUTE_STORAGE_DIR
 from .mqtt_client import get_mqtt_client
 
 
@@ -23,16 +24,19 @@ class DuplicateFileError(Exception):
 
 class EntityService:
     """Service layer for entity operations."""
-    
+
     def __init__(self, db: Session, base_dir: Optional[str] = None):
         """
         Initialize the entity service.
-        
+
         Args:
             db: SQLAlchemy database session
-            base_dir: Optional base directory for file storage (for testing)
+            base_dir: Optional base directory for media file storage (for testing)
         """
         self.db = db
+        # Use MEDIA_STORAGE_DIR for entity files (organized by date)
+        if base_dir is None:
+            base_dir = MEDIA_STORAGE_DIR
         self.file_storage = FileStorageService(base_dir=base_dir)
        
     @staticmethod
@@ -523,9 +527,12 @@ class JobService:
 
         Args:
             db: SQLAlchemy database session
-            base_dir: Optional base directory for file storage (for testing)
+            base_dir: Optional base directory for compute job storage (for testing)
         """
         self.db = db
+        # Use COMPUTE_STORAGE_DIR for job files (organized per job)
+        if base_dir is None:
+            base_dir = COMPUTE_STORAGE_DIR
         self.file_storage = FileStorageService(base_dir=base_dir)
 
     async def create_job(

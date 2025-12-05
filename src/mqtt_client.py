@@ -10,7 +10,7 @@ from typing import Optional
 
 import paho.mqtt.client as mqtt
 
-from .config import CAPABILITY_CACHE_TIMEOUT, CAPABILITY_TOPIC_PREFIX, MQTT_BROKER, MQTT_PORT
+from cl_server_shared.config import CAPABILITY_CACHE_TIMEOUT, CAPABILITY_TOPIC_PREFIX, MQTT_BROKER, MQTT_PORT
 
 logger = logging.getLogger(__name__)
 
