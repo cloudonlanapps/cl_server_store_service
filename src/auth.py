@@ -139,9 +139,10 @@ def require_permission(permission: str):
         # Check runtime read auth configuration for read permissions
         if permission == "media_store_read":
             from .config_service import ConfigService
+
             config_service = ConfigService(db)
             read_auth_enabled = config_service.get_read_auth_enabled()
-            
+
             # If read auth is disabled, allow access without authentication
             if not read_auth_enabled:
                 return current_user
