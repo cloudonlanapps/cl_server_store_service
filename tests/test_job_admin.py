@@ -3,7 +3,40 @@ Tests for job admin endpoints.
 Tests storage size tracking and cleanup functionality.
 """
 
+from io import BytesIO
 import pytest
+from PIL import Image
+
+
+def create_test_image():
+    """Create a test image as BytesIO for job creation."""
+    img = Image.new('RGB', (100, 100), color='red')
+    img_bytes = BytesIO()
+    img.save(img_bytes, format='PNG')
+    img_bytes.seek(0)
+    return img_bytes
+
+
+def create_job_via_plugin(client, token):
+    """Helper to create a job using the plugin API.
+    
+    Returns:
+        tuple: (response, job_id or None)
+    """
+    img_bytes = create_test_image()
+    response = client.post(
+        "/compute/jobs/image_resize",
+        data={
+            "width": "50",
+            "height": "50",
+            "maintain_aspect_ratio": "false",
+            "priority": "5",
+        },
+        files={"file": ("test.png", img_bytes, "image/png")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    job_id = response.json().get("job_id") if response.status_code == 200 else None
+    return response, job_id
 
 
 class TestStorageSizeEndpoint:
@@ -27,7 +60,7 @@ class TestStorageSizeEndpoint:
         assert data["total_size"] >= 0
         assert data["job_count"] >= 0
 
-    def test_storage_size_increases_after_job_creation(self, auth_client, inference_token, inference_admin_token, sample_job_data):
+    def test_storage_size_increases_after_job_creation(self, auth_client, inference_token, inference_admin_token):
         """Test that storage size increases after creating a job."""
         # Get initial storage size
         initial_response = auth_client.get(
@@ -37,12 +70,9 @@ class TestStorageSizeEndpoint:
 
         initial_count = initial_response.json()["job_count"]
 
-        # Create a job
-        auth_client.post(
-            "/compute/jobs/image_processing",
-            data=sample_job_data,
-            headers={"Authorization": f"Bearer {inference_token}"},
-        )
+        # Create a job using plugin API
+        response, _ = create_job_via_plugin(auth_client, inference_token)
+        assert response.status_code == 200
 
         # Get storage size after job creation
         updated_response = auth_client.get(
@@ -55,16 +85,12 @@ class TestStorageSizeEndpoint:
         # Job count should increase
         assert updated_count == initial_count + 1
 
-    def test_storage_size_decreases_after_job_deletion(self, auth_client, inference_token, inference_admin_token, sample_job_data):
+    def test_storage_size_decreases_after_job_deletion(self, auth_client, inference_token, inference_admin_token):
         """Test that storage size info reflects job deletion."""
         # Create a job
-        create_response = auth_client.post(
-            "/compute/jobs/image_processing",
-            data=sample_job_data,
-            headers={"Authorization": f"Bearer {inference_token}"},
-        )
-
-        job_id = create_response.json()["job_id"]
+        response, job_id = create_job_via_plugin(auth_client, inference_token)
+        assert response.status_code == 200
+        assert job_id is not None
 
         # Get storage size after job creation
         after_create = auth_client.get(
@@ -127,38 +153,32 @@ class TestCleanupEndpoint:
         assert "deleted_count" in data
         assert "freed_space" in data
 
-    def test_cleanup_with_zero_days_cleans_all(self, auth_client, inference_token, inference_admin_token, sample_job_data):
+    def test_cleanup_with_zero_days_cleans_all(self, auth_client, inference_token, inference_admin_token):
         """Test cleanup with days=0 parameter cleans all old jobs."""
         # Create a job
-        auth_client.post(
-            "/compute/jobs/image_processing",
-            data=sample_job_data,
-            headers={"Authorization": f"Bearer {inference_token}"},
-        )
+        response, _ = create_job_via_plugin(auth_client, inference_token)
+        assert response.status_code == 200
 
         # Cleanup with days=0 should remove all jobs
-        response = auth_client.delete(
+        cleanup_response = auth_client.delete(
             "/admin/compute/jobs/cleanup?days=0",
             headers={"Authorization": f"Bearer {inference_admin_token}"},
         )
 
-        assert response.status_code == 200
-        data = response.json()
+        assert cleanup_response.status_code == 200
+        data = cleanup_response.json()
 
         # Should have deleted the job
         assert data["deleted_count"] > 0
 
-    def test_cleanup_returns_deleted_count(self, auth_client, inference_token, inference_admin_token, sample_job_data):
+    def test_cleanup_returns_deleted_count(self, auth_client, inference_token, inference_admin_token):
         """Test that cleanup returns the number of deleted jobs."""
         # Create multiple jobs
         created_jobs = []
         for i in range(3):
-            response = auth_client.post(
-                "/compute/jobs/image_processing",
-                data=sample_job_data,
-                headers={"Authorization": f"Bearer {inference_token}"},
-            )
-            created_jobs.append(response.json()["job_id"])
+            response, job_id = create_job_via_plugin(auth_client, inference_token)
+            assert response.status_code == 200
+            created_jobs.append(job_id)
 
         # Cleanup with days=0 to delete all
         cleanup_response = auth_client.delete(
@@ -171,16 +191,11 @@ class TestCleanupEndpoint:
         # (might be more if there were existing jobs)
         assert cleanup_response.json()["deleted_count"] >= 3
 
-    def test_cleanup_preserves_recent_jobs(self, auth_client, inference_token, inference_admin_token, sample_job_data):
+    def test_cleanup_preserves_recent_jobs(self, auth_client, inference_token, inference_admin_token):
         """Test that cleanup with large days value preserves recent jobs."""
         # Create a job
-        create_response = auth_client.post(
-            "/compute/jobs/image_processing",
-            data=sample_job_data,
-            headers={"Authorization": f"Bearer {inference_token}"},
-        )
-
-        job_id = create_response.json()["job_id"]
+        response, job_id = create_job_via_plugin(auth_client, inference_token)
+        assert response.status_code == 200
 
         # Cleanup with days=30 (recent jobs should be preserved)
         cleanup_response = auth_client.delete(
