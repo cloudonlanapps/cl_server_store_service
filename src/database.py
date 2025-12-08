@@ -13,4 +13,4 @@ SessionLocal = create_session_factory(engine)
 
 def get_db():
     """Get database session for FastAPI dependency injection."""
-    return get_db_session(SessionLocal)
+    yield from get_db_session(SessionLocal)

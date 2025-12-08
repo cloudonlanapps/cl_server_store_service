@@ -135,6 +135,13 @@ def client(test_engine, clean_media_dir):
         original_session_factory = repository_adapter.session_factory
         repository_adapter.session_factory = TestingSessionLocal
 
+        # CRITICAL: Patch the file_storage_service used by plugin routes
+        # The plugin routes use the module-level file_storage_service which points to production dir
+        # We need to patch its base_dir to use the test directory
+        from src import file_storage_service as production_file_storage
+        original_file_storage_base_dir = production_file_storage.base_dir
+        production_file_storage.base_dir = clean_media_dir
+
         # Monkey patch EntityService to use test media directory
         original_entity_init = EntityService.__init__
 
@@ -157,6 +164,7 @@ def client(test_engine, clean_media_dir):
 
         # Cleanup
         repository_adapter.session_factory = original_session_factory
+        production_file_storage.base_dir = original_file_storage_base_dir
         EntityService.__init__ = original_entity_init
         JobService.__init__ = original_job_init
         app.dependency_overrides.clear()
@@ -509,6 +517,13 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
         original_session_factory = repository_adapter.session_factory
         repository_adapter.session_factory = TestingSessionLocal
 
+        # CRITICAL: Patch the file_storage_service used by plugin routes
+        # The plugin routes use the module-level file_storage_service which points to production dir
+        # We need to patch its base_dir to use the test directory
+        from src import file_storage_service as production_file_storage
+        original_file_storage_base_dir = production_file_storage.base_dir
+        production_file_storage.base_dir = clean_media_dir
+
         # Monkey patch EntityService to use test media directory
         original_entity_init = EntityService.__init__
 
@@ -531,6 +546,7 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
 
         # Cleanup
         repository_adapter.session_factory = original_session_factory
+        production_file_storage.base_dir = original_file_storage_base_dir
         EntityService.__init__ = original_entity_init
         JobService.__init__ = original_job_init
         app.dependency_overrides.clear()
