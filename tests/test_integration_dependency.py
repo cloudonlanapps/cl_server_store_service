@@ -7,6 +7,9 @@ Key difference from other tests:
 - Other tests override get_db() with a test implementation
 - These tests configure the database via environment variables
 - This ensures the ACTUAL get_db() function is tested
+
+NOTE: These tests should be run separately from the main test suite due to
+module reloading. Run with: pytest tests/test_integration_dependency.py -v
 """
 import sys
 from pathlib import Path
@@ -17,6 +20,9 @@ import os
 from fastapi.testclient import TestClient
 import tempfile
 import shutil
+
+# Mark all tests in this module to be run separately
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="session")
