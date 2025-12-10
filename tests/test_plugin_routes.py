@@ -1,5 +1,5 @@
 """
-Tests for cl_media_tools plugin routes integration.
+Tests for cl_ml_tools plugin routes integration.
 
 These tests verify that plugins are discovered and mounted correctly.
 For individual plugin tests, see:
@@ -61,6 +61,6 @@ class TestPluginDiscovery:
         # Check job management endpoints
         assert "/compute/jobs/{job_id}" in paths
         job_path = paths["/compute/jobs/{job_id}"]
-        
+
         assert "get" in job_path, "GET /compute/jobs/{job_id} should exist"
         assert "delete" in job_path, "DELETE /compute/jobs/{job_id} should exist"

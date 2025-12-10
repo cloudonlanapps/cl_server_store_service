@@ -34,25 +34,52 @@ class Item(BaseModel):
     label: Optional[str] = Field(None, title="Label")
     description: Optional[str] = Field(None, title="Description")
     parent_id: Optional[int] = Field(None, title="Parent Id")
-    added_date: Optional[int] = Field(None, title="Added Date", json_schema_extra={"read_only": True})
-    updated_date: Optional[int] = Field(None, title="Updated Date", json_schema_extra={"read_only": True})
+    added_date: Optional[int] = Field(
+        None, title="Added Date", json_schema_extra={"read_only": True}
+    )
+    updated_date: Optional[int] = Field(
+        None, title="Updated Date", json_schema_extra={"read_only": True}
+    )
     is_deleted: Optional[bool] = Field(None, title="Is Deleted")
-    create_date: Optional[int] = Field(None, title="Create Date", json_schema_extra={"read_only": True})
-    added_by: Optional[str] = Field(None, title="Added By", json_schema_extra={"read_only": True})
-    updated_by: Optional[str] = Field(None, title="Updated By", json_schema_extra={"read_only": True})
-    file_size: Optional[int] = Field(None, title="File Size", json_schema_extra={"read_only": True})
-    height: Optional[int] = Field(None, title="Height", json_schema_extra={"read_only": True})
-    width: Optional[int] = Field(None, title="Width", json_schema_extra={"read_only": True})
-    duration: Optional[float] = Field(None, title="Duration", json_schema_extra={"read_only": True})
-    mime_type: Optional[str] = Field(None, title="Mime Type", json_schema_extra={"read_only": True})
-    type: Optional[str] = Field(None, title="Type", json_schema_extra={"read_only": True})
-    extension: Optional[str] = Field(None, title="Extension", json_schema_extra={"read_only": True})
+    create_date: Optional[int] = Field(
+        None, title="Create Date", json_schema_extra={"read_only": True}
+    )
+    added_by: Optional[str] = Field(
+        None, title="Added By", json_schema_extra={"read_only": True}
+    )
+    updated_by: Optional[str] = Field(
+        None, title="Updated By", json_schema_extra={"read_only": True}
+    )
+    file_size: Optional[int] = Field(
+        None, title="File Size", json_schema_extra={"read_only": True}
+    )
+    height: Optional[int] = Field(
+        None, title="Height", json_schema_extra={"read_only": True}
+    )
+    width: Optional[int] = Field(
+        None, title="Width", json_schema_extra={"read_only": True}
+    )
+    duration: Optional[float] = Field(
+        None, title="Duration", json_schema_extra={"read_only": True}
+    )
+    mime_type: Optional[str] = Field(
+        None, title="Mime Type", json_schema_extra={"read_only": True}
+    )
+    type: Optional[str] = Field(
+        None, title="Type", json_schema_extra={"read_only": True}
+    )
+    extension: Optional[str] = Field(
+        None, title="Extension", json_schema_extra={"read_only": True}
+    )
     md5: Optional[str] = Field(None, title="Md5", json_schema_extra={"read_only": True})
-    file_path: Optional[str] = Field(None, title="File Path", json_schema_extra={"read_only": True})
+    file_path: Optional[str] = Field(
+        None, title="File Path", json_schema_extra={"read_only": True}
+    )
 
 
 class PaginationMetadata(BaseModel):
     """Pagination metadata for paginated responses."""
+
     page: int = Field(..., description="Current page number (1-indexed)")
     page_size: int = Field(..., description="Number of items per page")
     total_items: int = Field(..., description="Total number of items across all pages")
@@ -63,6 +90,7 @@ class PaginationMetadata(BaseModel):
 
 class PaginatedResponse(BaseModel):
     """Paginated response wrapper for entity lists."""
+
     items: list[Item] = Field(..., description="List of items for the current page")
     pagination: PaginationMetadata = Field(..., description="Pagination metadata")
 
@@ -70,44 +98,58 @@ class PaginatedResponse(BaseModel):
 # Admin configuration schemas
 class ConfigResponse(BaseModel):
     """Response schema for configuration."""
-    read_auth_enabled: bool = Field(..., description="Whether read authentication is enabled")
-    updated_at: Optional[int] = Field(None, description="Last update timestamp (milliseconds)")
-    updated_by: Optional[str] = Field(None, description="User ID who last updated the config")
+
+    read_auth_enabled: bool = Field(
+        ..., description="Whether read authentication is enabled"
+    )
+    updated_at: Optional[int] = Field(
+        None, description="Last update timestamp (milliseconds)"
+    )
+    updated_by: Optional[str] = Field(
+        None, description="User ID who last updated the config"
+    )
 
 
 class UpdateReadAuthConfig(BaseModel):
     """Request schema for updating read auth configuration."""
+
     enabled: bool = Field(..., description="Whether to enable read authentication")
 
 
 # Job Management Schemas (from compute service)
 # Import base Job schema from library for consistency
-from cl_media_tools.common.schemas import Job as BaseJob
+from cl_ml_tools.common.schemas import Job as BaseJob
 
 
 class JobResponse(BaseJob):
     """Response schema for job information.
-    
+
     Extends the library's Job schema with service-specific fields
     for timestamps and priority.
     """
+
     priority: int = Field(5, description="Job priority (0-10)")
     created_at: int = Field(..., description="Job creation timestamp (milliseconds)")
-    updated_at: Optional[int] = Field(None, description="Job last update timestamp (milliseconds)")
-    started_at: Optional[int] = Field(None, description="Job start timestamp (milliseconds)")
-    completed_at: Optional[int] = Field(None, description="Job completion timestamp (milliseconds)")
-
-
+    updated_at: Optional[int] = Field(
+        None, description="Job last update timestamp (milliseconds)"
+    )
+    started_at: Optional[int] = Field(
+        None, description="Job start timestamp (milliseconds)"
+    )
+    completed_at: Optional[int] = Field(
+        None, description="Job completion timestamp (milliseconds)"
+    )
 
 
 class StorageInfo(BaseModel):
     """Response schema for storage information."""
+
     total_size: int = Field(..., description="Total storage usage in bytes")
     job_count: int = Field(..., description="Number of jobs stored")
 
 
 class CleanupResult(BaseModel):
     """Response schema for cleanup operation results."""
+
     deleted_count: int = Field(..., description="Number of jobs deleted")
     freed_space: int = Field(..., description="Space freed in bytes")
-
