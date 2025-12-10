@@ -13,7 +13,7 @@ from .mqtt_client import close_mqtt_client, get_mqtt_client
 from .routes import router
 
 # Import for cl_ml_tools integration
-from cl_ml_tools.master import create_master_router
+from cl_ml_tools import create_master_router
 from cl_server_shared.adapters import SQLAlchemyJobRepository, FileStorageAdapter
 from cl_server_shared.file_storage import FileStorageService
 from cl_server_shared.config import MEDIA_STORAGE_DIR
