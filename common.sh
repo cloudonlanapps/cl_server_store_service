@@ -56,6 +56,10 @@ validate_cl_server_dir() {
         return 1
     fi
 
+    if [ ! -d "$CL_SERVER_DIR" ]; then
+        mkdir -p "$CL_SERVER_DIR"
+    fi
+
     if [ ! -w "$CL_SERVER_DIR" ]; then
         echo -e "${RED}[✗] Error: No write permission for CL_SERVER_DIR: $CL_SERVER_DIR${NC}"
         echo -e "${YELLOW}    Please ensure the directory exists and you have write permissions${NC}"
