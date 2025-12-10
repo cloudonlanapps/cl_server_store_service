@@ -118,7 +118,7 @@ class UpdateReadAuthConfig(BaseModel):
 
 # Job Management Schemas (from compute service)
 # Import base Job schema from library for consistency
-from cl_ml_tools.common.schemas import Job as BaseJob
+from cl_ml_tools import Job as BaseJob
 
 
 class JobResponse(BaseJob):
