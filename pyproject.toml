@@ -25,7 +25,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",
     "paho-mqtt>=1.6.0",
     "cl-server-shared[all] @ git+https://github.com/cloudonlanapps/cl_server_shared.git",
-    "cl-media-tools[master] @ git+https://github.com/cloudonlanapps/cl_ml_tools.git",
+    "cl_ml_tools[master] @ git+https://github.com/cloudonlanapps/cl_ml_tools.git",
 ]
 
 [tool.setuptools.packages.find]
