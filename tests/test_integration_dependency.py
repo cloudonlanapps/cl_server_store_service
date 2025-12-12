@@ -11,8 +11,10 @@ Key difference from other tests:
 NOTE: These tests should be run separately from the main test suite due to
 module reloading. Run with: pytest tests/test_integration_dependency.py -v
 """
+
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
@@ -45,16 +47,16 @@ def integration_app():
 
     # Remove cached modules to force fresh import with new env vars
     modules_to_remove = [
-        'src',
-        'src.auth',
-        'src.config',
-        'src.database',
-        'src.models',
-        'src.routes',
-        'src.service',
-        'src.capability_manager',
-        'src.versioning',
-        'cl_server_shared.config',  # CRITICAL: Clear shared config to reload AUTH_DISABLED
+        "src",
+        "store.auth",
+        "store.config",
+        "store.database",
+        "store.models",
+        "store.routes",
+        "store.service",
+        "store.capability_manager",
+        "store.versioning",
+        "cl_server_shared.config",  # CRITICAL: Clear shared config to reload AUTH_DISABLED
     ]
     for module_name in modules_to_remove:
         if module_name in sys.modules:
@@ -66,11 +68,13 @@ def integration_app():
     mock_mqtt_client.capabilities_cache = {}
     mock_mqtt_client.wait_for_capabilities.return_value = True
 
-    with patch("src.capability_manager._capability_manager_instance", mock_mqtt_client):
+    with patch(
+        "store.capability_manager._capability_manager_instance", mock_mqtt_client
+    ):
         # Import app AFTER setting environment variables and clearing cache
-        from src import app
-        from src.database import engine
-        from src.models import Base
+        from store import app
+        from store.database import engine
+        from store.models import Base
 
         # Create tables (including versioning tables)
         Base.metadata.create_all(bind=engine)
@@ -78,8 +82,9 @@ def integration_app():
         yield app
 
     # Cleanup
-    from src.models import Base
-    from src.database import engine
+    from store.models import Base
+    from store.database import engine
+
     Base.metadata.drop_all(bind=engine)
     shutil.rmtree(temp_media_dir, ignore_errors=True)
 
@@ -117,15 +122,13 @@ class TestDependencyInjection:
         """
         # Create a collection entity (doesn't require file upload)
         response = integration_client.post(
-            "/entities/",
-            data={
-                "is_collection": "true",
-                "label": "Test Collection"
-            }
+            "/entities/", data={"is_collection": "true", "label": "Test Collection"}
         )
 
         # If get_db() is broken, this will return 500
-        assert response.status_code == 201, f"Entity creation failed: {response.json() if response.status_code != 500 else response.text}"
+        assert (
+            response.status_code == 201
+        ), f"Entity creation failed: {response.json() if response.status_code != 500 else response.text}"
         assert response.json()["label"] == "Test Collection"
         assert response.json()["is_collection"] is True
 
@@ -140,11 +143,7 @@ class TestDependencyInjection:
         """Test entity retrieval with real dependency injection."""
         # Create entity first
         create_response = integration_client.post(
-            "/entities/",
-            data={
-                "is_collection": "true",
-                "label": "Test Entity"
-            }
+            "/entities/", data={"is_collection": "true", "label": "Test Entity"}
         )
         assert create_response.status_code == 201
         entity_id = create_response.json()["id"]
@@ -167,8 +166,8 @@ class TestEntityOperations:
             data={
                 "is_collection": "true",
                 "label": "Original Name",
-                "description": "Original description"
-            }
+                "description": "Original description",
+            },
         )
         assert create_response.status_code == 201
         entity_id = create_response.json()["id"]
@@ -176,10 +175,9 @@ class TestEntityOperations:
         # Update entity
         update_response = integration_client.patch(
             f"/entities/{entity_id}",
-            json={"body": {
-                "label": "Updated Name",
-                "description": "Updated description"
-            }}
+            json={
+                "body": {"label": "Updated Name", "description": "Updated description"}
+            },
         )
         assert update_response.status_code == 200
         assert update_response.json()["label"] == "Updated Name"
@@ -191,11 +189,7 @@ class TestEntityOperations:
 
         for i in range(5):
             response = integration_client.post(
-                "/entities/",
-                data={
-                    "is_collection": "true",
-                    "label": f"Entity {i}"
-                }
+                "/entities/", data={"is_collection": "true", "label": f"Entity {i}"}
             )
             assert response.status_code == 201
             entity_ids.append(response.json()["id"])
@@ -209,11 +203,7 @@ class TestEntityOperations:
         """Test entity deletion with real dependency injection."""
         # Create entity
         create_response = integration_client.post(
-            "/entities/",
-            data={
-                "is_collection": "true",
-                "label": "To Be Deleted"
-            }
+            "/entities/", data={"is_collection": "true", "label": "To Be Deleted"}
         )
         assert create_response.status_code == 201
         entity_id = create_response.json()["id"]
@@ -234,17 +224,17 @@ class TestFileUpload:
         """Test file upload endpoint with real get_db()."""
         # Create a simple test image (1x1 PNG)
         png_data = (
-            b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'
-            b'\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00'
-            b'\x00\x0cIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4'
-            b'\x00\x00\x00\x00IEND\xaeB`\x82'
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00"
+            b"\x00\x0cIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4"
+            b"\x00\x00\x00\x00IEND\xaeB`\x82"
         )
 
         # Create entity with file
         create_response = integration_client.post(
             "/entities/",
             data={"is_collection": "false", "label": "Entity with File"},
-            files={"image": ("test.png", png_data, "image/png")}
+            files={"image": ("test.png", png_data, "image/png")},
         )
         assert create_response.status_code == 201
         entity_data = create_response.json()
@@ -261,11 +251,7 @@ class TestMultipleSequentialRequests:
 
         for i in range(10):
             response = integration_client.post(
-                "/entities/",
-                data={
-                    "is_collection": "true",
-                    "label": f"Seq {i}"
-                }
+                "/entities/", data={"is_collection": "true", "label": f"Seq {i}"}
             )
             assert response.status_code == 201
             entity_ids.append(response.json()["id"])
@@ -279,11 +265,7 @@ class TestMultipleSequentialRequests:
         """Test mixed create/read/update/delete operations."""
         # Create
         create_resp = integration_client.post(
-            "/entities/",
-            data={
-                "is_collection": "true",
-                "label": "Mixed Test"
-            }
+            "/entities/", data={"is_collection": "true", "label": "Mixed Test"}
         )
         assert create_resp.status_code == 201
         entity_id = create_resp.json()["id"]
@@ -294,8 +276,7 @@ class TestMultipleSequentialRequests:
 
         # Update
         update_resp = integration_client.patch(
-            f"/entities/{entity_id}",
-            json={"body": {"label": "Updated Mixed Test"}}
+            f"/entities/{entity_id}", json={"body": {"label": "Updated Mixed Test"}}
         )
         assert update_resp.status_code == 200
 

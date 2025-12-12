@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 
-# Set up test environment variables BEFORE importing from src
+# Set up test environment variables BEFORE importing from store
 # IMPORTANT: Always use a test-specific directory for CL_SERVER_DIR
 # NEVER use the production CL_SERVER_DIR from environment
 # This prevents tests from contaminating production data
@@ -58,7 +58,7 @@ def test_engine():
     )
 
     # Import models and configure versioning BEFORE creating tables
-    from src.models import Base
+    from store.models import Base
     from sqlalchemy.orm import configure_mappers
 
     # This must be called before create_all to ensure version tables are created
@@ -120,17 +120,17 @@ def client(test_engine, clean_media_dir, monkeypatch):
     mock_manager.capabilities_cache = {}  # Empty cache = 0 workers
     mock_manager.wait_for_capabilities.return_value = True
 
-    with patch("src.capability_manager._capability_manager_instance", mock_manager):
+    with patch("store.capability_manager._capability_manager_instance", mock_manager):
         # Import app and override dependency
-        from src import app, repository_adapter
-        from src.database import get_db
-        from src.auth import get_current_user
+        from store import app, repository_adapter
+        from store.database import get_db
+        from store.auth import get_current_user
 
         # CRITICAL: Reset auth module's public key cache to prevent contamination from auth tests
         # Even though this fixture bypasses auth, we need to clear any cached keys from previous tests
-        if "src.auth" in sys.modules:
-            sys.modules["src.auth"]._public_key_cache = None
-            sys.modules["src.auth"]._public_key_load_attempts = 0
+        if "store.auth" in sys.modules:
+            sys.modules["store.auth"]._public_key_cache = None
+            sys.modules["store.auth"]._public_key_load_attempts = 0
 
         app.dependency_overrides[get_db] = override_get_db
 
@@ -152,7 +152,7 @@ def client(test_engine, clean_media_dir, monkeypatch):
         # CRITICAL: Patch the file_storage_service used by plugin routes
         # The plugin routes use the module-level file_storage_service which points to production dir
         # We need to patch its base_dir to use the test directory
-        from src import file_storage_service as production_file_storage
+        from store import file_storage_service as production_file_storage
 
         original_file_storage_base_dir = production_file_storage.base_dir
         production_file_storage.base_dir = clean_media_dir
@@ -263,7 +263,7 @@ def job_service(test_db_session, file_storage_service):
     Returns:
         JobService: Service instance with test database and file storage
     """
-    from src.service import JobService
+    from store.service import JobService
 
     return JobService(db=test_db_session, base_dir=str(file_storage_service.base_dir))
 
@@ -489,19 +489,21 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     mock_mqtt_client.capabilities_cache = {}
     mock_mqtt_client.wait_for_capabilities.return_value = True
 
-    with patch("src.capability_manager._capability_manager_instance", mock_mqtt_client):
+    with patch(
+        "store.capability_manager._capability_manager_instance", mock_mqtt_client
+    ):
         # Import app
-        from src import app, repository_adapter
-        from src.database import get_db
-        from src.service import EntityService, JobService
-        from src.auth import get_current_user
+        from store import app, repository_adapter
+        from store.database import get_db
+        from store.service import EntityService, JobService
+        from store.auth import get_current_user
 
         # CRITICAL: Reset auth module's public key cache AFTER importing
         # This ensures each test uses the fresh key pair from the key_pair fixture
         # Use sys.modules to ensure we get the actual module instance being used
-        if "src.auth" in sys.modules:
-            sys.modules["src.auth"]._public_key_cache = None
-            sys.modules["src.auth"]._public_key_load_attempts = 0
+        if "store.auth" in sys.modules:
+            sys.modules["store.auth"]._public_key_cache = None
+            sys.modules["store.auth"]._public_key_load_attempts = 0
 
         # CRITICAL: Clear any existing auth override from previous tests
         # This ensures auth tests actually test authentication, not bypassed auth
@@ -518,7 +520,7 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
         # CRITICAL: Patch the file_storage_service used by plugin routes
         # The plugin routes use the module-level file_storage_service which points to production dir
         # We need to patch its base_dir to use the test directory
-        from src import file_storage_service as production_file_storage
+        from store import file_storage_service as production_file_storage
 
         original_file_storage_base_dir = production_file_storage.base_dir
         production_file_storage.base_dir = clean_media_dir
@@ -541,9 +543,9 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
 
         # Cleanup - CRITICAL: Reset cache again after test completes
         # This ensures the next test doesn't use a stale cached key
-        if "src.auth" in sys.modules:
-            sys.modules["src.auth"]._public_key_cache = None
-            sys.modules["src.auth"]._public_key_load_attempts = 0
+        if "store.auth" in sys.modules:
+            sys.modules["store.auth"]._public_key_cache = None
+            sys.modules["store.auth"]._public_key_load_attempts = 0
 
         repository_adapter.session_factory = original_session_factory
         production_file_storage.base_dir = original_file_storage_base_dir

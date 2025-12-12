@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # Initialize versioning before importing models
 make_versioned(user_cls=None)
 
-from src.models import Base
+from store.models import Base
 from cl_server_shared.config import Config as AppConfig
 
 # Configure mappers after models are imported

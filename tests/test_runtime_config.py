@@ -7,10 +7,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.database import get_db
-from src.models import Base, ServiceConfig
-from src.config_service import ConfigService
-from src import app
+from store import app
+from store.config_service import ConfigService
+from store.database import get_db
+from store.models import Base, ServiceConfig
 
 
 @pytest.fixture(scope="function")
@@ -135,8 +135,8 @@ class TestJWTUserID:
 
         # Decode the token to verify structure (simulating what auth middleware does)
         # We use the same verify logic as the application
-        from jose import jwt
         from cl_server_shared.config import Config
+        from jose import jwt
 
         # In tests, we might not have the actual public key file, but we can verify
         # the token structure and that our generator puts the ID in the right place.
@@ -182,7 +182,7 @@ class TestJWTUserID:
         entity_id = response.json()["id"]
 
         # Verify directly in database that added_by was set correctly
-        from src.models import Entity
+        from store.models import Entity
 
         entity = db_session.query(Entity).filter(Entity.id == entity_id).first()
 

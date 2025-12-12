@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "media-store"
+version = "0.1.0"
+description = "Fwith metadata extraction, versioning, and duplicate detection"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "python-multipart>=0.0.6",
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.12.0",
+    "sqlalchemy-continuum>=1.4.0",
+    "clmediakit @ git+ssh://git@github.com/asarangaram/clmediakit.git",
+    "marshmallow>=3.0.0",
+    "werkzeug>=2.0.0",
+    "m3u8>=0.9.0",
+    "python-magic>=0.4.0",
+    "requests>=2.28.0",
+    "pytest>=7.4.0",
+    "httpx>=0.24.0",
+    "python-jose[cryptography]>=3.3.0",
+    "paho-mqtt>=1.6.0",
+    "cl-server-shared[all] @ git+https://github.com/cloudonlanapps/cl_server_shared.git",
+    "cl_ml_tools @ git+https://github.com/cloudonlanapps/cl_ml_tools.git",
+]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short -m 'not integration'"
+markers = [
+    "integration: marks tests as integration tests that reload modules (deselect with '-m \"not integration\"')",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "*/conftest.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

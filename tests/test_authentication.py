@@ -48,7 +48,7 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_correct_permission(self):
         """User with the required permission should be allowed."""
-        from src.auth import require_permission
+        from store.auth import require_permission
         import asyncio
 
         from unittest.mock import patch
@@ -68,7 +68,7 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_admin(self):
         """Admin user should be allowed even without specific permission."""
-        from src.auth import require_permission
+        from store.auth import require_permission
         import asyncio
 
         from unittest.mock import patch
@@ -82,7 +82,7 @@ class TestAuthenticationLogic:
 
     def test_require_permission_rejects_wrong_permission(self):
         """User with only read permission should be rejected when write is required."""
-        from src.auth import require_permission
+        from store.auth import require_permission
         import asyncio
 
         from unittest.mock import patch
@@ -102,7 +102,7 @@ class TestAuthenticationLogic:
 
     def test_require_permission_rejects_none_user(self):
         """None user (no auth) should be rejected when auth is not disabled."""
-        from src.auth import require_permission
+        from store.auth import require_permission
         import asyncio
 
         from unittest.mock import patch
@@ -117,7 +117,7 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_read_permission(self):
         """User with media_store_read permission should be allowed."""
-        from src.auth import require_permission
+        from store.auth import require_permission
         import asyncio
 
         from unittest.mock import patch
@@ -135,7 +135,7 @@ class TestAuthenticationLogic:
 
     def test_require_admin_allows_admin_user(self):
         """Admin user should be allowed by require_admin."""
-        from src.auth import require_admin
+        from store.auth import require_admin
         import asyncio
 
         from unittest.mock import patch
@@ -148,7 +148,7 @@ class TestAuthenticationLogic:
 
     def test_require_admin_rejects_non_admin(self):
         """Non-admin user should be rejected by require_admin."""
-        from src.auth import require_admin
+        from store.auth import require_admin
         import asyncio
 
         from unittest.mock import patch
@@ -186,7 +186,7 @@ class TestAuthenticationModes:
 
     def test_demo_mode_bypasses_permission_check(self):
         """When AUTH_DISABLED=true, permission checks should be bypassed."""
-        from src.auth import require_permission
+        from store.auth import require_permission
         import asyncio
 
         from unittest.mock import patch
@@ -199,7 +199,7 @@ class TestAuthenticationModes:
 
     def test_demo_mode_bypasses_admin_check(self):
         """When AUTH_DISABLED=true, admin checks should be bypassed."""
-        from src.auth import require_admin
+        from store.auth import require_admin
         import asyncio
 
         from unittest.mock import patch

@@ -51,9 +51,7 @@ class TestAdminConfigPutEndpoint:
         headers = {"Authorization": f"Bearer {admin_token}"}
         payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth",
-            json=payload,
-            headers=headers
+            "/admin/config/read-auth", json=payload, headers=headers
         )
 
         assert response.status_code == 200
@@ -63,9 +61,7 @@ class TestAdminConfigPutEndpoint:
         headers = {"Authorization": f"Bearer {write_token}"}
         payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth",
-            json=payload,
-            headers=headers
+            "/admin/config/read-auth", json=payload, headers=headers
         )
 
         assert response.status_code == 403
@@ -75,9 +71,7 @@ class TestAdminConfigPutEndpoint:
         headers = {"Authorization": f"Bearer {read_token}"}
         payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth",
-            json=payload,
-            headers=headers
+            "/admin/config/read-auth", json=payload, headers=headers
         )
 
         assert response.status_code == 403
@@ -85,10 +79,7 @@ class TestAdminConfigPutEndpoint:
     def test_put_read_auth_without_token_returns_401(self, auth_client):
         """PUT /admin/config/read-auth without token should return 401 Unauthorized."""
         payload = {"enabled": True}
-        response = auth_client.put(
-            "/admin/config/read-auth",
-            json=payload
-        )
+        response = auth_client.put("/admin/config/read-auth", json=payload)
 
         assert response.status_code == 401
 
@@ -97,16 +88,16 @@ class TestAdminConfigPutEndpoint:
         headers = {"Authorization": "Bearer invalid.token.here"}
         payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth",
-            json=payload,
-            headers=headers
+            "/admin/config/read-auth", json=payload, headers=headers
         )
 
         assert response.status_code == 401
 
-    def test_config_changes_persisted_in_database(self, auth_client, admin_token, test_db_session):
+    def test_config_changes_persisted_in_database(
+        self, auth_client, admin_token, test_db_session
+    ):
         """Config changes via PUT should be persisted in database."""
-        from src.config_service import ConfigService
+        from store.config_service import ConfigService
 
         # Clear cache before test
         ConfigService._cache.clear()
@@ -116,9 +107,7 @@ class TestAdminConfigPutEndpoint:
         headers = {"Authorization": f"Bearer {admin_token}"}
         payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth",
-            json=payload,
-            headers=headers
+            "/admin/config/read-auth", json=payload, headers=headers
         )
 
         assert response.status_code == 200
@@ -135,9 +124,7 @@ class TestAdminConfigPutEndpoint:
         # Update config
         payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth",
-            json=payload,
-            headers=headers
+            "/admin/config/read-auth", json=payload, headers=headers
         )
         assert response.status_code == 200
 

@@ -66,15 +66,20 @@ class TestCapabilityEndpointWithWorkers:
         }
         mock_manager.capabilities_cache = {
             "worker-1": {"capabilities": ["image_resize"], "idle_count": 1},
-            "worker-2": {"capabilities": ["image_resize", "image_conversion"], "idle_count": 1},
+            "worker-2": {
+                "capabilities": ["image_resize", "image_conversion"],
+                "idle_count": 1,
+            },
         }
 
         # Patch the singleton instance directly to ensure all calls use the mock
-        with patch("src.capability_manager._capability_manager_instance", mock_manager):
-            from src import app
-            from src.database import get_db
-            from src.auth import get_current_user
-            from src.service import EntityService, JobService
+        with patch(
+            "store.capability_manager._capability_manager_instance", mock_manager
+        ):
+            from store import app
+            from store.database import get_db
+            from store.auth import get_current_user
+            from store.service import EntityService, JobService
 
             app.dependency_overrides[get_db] = override_get_db
             app.dependency_overrides[get_current_user] = lambda: {
@@ -93,7 +98,9 @@ class TestCapabilityEndpointWithWorkers:
                 assert data["capabilities"]["image_conversion"] == 1
             app.dependency_overrides.clear()
 
-    def test_get_capabilities_mqtt_error_returns_empty(self, test_engine, clean_media_dir):
+    def test_get_capabilities_mqtt_error_returns_empty(
+        self, test_engine, clean_media_dir
+    ):
         """Test that MQTT errors return empty capabilities gracefully."""
         from unittest.mock import MagicMock, patch
         from sqlalchemy.orm import sessionmaker
@@ -112,15 +119,19 @@ class TestCapabilityEndpointWithWorkers:
 
         # Mock capability manager that raises an error
         mock_manager = MagicMock()
-        mock_manager.get_cached_capabilities.side_effect = Exception("Capability manager error")
+        mock_manager.get_cached_capabilities.side_effect = Exception(
+            "Capability manager error"
+        )
         mock_manager.capabilities_cache = {}
 
         # Patch the singleton instance directly
-        with patch("src.capability_manager._capability_manager_instance", mock_manager):
-            from src import app
-            from src.database import get_db
-            from src.auth import get_current_user
-            from src.service import EntityService, JobService
+        with patch(
+            "store.capability_manager._capability_manager_instance", mock_manager
+        ):
+            from store import app
+            from store.database import get_db
+            from store.auth import get_current_user
+            from store.service import EntityService, JobService
 
             app.dependency_overrides[get_db] = override_get_db
             app.dependency_overrides[get_current_user] = lambda: {
@@ -145,14 +156,14 @@ class TestCapabilityService:
 
     def test_capability_service_initialization(self, test_db_session):
         """Test CapabilityService can be initialized."""
-        from src.service import CapabilityService
+        from store.service import CapabilityService
 
         service = CapabilityService(test_db_session)
         assert service.db is test_db_session
 
     def test_capability_service_get_available(self, test_db_session):
         """Test CapabilityService.get_available_capabilities()."""
-        from src.service import CapabilityService
+        from store.service import CapabilityService
 
         mock_manager = MagicMock()
         mock_manager.get_cached_capabilities.return_value = {
@@ -160,7 +171,9 @@ class TestCapabilityService:
             "image_conversion": 1,
         }
 
-        with patch("src.capability_manager.get_capability_manager", return_value=mock_manager):
+        with patch(
+            "store.capability_manager.get_capability_manager", return_value=mock_manager
+        ):
             service = CapabilityService(test_db_session)
             capabilities = service.get_available_capabilities()
 
@@ -171,12 +184,14 @@ class TestCapabilityService:
 
     def test_capability_service_handles_capability_manager_error(self, test_db_session):
         """Test CapabilityService gracefully handles capability manager errors."""
-        from src.service import CapabilityService
+        from store.service import CapabilityService
 
         mock_manager = MagicMock()
         mock_manager.get_cached_capabilities.side_effect = Exception("Connection error")
 
-        with patch("src.capability_manager.get_capability_manager", return_value=mock_manager):
+        with patch(
+            "store.capability_manager.get_capability_manager", return_value=mock_manager
+        ):
             service = CapabilityService(test_db_session)
             capabilities = service.get_available_capabilities()
 
@@ -189,7 +204,7 @@ class TestCapabilityManagerIntegration:
 
     def test_capability_manager_caches_capabilities(self):
         """Test that CapabilityManager caches capability messages."""
-        from src.capability_manager import CapabilityManager
+        from store.capability_manager import CapabilityManager
 
         # Note: This test uses mocking to avoid needing live broker
         manager = CapabilityManager()
@@ -215,7 +230,7 @@ class TestCapabilityManagerIntegration:
 
     def test_capability_manager_aggregates_multiple_workers(self):
         """Test aggregation across multiple workers."""
-        from src.capability_manager import CapabilityManager
+        from store.capability_manager import CapabilityManager
 
         manager = CapabilityManager()
 
@@ -240,7 +255,7 @@ class TestCapabilityManagerIntegration:
 
     def test_capability_manager_handles_lwt_cleanup(self):
         """Test LWT message removes worker from cache."""
-        from src.capability_manager import CapabilityManager
+        from store.capability_manager import CapabilityManager
 
         manager = CapabilityManager()
 
@@ -262,7 +277,7 @@ class TestCapabilityManagerIntegration:
 
     def test_capability_manager_get_worker_count(self):
         """Test getting total worker count by capability."""
-        from src.capability_manager import CapabilityManager
+        from store.capability_manager import CapabilityManager
 
         manager = CapabilityManager()
 
@@ -335,4 +350,3 @@ class TestCapabilityResponseFormat:
         # If capabilities exist, num_workers should be >= 1
         if data["capabilities"]:
             assert data["num_workers"] >= 1
-
