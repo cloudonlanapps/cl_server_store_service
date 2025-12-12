@@ -13,22 +13,16 @@ A FastAPI-based microservice for managing media entities and compute jobs. This 
 Start the store service from the root directory:
 
 ```bash
-./start.sh
+uv venv .venv 
+uv sync 
+uv run store [--reload --no-auth]
 ```
 
 The service will:
-1. Validate required environment variables
-2. Run database migrations
-3. Start the FastAPI server on port 8001
+1. Run database migrations
+2. Start the FastAPI server on port 8001
 
 Server will be accessible at: `http://localhost:8001`
-
-### Start Script Options
-
-```bash
-./start.sh              # Start with authentication enabled (default)
-./start.sh --no-auth    # Start without authentication (AUTH_DISABLED=true)
-```
 
 ## Environment Variables
 
