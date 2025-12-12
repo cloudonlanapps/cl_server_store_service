@@ -6,35 +6,41 @@ from typing import Optional
 from sqlalchemy import BigInteger, Boolean, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-# Import shared models
-from cl_server_shared.database import Base
-from cl_server_shared import Job, QueueEntry
+# Import Base from local database module (with WAL mode support)
+from .database import Base
+# Import shared models to ensure they're registered with our Base
+from cl_server_shared.models import Job, QueueEntry
+
+# Register shared model tables with our local Base metadata so alembic can find them
+# This ensures the jobs and queue tables are created in our database
+for table in [Job.__table__, QueueEntry.__table__]:
+    table.to_metadata(Base.metadata)
 
 
 class Entity(Base):
     """SQLAlchemy model for media entities."""
-    
+
     __tablename__ = "entities"
     __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning
-    
+
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    
+
     # Core fields
     is_collection: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     label: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     description: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     parent_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    
+
     # Timestamps
     added_date: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     updated_date: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     create_date: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
-    
+
     # User identity tracking
     added_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     updated_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    
+
     # File metadata
     file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -43,14 +49,18 @@ class Entity(Base):
     mime_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     extension: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    md5: Mapped[Optional[str]] = mapped_column(String, unique=True, index=True, nullable=True)
-    
+    md5: Mapped[Optional[str]] = mapped_column(
+        String, unique=True, index=True, nullable=True
+    )
+
     # File storage
     file_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    
+
     # Soft delete flag
-    is_deleted: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
-    
+    is_deleted: Mapped[Optional[bool]] = mapped_column(
+        Boolean, default=False, nullable=True
+    )
+
     def __repr__(self) -> str:
         return f"<Entity(id={self.id}, label={self.label})>"
 

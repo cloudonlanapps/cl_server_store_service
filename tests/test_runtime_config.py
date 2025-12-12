@@ -136,7 +136,7 @@ class TestJWTUserID:
         # Decode the token to verify structure (simulating what auth middleware does)
         # We use the same verify logic as the application
         from jose import jwt
-        from cl_server_shared.config import PUBLIC_KEY_PATH
+        from cl_server_shared.config import Config
 
         # In tests, we might not have the actual public key file, but we can verify
         # the token structure and that our generator puts the ID in the right place.

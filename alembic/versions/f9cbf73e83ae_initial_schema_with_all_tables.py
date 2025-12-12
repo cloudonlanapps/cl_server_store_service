@@ -1,8 +1,8 @@
-"""reset_and_standardize_job_schema
+"""Initial schema with all tables
 
-Revision ID: 2cdb67716137
+Revision ID: f9cbf73e83ae
 Revises: 
-Create Date: 2025-12-05 11:21:52.265647
+Create Date: 2025-12-11 18:34:09.036416
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '2cdb67716137'
+revision: str = 'f9cbf73e83ae'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -79,6 +79,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('job_id', sa.String(), nullable=False),
     sa.Column('task_type', sa.String(), nullable=False),
+    sa.Column('priority', sa.Integer(), nullable=False),
     sa.Column('params', sa.Text(), nullable=False),
     sa.Column('status', sa.String(), nullable=False),
     sa.Column('progress', sa.Integer(), nullable=False),

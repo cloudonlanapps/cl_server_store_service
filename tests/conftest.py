@@ -88,9 +88,23 @@ def test_db_session(test_engine):
 
 
 @pytest.fixture(scope="function")
-def client(test_engine, clean_media_dir):
+def client(test_engine, clean_media_dir, monkeypatch):
     """Create a test client with a fresh database and test media directory."""
+    print("Clien t was called..........")
     from unittest.mock import MagicMock, patch
+    import importlib
+
+    # Set environment variables for Config to use test directories
+    # monkeypatch.setenv("Config.MEDIA_STORAGE_DIR", str(clean_media_dir))
+    # monkeypatch.setenv("Config.COMPUTE_STORAGE_DIR", str(clean_media_dir))
+    monkeypatch.setenv("CL_SERVER_DIR", str(clean_media_dir))
+
+    # Reload Config module to pick up new environment variables
+    from cl_server_shared import config as config_module
+
+    importlib.reload(config_module)
+
+    print(f"root directory now is {config_module.Config.CL_SERVER_DIR}")
 
     # Create session maker
     TestingSessionLocal = sessionmaker(
@@ -105,18 +119,23 @@ def client(test_engine, clean_media_dir):
         finally:
             db.close()
 
-    # Mock get_mqtt_client before importing app
-    mock_mqtt_client = MagicMock()
-    mock_mqtt_client.get_cached_capabilities.return_value = {}
-    mock_mqtt_client.capabilities_cache = {}  # Empty cache = 0 workers
-    mock_mqtt_client.wait_for_capabilities.return_value = True
+    # Mock capability_manager before importing app
+    mock_manager = MagicMock()
+    mock_manager.get_cached_capabilities.return_value = {}
+    mock_manager.capabilities_cache = {}  # Empty cache = 0 workers
+    mock_manager.wait_for_capabilities.return_value = True
 
-    with patch("src.mqtt_client._mqtt_client_instance", mock_mqtt_client):
+    with patch("src.capability_manager._capability_manager_instance", mock_manager):
         # Import app and override dependency
         from src import app, repository_adapter
         from src.database import get_db
-        from src.service import EntityService, JobService
         from src.auth import get_current_user
+
+        # CRITICAL: Reset auth module's public key cache to prevent contamination from auth tests
+        # Even though this fixture bypasses auth, we need to clear any cached keys from previous tests
+        if "src.auth" in sys.modules:
+            sys.modules["src.auth"]._public_key_cache = None
+            sys.modules["src.auth"]._public_key_load_attempts = 0
 
         app.dependency_overrides[get_db] = override_get_db
 
@@ -139,24 +158,9 @@ def client(test_engine, clean_media_dir):
         # The plugin routes use the module-level file_storage_service which points to production dir
         # We need to patch its base_dir to use the test directory
         from src import file_storage_service as production_file_storage
+
         original_file_storage_base_dir = production_file_storage.base_dir
         production_file_storage.base_dir = clean_media_dir
-
-        # Monkey patch EntityService to use test media directory
-        original_entity_init = EntityService.__init__
-
-        def patched_entity_init(self, db, base_dir=None):
-            original_entity_init(self, db, base_dir=str(clean_media_dir))
-
-        EntityService.__init__ = patched_entity_init
-
-        # Monkey patch JobService to use test media directory
-        original_job_init = JobService.__init__
-
-        def patched_job_init(self, db, base_dir=None):
-            original_job_init(self, db, base_dir=str(clean_media_dir))
-
-        JobService.__init__ = patched_job_init
 
         # Create test client
         with TestClient(app) as test_client:
@@ -165,8 +169,6 @@ def client(test_engine, clean_media_dir):
         # Cleanup
         repository_adapter.session_factory = original_session_factory
         production_file_storage.base_dir = original_file_storage_base_dir
-        EntityService.__init__ = original_entity_init
-        JobService.__init__ = original_job_init
         app.dependency_overrides.clear()
 
 
@@ -463,20 +465,15 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
 
     # Set PUBLIC_KEY_PATH environment variable for JWT validation
     _, public_key_path = key_pair
-    monkeypatch.setenv("PUBLIC_KEY_PATH", public_key_path)
 
-    # Update auth module's PUBLIC_KEY_PATH and clear cache
-    if "src.auth" in sys.modules:
-        auth_module = sys.modules["src.auth"]
-        # Reload config to pick up new environment variable
-        if "cl_server_shared.config" in sys.modules:
-            config_module = sys.modules["cl_server_shared.config"]
-            importlib.reload(config_module)
-            # Update auth module's reference to PUBLIC_KEY_PATH
-            auth_module.PUBLIC_KEY_PATH = config_module.PUBLIC_KEY_PATH
+    # Copy the generated public key to the expected location for tests
+    from cl_server_shared.config import Config
 
-        auth_module._public_key_cache = None
-        auth_module._public_key_load_attempts = 0
+    expected_key_path = Config.PUBLIC_KEY_PATH
+    Path(expected_key_path).parent.mkdir(parents=True, exist_ok=True)
+    import shutil
+
+    shutil.copy(public_key_path, expected_key_path)
 
     # Create session maker
     TestingSessionLocal = sessionmaker(
@@ -497,12 +494,19 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     mock_mqtt_client.capabilities_cache = {}
     mock_mqtt_client.wait_for_capabilities.return_value = True
 
-    with patch("src.mqtt_client._mqtt_client_instance", mock_mqtt_client):
+    with patch("src.capability_manager._capability_manager_instance", mock_mqtt_client):
         # Import app
         from src import app, repository_adapter
         from src.database import get_db
         from src.service import EntityService, JobService
         from src.auth import get_current_user
+
+        # CRITICAL: Reset auth module's public key cache AFTER importing
+        # This ensures each test uses the fresh key pair from the key_pair fixture
+        # Use sys.modules to ensure we get the actual module instance being used
+        if "src.auth" in sys.modules:
+            sys.modules["src.auth"]._public_key_cache = None
+            sys.modules["src.auth"]._public_key_load_attempts = 0
 
         # CRITICAL: Clear any existing auth override from previous tests
         # This ensures auth tests actually test authentication, not bypassed auth
@@ -510,7 +514,6 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
             del app.dependency_overrides[get_current_user]
 
         app.dependency_overrides[get_db] = override_get_db
-
 
         # CRITICAL: Patch the repository adapter to use test session factory
         # The plugin routes use this adapter, which was created with production SessionLocal
@@ -521,34 +524,32 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
         # The plugin routes use the module-level file_storage_service which points to production dir
         # We need to patch its base_dir to use the test directory
         from src import file_storage_service as production_file_storage
+
         original_file_storage_base_dir = production_file_storage.base_dir
         production_file_storage.base_dir = clean_media_dir
 
-        # Monkey patch EntityService to use test media directory
-        original_entity_init = EntityService.__init__
+        # Patch Config.MEDIA_STORAGE_DIR to use test media directory
+        # EntityService reads this config value internally
+        monkeypatch.setattr(
+            "cl_server_shared.config.Config.MEDIA_STORAGE_DIR", str(clean_media_dir)
+        )
 
-        def patched_entity_init(self, db, base_dir=None):
-            original_entity_init(self, db, base_dir=str(clean_media_dir))
-
-        EntityService.__init__ = patched_entity_init
-
-        # Monkey patch JobService to use test media directory
-        original_job_init = JobService.__init__
-
-        def patched_job_init(self, db, base_dir=None):
-            original_job_init(self, db, base_dir=str(clean_media_dir))
-
-        JobService.__init__ = patched_job_init
+        # Patch Config.COMPUTE_STORAGE_DIR to use test media directory
+        # JobService reads this config value internally
+        monkeypatch.setattr(
+            "cl_server_shared.config.Config.COMPUTE_STORAGE_DIR", str(clean_media_dir)
+        )
 
         # Create test client
         with TestClient(app) as test_client:
             yield test_client
 
-        # Cleanup
+        # Cleanup - CRITICAL: Reset cache again after test completes
+        # This ensures the next test doesn't use a stale cached key
+        if "src.auth" in sys.modules:
+            sys.modules["src.auth"]._public_key_cache = None
+            sys.modules["src.auth"]._public_key_load_attempts = 0
+
         repository_adapter.session_factory = original_session_factory
         production_file_storage.base_dir = original_file_storage_base_dir
-        EntityService.__init__ = original_entity_init
-        JobService.__init__ = original_job_init
         app.dependency_overrides.clear()
-
-

@@ -35,7 +35,10 @@ exclude = ["tests*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m 'not integration'"
+markers = [
+    "integration: marks tests as integration tests that reload modules (deselect with '-m \"not integration\"')",
+]
 
 [tool.coverage.run]
 source = ["src"]

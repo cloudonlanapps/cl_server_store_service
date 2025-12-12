@@ -9,7 +9,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from cl_server_shared.config import PUBLIC_KEY_PATH, AUTH_DISABLED, READ_AUTH_ENABLED
+from cl_server_shared.config import Config
 from .database import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", auto_error=False)
@@ -36,9 +36,9 @@ def get_public_key() -> str:
     # Try to load the key
     retry_count = 0
     while retry_count < _max_load_attempts:
-        if os.path.exists(PUBLIC_KEY_PATH):
+        if os.path.exists(Config.PUBLIC_KEY_PATH):
             try:
-                with open(PUBLIC_KEY_PATH, "r") as f:
+                with open(Config.PUBLIC_KEY_PATH, "r") as f:
                     _public_key_cache = f.read()
                     if _public_key_cache:
                         return _public_key_cache
@@ -58,7 +58,7 @@ def get_public_key() -> str:
     # If we get here, public key still doesn't exist
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail=f"Public key not found at {PUBLIC_KEY_PATH}. Is the authentication service running?",
+        detail=f"Public key not found at {Config.PUBLIC_KEY_PATH}. Is the authentication service running?",
     )
 
 
@@ -71,7 +71,7 @@ async def get_current_user(
     Returns None if token is not provided and auto_error is False.
     """
     # Demo mode: bypass authentication
-    if AUTH_DISABLED:
+    if Config.AUTH_DISABLED:
         return None
 
     # No token provided
@@ -133,7 +133,7 @@ def require_permission(permission: str):
         db: Session = Depends(get_db),
     ) -> Optional[dict]:
         # Demo mode: bypass permission check
-        if AUTH_DISABLED:
+        if Config.AUTH_DISABLED:
             return current_user
 
         # Check runtime read auth configuration for read permissions
@@ -176,7 +176,7 @@ async def require_admin(
     current_user: Optional[dict] = Depends(get_current_user),
 ) -> Optional[dict]:
     # Demo mode: bypass permission check
-    if AUTH_DISABLED:
+    if Config.AUTH_DISABLED:
         return current_user
 
     # No user provided but auth is required

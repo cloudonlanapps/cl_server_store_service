@@ -175,6 +175,64 @@ class TestInferenceAdminPermissions:
         assert response.status_code == 201  # Admin bypasses permission checks
 
 
+class TestPermissionHierarchy:
+    """Test permission hierarchy and combinations."""
+
+    def test_multiple_permissions_with_write_and_inference(
+        self, write_token, inference_token, auth_client, sample_image
+    ):
+        """Test that users with write and inference permissions can access respective endpoints."""
+        # Write permission should allow entity write
+        with open(sample_image, "rb") as f:
+            entity_response = auth_client.post(
+                "/entities/",
+                files={"image": (sample_image.name, f, "image/jpeg")},
+                data={"is_collection": "false", "label": "Write Entity"},
+                headers={"Authorization": f"Bearer {write_token}"},
+            )
+
+        assert entity_response.status_code == 201
+
+        # Inference permission should allow job creation
+        response, _ = create_job_via_plugin(auth_client, inference_token)
+        assert response.status_code == 200
+
+        # Write permission should NOT allow admin operations
+        admin_response = auth_client.get(
+            "/admin/compute/jobs/storage/size",
+            headers={"Authorization": f"Bearer {write_token}"},
+        )
+
+        assert admin_response.status_code == 403
+
+    def test_admin_overrides_all_restrictions(
+        self, admin_token, auth_client, sample_image
+    ):
+        """Test that admin flag overrides all permission requirements."""
+        # Should allow job creation (admin override)
+        response, _ = create_job_via_plugin(auth_client, admin_token)
+        assert response.status_code == 200
+
+        # Should allow entity write (admin override)
+        with open(sample_image, "rb") as f:
+            entity_response = auth_client.post(
+                "/entities/",
+                files={"image": (sample_image.name, f, "image/jpeg")},
+                data={"is_collection": "false", "label": "Admin Entity"},
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+
+        assert entity_response.status_code == 201
+
+        # Should allow admin operations
+        admin_response = auth_client.get(
+            "/admin/compute/jobs/storage/size",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+        assert admin_response.status_code == 200
+
+
 class TestCombinedOperations:
     """Test combined operations across entity and job endpoints."""
 
@@ -247,79 +305,3 @@ class TestCombinedOperations:
         storage_response = client.get("/admin/compute/jobs/storage/size")
 
         assert storage_response.status_code == 200
-
-
-class TestPermissionHierarchy:
-    """Test permission hierarchy and combinations."""
-
-    def test_multiple_permissions_cumulative(
-        self, jwt_token_generator, auth_client, sample_image
-    ):
-        """Test that user with multiple permissions can access all endpoints."""
-        # Create token with both read and write permissions
-        multi_token = jwt_token_generator.generate_token(
-            sub="multi_user",
-            permissions=[
-                "media_store_read",
-                "media_store_write",
-                "ai_inference_support",
-            ],
-            is_admin=False,
-        )
-
-        # Should allow entity write
-        with open(sample_image, "rb") as f:
-            entity_response = auth_client.post(
-                "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
-                data={"is_collection": "false", "label": "Multi Entity"},
-                headers={"Authorization": f"Bearer {multi_token}"},
-            )
-
-        assert entity_response.status_code == 201
-
-        # Should allow job creation
-        response, _ = create_job_via_plugin(auth_client, multi_token)
-        assert response.status_code == 200
-
-        # Should NOT allow admin operations (no admin status)
-        admin_response = auth_client.get(
-            "/admin/compute/jobs/storage/size",
-            headers={"Authorization": f"Bearer {multi_token}"},
-        )
-
-        assert admin_response.status_code == 403
-
-    def test_admin_overrides_all_restrictions(
-        self, jwt_token_generator, auth_client, sample_image
-    ):
-        """Test that admin flag overrides all permission requirements."""
-        # Create token with minimal permissions but admin=True
-        admin_token = jwt_token_generator.generate_token(
-            sub="minimal_admin",
-            permissions=["media_store_read"],  # Only read permission
-            is_admin=True,
-        )
-
-        # Should allow job creation (admin override)
-        response, _ = create_job_via_plugin(auth_client, admin_token)
-        assert response.status_code == 200
-
-        # Should allow entity write (admin override)
-        with open(sample_image, "rb") as f:
-            entity_response = auth_client.post(
-                "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
-                data={"is_collection": "false", "label": "Admin Entity"},
-                headers={"Authorization": f"Bearer {admin_token}"},
-            )
-
-        assert entity_response.status_code == 201
-
-        # Should allow admin operations
-        admin_response = auth_client.get(
-            "/admin/compute/jobs/storage/size",
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
-
-        assert admin_response.status_code == 200

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import tempfile
 import contextlib
 import io
@@ -15,37 +16,33 @@ from sqlalchemy.orm import Session
 from .schemas import BodyCreateEntity, BodyPatchEntity, BodyUpdateEntity, Item
 from .models import Entity
 from cl_server_shared import FileStorageService
-from cl_server_shared.config import MEDIA_STORAGE_DIR, COMPUTE_STORAGE_DIR
-from .mqtt_client import get_mqtt_client
+from cl_server_shared import Config
 
 
 class DuplicateFileError(Exception):
     """Raised when attempting to upload a file with duplicate MD5."""
+
     pass
 
 
 class EntityService:
     """Service layer for entity operations."""
 
-    def __init__(self, db: Session, base_dir: Optional[str] = None):
-        """
-        Initialize the entity service.
+    def __init__(self, db: Session):
+        """Initialize the entity service.
 
         Args:
             db: SQLAlchemy database session
-            base_dir: Optional base directory for media file storage (for testing)
         """
         self.db = db
         # Use MEDIA_STORAGE_DIR for entity files (organized by date)
-        if base_dir is None:
-            base_dir = MEDIA_STORAGE_DIR
-        self.file_storage = FileStorageService(base_dir=base_dir)
-       
+        self.file_storage = FileStorageService(base_dir=Config.MEDIA_STORAGE_DIR)
+
     @staticmethod
     def _now_timestamp() -> int:
         """Return current UTC timestamp in milliseconds."""
         return int(datetime.now(timezone.utc).timestamp() * 1000)
-    
+
     def _extract_metadata(self, file_bytes: bytes, filename: str = "file") -> Dict:
         """
         Extract metadata from file using CLMetaData.
@@ -60,7 +57,9 @@ class EntityService:
         import mimetypes
 
         # Create temporary file for CLMetaData processing
-        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp_file:
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=Path(filename).suffix
+        ) as tmp_file:
             tmp_file.write(file_bytes)
             tmp_path = tmp_file.name
 
@@ -73,8 +72,9 @@ class EntityService:
             except Exception as e:
                 # If CLMetaData fails (e.g., invalid image), return minimal metadata with file size
                 import hashlib
+
                 print(f"Warning: CLMetaData extraction failed for {filename}: {e}")
-                ext = Path(filename).suffix.lstrip('.').lower()
+                ext = Path(filename).suffix.lstrip(".").lower()
                 mime_type, _ = mimetypes.guess_type(filename)
 
                 # Compute MD5 hash for duplicate detection
@@ -95,13 +95,16 @@ class EntityService:
             # Ensure MD5 is computed if not present
             if "md5" not in metadata or not metadata["md5"]:
                 import hashlib
+
                 metadata["md5"] = hashlib.md5(file_bytes).hexdigest()
 
             # Convert CreateDate to timestamp (ms) if present
             if "CreateDate" in metadata and metadata["CreateDate"]:
                 try:
                     # Attempt to parse EXIF date format: YYYY:MM:DD HH:MM:SS
-                    dt = datetime.strptime(str(metadata["CreateDate"]), "%Y:%m:%d %H:%M:%S")
+                    dt = datetime.strptime(
+                        str(metadata["CreateDate"]), "%Y:%m:%d %H:%M:%S"
+                    )
                     metadata["CreateDate"] = int(dt.timestamp() * 1000)
                 except ValueError:
                     # Fallback or ignore if format is different
@@ -111,33 +114,35 @@ class EntityService:
         finally:
             # Clean up temporary file
             Path(tmp_path).unlink(missing_ok=True)
-    
-    def _check_duplicate_md5(self, md5: str, exclude_entity_id: Optional[int] = None) -> Optional[Entity]:
+
+    def _check_duplicate_md5(
+        self, md5: str, exclude_entity_id: Optional[int] = None
+    ) -> Optional[Entity]:
         """
         Check if an entity with the given MD5 already exists.
-        
+
         Args:
             md5: MD5 hash to check
             exclude_entity_id: Optional entity ID to exclude from check (for updates)
-            
+
         Returns:
             Entity if duplicate found, None otherwise
         """
         query = self.db.query(Entity).filter(Entity.md5 == md5)
-        
+
         if exclude_entity_id is not None:
             query = query.filter(Entity.id != exclude_entity_id)
-        
+
         return query.first()
-    
+
     @staticmethod
     def _entity_to_item(entity: Entity) -> Item:
         """
         Convert SQLAlchemy Entity model to Pydantic Item schema.
-        
+
         Args:
             entity: SQLAlchemy Entity instance
-            
+
         Returns:
             Pydantic Item instance
         """
@@ -163,42 +168,42 @@ class EntityService:
             file_path=entity.file_path,
             is_deleted=entity.is_deleted,
         )
-    
+
     def get_entities(
         self,
         page: int = 1,
         page_size: int = 20,
         version: Optional[int] = None,
-        filter_param: Optional[str] = None, 
-        search_query: Optional[str] = None
+        filter_param: Optional[str] = None,
+        search_query: Optional[str] = None,
     ) -> Tuple[List[Item], int]:
         """
         Retrieve all entities with optional pagination and versioning.
-        
+
         Args:
             page: Page number (1-indexed)
             page_size: Number of items per page
             version: Optional version number to retrieve for all entities
             filter_param: Optional filter string (not implemented yet)
             search_query: Optional search query (not implemented yet)
-            
+
         Returns:
             Tuple of (items, total_count)
         """
         query = self.db.query(Entity)
-        
+
         # TODO: Implement filtering and search logic
         # For now, return all entities
-        
+
         # Get total count before pagination
         total_count = query.count()
-        
+
         # Apply pagination
         offset = (page - 1) * page_size
         query = query.order_by(Entity.id.asc()).offset(offset).limit(page_size)
-        
+
         entities = query.all()
-        
+
         # If version is specified, get that version of each entity
         if version is not None:
             items = []
@@ -208,36 +213,38 @@ class EntityService:
                     items.append(versioned_item)
         else:
             items = [self._entity_to_item(entity) for entity in entities]
-        
+
         return items, total_count
-    
-    def get_entity_by_id(self, entity_id: int, version: Optional[int] = None) -> Optional[Item]:
+
+    def get_entity_by_id(
+        self, entity_id: int, version: Optional[int] = None
+    ) -> Optional[Item]:
         """
         Retrieve a single entity by ID, optionally at a specific version.
-        
+
         Args:
             entity_id: Entity ID
             version: Optional version number to retrieve (None = latest)
-            
+
         Returns:
             Item instance or None if not found
         """
         if version is not None:
             return self.get_entity_version(entity_id, version)
-        
+
         entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
         if entity:
             return self._entity_to_item(entity)
         return None
-    
+
     def get_entity_version(self, entity_id: int, version: int) -> Optional[Item]:
         """
         Retrieve a specific version of an entity.
-        
+
         Args:
             entity_id: Entity ID
             version: Version number to retrieve (1-indexed)
-            
+
         Returns:
             Item instance for the specified version or None if not found
         """
@@ -245,66 +252,72 @@ class EntityService:
         entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
         if not entity:
             return None
-        
+
         # Get the specific version
         # SQLAlchemy-Continuum creates a versions relationship on the model
-        if hasattr(entity, 'versions'):
+        if hasattr(entity, "versions"):
             versions_list = entity.versions.all()
             # Versions are 1-indexed for the API
             if 1 <= version <= len(versions_list):
                 version_entity = versions_list[version - 1]
                 return self._entity_to_item(version_entity)
-        
+
         return None
-    
+
     def get_entity_versions(self, entity_id: int) -> List[Dict]:
         """
         Get all versions of an entity with metadata.
-        
+
         Args:
             entity_id: Entity ID
-            
+
         Returns:
             List of version metadata dictionaries
         """
         entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
         if not entity:
             return []
-        
-        if not hasattr(entity, 'versions'):
+
+        if not hasattr(entity, "versions"):
             return []
-        
+
         versions_list = entity.versions.all()
         result = []
         for idx, version in enumerate(versions_list, start=1):
             version_info = {
                 "version": idx,
-                "transaction_id": version.transaction_id if hasattr(version, 'transaction_id') else None,
-                "updated_date": version.updated_date if hasattr(version, 'updated_date') else None,
+                "transaction_id": (
+                    version.transaction_id
+                    if hasattr(version, "transaction_id")
+                    else None
+                ),
+                "updated_date": (
+                    version.updated_date if hasattr(version, "updated_date") else None
+                ),
             }
             result.append(version_info)
-        
+
         return result
-    
+
     def create_entity(
-        self, 
-        body: BodyCreateEntity, 
+        self,
+        body: BodyCreateEntity,
         image: Optional[bytes] = None,
         filename: str = "file",
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
     ) -> Item:
         """
         Create a new entity.
-        
+
         Args:
             body: Entity creation data
             image: Optional image file bytes
             filename: Original filename
             user_id: Optional user identifier from JWT (None in demo mode)
-            
+
         Returns:
             Created Item instance
-            
+
         Raises:
             DuplicateFileError: If file with same MD5 already exists
         """
@@ -315,11 +328,11 @@ class EntityService:
         # Validation: image is required if is_collection is False
         if not body.is_collection and not image:
             raise ValueError("Image is required when is_collection is False")
-        
+
         # Validation: image should not be present if is_collection is True
         if body.is_collection and image:
             raise ValueError("Image should not be provided when is_collection is True")
-        
+
         # Extract metadata and save file if provided
         if image:
             # Extract metadata using CLMetaData
@@ -333,8 +346,11 @@ class EntityService:
                     return self._entity_to_item(duplicate)
 
             # Save file to storage
+            logging.error(f"{filename} is sent for saving with metadata {file_meta}")
             file_path = self.file_storage.save_file(image, file_meta, filename)
-        
+            logging.error(f"filepath received: {file_path}")
+            logging.error(self.file_storage.base_dir)
+
         entity = Entity(
             is_collection=body.is_collection,
             label=body.label,
@@ -356,7 +372,7 @@ class EntityService:
             added_by=user_id,
             updated_by=user_id,
         )
-        
+
         try:
             self.db.add(entity)
             self.db.commit()
@@ -367,30 +383,30 @@ class EntityService:
             if file_path:
                 self.file_storage.delete_file(file_path)
             raise DuplicateFileError(f"Duplicate MD5 detected: {file_meta.get('md5')}")
-        
+
         return self._entity_to_item(entity)
-    
+
     def update_entity(
-        self, 
-        entity_id: int, 
+        self,
+        entity_id: int,
         body: BodyUpdateEntity,
         image: bytes,
         filename: str = "file",
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
     ) -> Optional[Item]:
         """
         Fully update an existing entity (PUT) - requires file upload.
-        
+
         Args:
             entity_id: Entity ID
             body: Entity update data
             image: Image file bytes (mandatory for PUT)
             filename: Original filename
             user_id: Optional user identifier from JWT (None in demo mode)
-            
+
         Returns:
             Updated Item instance or None if not found
-            
+
         Raises:
             DuplicateFileError: If file with same MD5 already exists
         """
@@ -405,21 +421,23 @@ class EntityService:
                 f"Cannot change is_collection from {entity.is_collection} to {body.is_collection}. "
                 "is_collection is immutable after entity creation."
             )
-        
+
         # Validation: image should not be present if is_collection is True
         if entity.is_collection and image:
             raise ValueError("Image should not be provided when is_collection is True")
-        
+
         # Note: image is optional if is_collection is False (for PUT operations)
         # This allows updating metadata without changing the file
-        
+
         if image:
             # Extract metadata from new file
             file_meta = self._extract_metadata(image, filename)
 
             # Check for duplicate MD5 (excluding current entity)
             if file_meta.get("md5"):
-                duplicate = self._check_duplicate_md5(file_meta["md5"], exclude_entity_id=entity_id)
+                duplicate = self._check_duplicate_md5(
+                    file_meta["md5"], exclude_entity_id=entity_id
+                )
                 if duplicate:
                     # Return the existing item instead of raising an error
                     return self._entity_to_item(duplicate)
@@ -431,7 +449,7 @@ class EntityService:
 
             # Save new file
             file_path = self.file_storage.save_file(image, file_meta, filename)
-                   
+
             # Update file metadata
             entity.file_size = file_meta.get("FileSize")
             entity.height = file_meta.get("ImageHeight")
@@ -442,17 +460,16 @@ class EntityService:
             entity.extension = file_meta.get("extension")
             entity.md5 = file_meta.get("md5")
             entity.file_path = file_path
-                
+
         # Update entity with new metadata and client-provided fields
         now = self._now_timestamp()
-        
+
         entity.label = body.label
         entity.description = body.description
         entity.parent_id = body.parent_id
         entity.updated_date = now
         entity.updated_by = user_id
 
-        
         try:
             self.db.commit()
             self.db.refresh(entity)
@@ -462,60 +479,62 @@ class EntityService:
             if file_path:
                 self.file_storage.delete_file(file_path)
             raise DuplicateFileError(f"Duplicate MD5 detected: {file_meta.get('md5')}")
-        
+
         return self._entity_to_item(entity)
-    
-    def patch_entity(self, entity_id: int, body: BodyPatchEntity, user_id: Optional[str] = None) -> Optional[Item]:
+
+    def patch_entity(
+        self, entity_id: int, body: BodyPatchEntity, user_id: Optional[str] = None
+    ) -> Optional[Item]:
         """
         Partially update an existing entity (PATCH).
-        
+
         Args:
             entity_id: Entity ID
             body: Entity patch data (only provided fields will be updated)
             user_id: Optional user identifier from JWT (None in demo mode)
-            
+
         Returns:
             Updated Item instance or None if not found
         """
         entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
         if not entity:
             return None
-        
+
         # Update only provided fields
         for field, value in body.model_dump(exclude_unset=True).items():
             setattr(entity, field, value)
-        
+
         entity.updated_date = self._now_timestamp()
         entity.updated_by = user_id
-        
+
         self.db.commit()
         self.db.refresh(entity)
-        
+
         return self._entity_to_item(entity)
-    
+
     def delete_entity(self, entity_id: int) -> Optional[Item]:
         """
         Soft delete an entity (set is_deleted=True).
-        
+
         Args:
             entity_id: Entity ID
-            
+
         Returns:
             Deleted Item instance or None if not found
         """
         entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
         if not entity:
             return None
-        
+
         # Hard delete: remove file and database record
         if entity.file_path:
             self.file_storage.delete_file(entity.file_path)
-            
+
         self.db.delete(entity)
         self.db.commit()
-        
+
         return self._entity_to_item(entity)
-    
+
     def delete_all_entities(self) -> None:
         """Delete all entities from the database."""
         self.db.query(Entity).delete()
@@ -525,109 +544,19 @@ class EntityService:
 class JobService:
     """Service layer for job management (from compute service)."""
 
-    def __init__(self, db: Session, base_dir: Optional[str] = None):
+    def __init__(self, db: Session):
         """Initialize the job service.
 
         Args:
             db: SQLAlchemy database session
-            base_dir: Optional base directory for compute job storage (for testing)
         """
         self.db = db
-        # Use COMPUTE_STORAGE_DIR for job files (organized per job)
-        if base_dir is None:
-            base_dir = COMPUTE_STORAGE_DIR
-        self.file_storage = FileStorageService(base_dir=base_dir)
+        # Use the module-level repository_adapter (allows test patching)
+        from . import repository_adapter
 
-    async def create_job(
-        self,
-        task_type: str,
-        params: Dict,
-        priority: int = 5,
-        user: Optional[Dict] = None,
-    ):
-        """Create a new compute job.
-
-        Args:
-            task_type: Type of task to execute
-            params: Job parameters (input_paths, output_paths, etc.)
-            priority: Priority level (0-10)
-            user: Current user information
-
-        Returns:
-            JobResponse with job details
-        """
-        import json
-        import time
-        import uuid
-        from . import schemas
-        from .models import Job, QueueEntry
-        from cl_server_shared import ComputeJobParams, ImageResizeParams, ImageConversionParams
-
-        # Validate priority
-        if not (0 <= priority <= 10):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Priority must be between 0 and 10"
-            )
-
-        # Create job ID
-        job_id = str(uuid.uuid4())
-        current_time = int(time.time() * 1000)
-
-        # Create job directory
-        self.file_storage.create_job_directory(job_id)
-
-        # Validate and serialize params
-        try:
-            if task_type == "image_resize":
-                job_params = ImageResizeParams(**params)
-            elif task_type == "image_conversion":
-                job_params = ImageConversionParams(**params)
-            else:
-                job_params = ComputeJobParams(**params)
-            
-            params_json = job_params.model_dump_json()
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid parameters: {str(e)}"
-            )
-
-        # Create Job record
-        job = Job(
-            job_id=job_id,
-            task_type=task_type,
-            params=params_json,
-            status="queued",
-            progress=0,
-            created_at=current_time,
-            created_by=user.get("sub") if user else None,
-        )
-
-        self.db.add(job)
-        self.db.commit()
-
-        # Create QueueEntry for priority-based processing
-        queue_entry = QueueEntry(
-            job_id=job_id,
-            priority=priority,
-            enqueued_at=current_time,
-        )
-
-        self.db.add(queue_entry)
-        self.db.commit()
-
-        return schemas.JobResponse(
-            job_id=job_id,
-            task_type=task_type,
-            status="queued",
-            priority=priority,
-            progress=0,
-            params=json.loads(params_json),
-            task_output=None,
-            created_at=current_time,
-            updated_at=current_time,
-        )
+        self.repository = repository_adapter
+        # Use COMPUTE_STORAGE_DIR for job files (organized per job) - separate from EntityService
+        self.file_storage = FileStorageService(base_dir=Config.COMPUTE_STORAGE_DIR)
 
     def get_job(self, job_id: str):
         """Get job status and results.
@@ -641,35 +570,33 @@ class JobService:
         Raises:
             ValueError: If job not found
         """
-        import json
         from . import schemas
         from .models import Job
 
-        job = self.db.query(Job).filter_by(job_id=job_id).first()
-        if not job:
+        # Use repository to get job (handles parsing automatically)
+        library_job = self.repository.get_job(job_id)
+        if not library_job:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job {job_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Job {job_id} not found"
             )
 
-        # Parse JSON fields
-        params = json.loads(job.params) if job.params else {}
-        task_output = json.loads(job.task_output) if job.task_output else None
+        # Get additional metadata from database
+        db_job = self.db.query(Job).filter_by(job_id=job_id).first()
 
         return schemas.JobResponse(
-            job_id=job.job_id,
-            task_type=job.task_type,
-            status=job.status,
-            progress=job.progress,
-            params=params,
-            task_output=task_output,
-            created_at=job.created_at,
-            updated_at=job.created_at,
-            started_at=job.started_at,
-            completed_at=job.completed_at,
-            error_message=job.error_message,
+            job_id=library_job.job_id,
+            task_type=library_job.task_type,
+            status=library_job.status,
+            progress=library_job.progress,
+            params=library_job.params,  # Already parsed by repository
+            task_output=library_job.task_output,  # Already parsed by repository
+            created_at=db_job.created_at if db_job else None,
+            updated_at=db_job.created_at if db_job else None,
+            started_at=db_job.started_at if db_job else None,
+            completed_at=db_job.completed_at if db_job else None,
+            error_message=library_job.error_message,
+            priority=db_job.priority if db_job else None,
         )
-
 
     def delete_job(self, job_id: str) -> None:
         """Delete job and all associated files.
@@ -680,24 +607,18 @@ class JobService:
         Raises:
             HTTPException: If job not found
         """
-        from .models import Job, QueueEntry
-
-        job = self.db.query(Job).filter_by(job_id=job_id).first()
-        if not job:
+        # Check job exists using repository
+        library_job = self.repository.get_job(job_id)
+        if not library_job:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job {job_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Job {job_id} not found"
             )
 
         # Delete job directory
         self.file_storage.cleanup_job(job_id)
 
-        # Delete queue entry if exists
-        self.db.query(QueueEntry).filter_by(job_id=job_id).delete()
-
-        # Delete job record
-        self.db.delete(job)
-        self.db.commit()
+        # Use repository to delete job (handles QueueEntry cascade)
+        self.repository.delete_job(job_id)
 
     def get_storage_size(self):
         """Get total storage usage for all jobs.
@@ -720,20 +641,18 @@ class JobService:
             CleanupResult with cleanup details
         """
         from . import schemas
-        from .models import Job, QueueEntry
+        from .models import Job
 
         cleanup_info = self.file_storage.cleanup_old_jobs(days)
 
-        # Remove cleaned up jobs from database
+        # Remove cleaned up jobs from database using repository
         current_time = int(datetime.now(timezone.utc).timestamp() * 1000)
         cutoff_time = current_time - (days * 24 * 60 * 60 * 1000)
 
         old_jobs = self.db.query(Job).filter(Job.created_at < cutoff_time).all()
         for job in old_jobs:
-            self.db.query(QueueEntry).filter_by(job_id=job.job_id).delete()
-            self.db.delete(job)
-
-        self.db.commit()
+            # Use repository to delete (handles QueueEntry cascade)
+            self.repository.delete_job(job.job_id)
 
         return schemas.CleanupResult(**cleanup_info)
 
@@ -750,17 +669,20 @@ class CapabilityService:
         self.db = db
 
     def get_available_capabilities(self) -> dict:
-        """Get aggregated available worker capabilities from MQTT.
+        """Get aggregated available worker capabilities.
 
         Returns:
             Dict mapping capability names to available idle count
             Example: {"image_resize": 2, "image_conversion": 1}
         """
         try:
-            mqtt_client = get_mqtt_client()
-            return mqtt_client.get_cached_capabilities()
+            from .capability_manager import get_capability_manager
+
+            manager = get_capability_manager()
+            return manager.get_cached_capabilities()
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Error retrieving worker capabilities: {e}")
             return {}
@@ -772,10 +694,13 @@ class CapabilityService:
             Number of unique workers in the capability cache
         """
         try:
-            mqtt_client = get_mqtt_client()
-            return len(mqtt_client.capabilities_cache)
+            from .capability_manager import get_capability_manager
+
+            manager = get_capability_manager()
+            return len(manager.capabilities_cache)
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Error retrieving worker count: {e}")
             return 0

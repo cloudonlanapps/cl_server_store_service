@@ -58,19 +58,19 @@ class TestCapabilityEndpointWithWorkers:
             finally:
                 db.close()
 
-        # Mock MQTT client with worker data
-        mock_mqtt_client = MagicMock()
-        mock_mqtt_client.get_cached_capabilities.return_value = {
+        # Mock capability manager with worker data
+        mock_manager = MagicMock()
+        mock_manager.get_cached_capabilities.return_value = {
             "image_resize": 2,
             "image_conversion": 1,
         }
-        mock_mqtt_client.capabilities_cache = {
+        mock_manager.capabilities_cache = {
             "worker-1": {"capabilities": ["image_resize"], "idle_count": 1},
             "worker-2": {"capabilities": ["image_resize", "image_conversion"], "idle_count": 1},
         }
 
         # Patch the singleton instance directly to ensure all calls use the mock
-        with patch("src.mqtt_client._mqtt_client_instance", mock_mqtt_client):
+        with patch("src.capability_manager._capability_manager_instance", mock_manager):
             from src import app
             from src.database import get_db
             from src.auth import get_current_user
@@ -83,18 +83,6 @@ class TestCapabilityEndpointWithWorkers:
                 "is_admin": True,
             }
 
-            original_entity_init = EntityService.__init__
-            original_job_init = JobService.__init__
-
-            def patched_entity_init(self, db, base_dir=None):
-                original_entity_init(self, db, base_dir=str(clean_media_dir))
-
-            def patched_job_init(self, db, base_dir=None):
-                original_job_init(self, db, base_dir=str(clean_media_dir))
-
-            EntityService.__init__ = patched_entity_init
-            JobService.__init__ = patched_job_init
-
             with TestClient(app) as test_client:
                 response = test_client.get("/compute/capabilities")
 
@@ -103,9 +91,6 @@ class TestCapabilityEndpointWithWorkers:
                 assert data["num_workers"] == 2  # 2 unique workers
                 assert data["capabilities"]["image_resize"] == 2
                 assert data["capabilities"]["image_conversion"] == 1
-
-            EntityService.__init__ = original_entity_init
-            JobService.__init__ = original_job_init
             app.dependency_overrides.clear()
 
     def test_get_capabilities_mqtt_error_returns_empty(self, test_engine, clean_media_dir):
@@ -125,13 +110,13 @@ class TestCapabilityEndpointWithWorkers:
             finally:
                 db.close()
 
-        # Mock MQTT client that raises an error
-        mock_mqtt_client = MagicMock()
-        mock_mqtt_client.get_cached_capabilities.side_effect = Exception("MQTT error")
-        mock_mqtt_client.capabilities_cache = {}
+        # Mock capability manager that raises an error
+        mock_manager = MagicMock()
+        mock_manager.get_cached_capabilities.side_effect = Exception("Capability manager error")
+        mock_manager.capabilities_cache = {}
 
         # Patch the singleton instance directly
-        with patch("src.mqtt_client._mqtt_client_instance", mock_mqtt_client):
+        with patch("src.capability_manager._capability_manager_instance", mock_manager):
             from src import app
             from src.database import get_db
             from src.auth import get_current_user
@@ -144,18 +129,6 @@ class TestCapabilityEndpointWithWorkers:
                 "is_admin": True,
             }
 
-            original_entity_init = EntityService.__init__
-            original_job_init = JobService.__init__
-
-            def patched_entity_init(self, db, base_dir=None):
-                original_entity_init(self, db, base_dir=str(clean_media_dir))
-
-            def patched_job_init(self, db, base_dir=None):
-                original_job_init(self, db, base_dir=str(clean_media_dir))
-
-            EntityService.__init__ = patched_entity_init
-            JobService.__init__ = patched_job_init
-
             with TestClient(app) as test_client:
                 response = test_client.get("/compute/capabilities")
 
@@ -164,9 +137,6 @@ class TestCapabilityEndpointWithWorkers:
                 # Should return empty on error
                 assert data["num_workers"] == 0
                 assert data["capabilities"] == {}
-
-            EntityService.__init__ = original_entity_init
-            JobService.__init__ = original_job_init
             app.dependency_overrides.clear()
 
 
@@ -184,13 +154,13 @@ class TestCapabilityService:
         """Test CapabilityService.get_available_capabilities()."""
         from src.service import CapabilityService
 
-        mock_mqtt_client = MagicMock()
-        mock_mqtt_client.get_cached_capabilities.return_value = {
+        mock_manager = MagicMock()
+        mock_manager.get_cached_capabilities.return_value = {
             "image_resize": 2,
             "image_conversion": 1,
         }
 
-        with patch("src.service.get_mqtt_client", return_value=mock_mqtt_client):
+        with patch("src.capability_manager.get_capability_manager", return_value=mock_manager):
             service = CapabilityService(test_db_session)
             capabilities = service.get_available_capabilities()
 
@@ -199,14 +169,14 @@ class TestCapabilityService:
                 "image_conversion": 1,
             }
 
-    def test_capability_service_handles_mqtt_error(self, test_db_session):
-        """Test CapabilityService gracefully handles MQTT errors."""
+    def test_capability_service_handles_capability_manager_error(self, test_db_session):
+        """Test CapabilityService gracefully handles capability manager errors."""
         from src.service import CapabilityService
 
-        mock_mqtt = MagicMock()
-        mock_mqtt.get_cached_capabilities.side_effect = Exception("Connection error")
+        mock_manager = MagicMock()
+        mock_manager.get_cached_capabilities.side_effect = Exception("Connection error")
 
-        with patch("src.service.get_mqtt_client", return_value=mock_mqtt):
+        with patch("src.capability_manager.get_capability_manager", return_value=mock_manager):
             service = CapabilityService(test_db_session)
             capabilities = service.get_available_capabilities()
 
@@ -214,15 +184,15 @@ class TestCapabilityService:
             assert capabilities == {}
 
 
-class TestMQTTClientIntegration:
-    """Tests for MQTT client message caching and aggregation."""
+class TestCapabilityManagerIntegration:
+    """Tests for CapabilityManager message caching and aggregation."""
 
-    def test_mqtt_client_caches_capabilities(self):
-        """Test that MQTT client caches capability messages."""
-        from src.mqtt_client import MQTTClient
+    def test_capability_manager_caches_capabilities(self):
+        """Test that CapabilityManager caches capability messages."""
+        from src.capability_manager import CapabilityManager
 
-        # Note: This test uses mocking to avoid needing live MQTT broker
-        client = MQTTClient("localhost", 1883)
+        # Note: This test uses mocking to avoid needing live broker
+        manager = CapabilityManager()
 
         # Simulate receiving a capability message
         test_message = {
@@ -232,85 +202,85 @@ class TestMQTTClientIntegration:
             "timestamp": 1000,
         }
 
-        # Manually inject into cache (simulating MQTT message receipt)
-        client.capabilities_cache["worker-1"] = test_message
+        # Manually inject into cache (simulating message receipt)
+        manager.capabilities_cache["worker-1"] = test_message
 
         # Get cached capabilities
-        cached = client.get_cached_capabilities()
+        cached = manager.get_cached_capabilities()
 
         assert "image_resize" in cached
         assert "image_conversion" in cached
         assert cached["image_resize"] == 2
         assert cached["image_conversion"] == 2
 
-    def test_mqtt_client_aggregates_multiple_workers(self):
+    def test_capability_manager_aggregates_multiple_workers(self):
         """Test aggregation across multiple workers."""
-        from src.mqtt_client import MQTTClient
+        from src.capability_manager import CapabilityManager
 
-        client = MQTTClient("localhost", 1883)
+        manager = CapabilityManager()
 
         # Simulate multiple workers
-        client.capabilities_cache["worker-1"] = {
+        manager.capabilities_cache["worker-1"] = {
             "id": "worker-1",
             "capabilities": ["image_resize"],
             "idle_count": 2,
         }
-        client.capabilities_cache["worker-2"] = {
+        manager.capabilities_cache["worker-2"] = {
             "id": "worker-2",
             "capabilities": ["image_resize", "image_conversion"],
             "idle_count": 1,
         }
 
-        cached = client.get_cached_capabilities()
+        cached = manager.get_cached_capabilities()
 
         # image_resize: 2 (worker-1) + 1 (worker-2) = 3
         # image_conversion: 1 (worker-2)
         assert cached["image_resize"] == 3
         assert cached["image_conversion"] == 1
 
-    def test_mqtt_client_handles_lwt_cleanup(self):
+    def test_capability_manager_handles_lwt_cleanup(self):
         """Test LWT message removes worker from cache."""
-        from src.mqtt_client import MQTTClient
+        from src.capability_manager import CapabilityManager
 
-        client = MQTTClient("localhost", 1883)
+        manager = CapabilityManager()
 
         # Add worker
-        client.capabilities_cache["worker-1"] = {
+        manager.capabilities_cache["worker-1"] = {
             "id": "worker-1",
             "capabilities": ["image_resize"],
             "idle_count": 1,
         }
 
-        assert "worker-1" in client.capabilities_cache
+        assert "worker-1" in manager.capabilities_cache
 
         # Simulate LWT message (empty payload)
         # The on_message handler should remove it
-        client.capabilities_cache.pop("worker-1", None)
+        manager.capabilities_cache.pop("worker-1", None)
 
         # Verify removed
-        assert "worker-1" not in client.capabilities_cache
+        assert "worker-1" not in manager.capabilities_cache
 
-    def test_mqtt_client_get_worker_count(self):
+    def test_capability_manager_get_worker_count(self):
         """Test getting total worker count by capability."""
-        from src.mqtt_client import MQTTClient
+        from src.capability_manager import CapabilityManager
 
-        client = MQTTClient("localhost", 1883)
+        manager = CapabilityManager()
 
         # Add workers
-        client.capabilities_cache["worker-1"] = {
+        manager.capabilities_cache["worker-1"] = {
             "capabilities": ["image_resize"],
             "idle_count": 1,
         }
-        client.capabilities_cache["worker-2"] = {
+        manager.capabilities_cache["worker-2"] = {
             "capabilities": ["image_resize"],
             "idle_count": 0,
         }
-        client.capabilities_cache["worker-3"] = {
+        manager.capabilities_cache["worker-3"] = {
             "capabilities": ["image_conversion"],
             "idle_count": 1,
         }
 
-        counts = client.get_worker_count_by_capability()
+        counts = manager.get_worker_count_by_capability()
 
         assert counts["image_resize"] == 2  # 2 workers
         assert counts["image_conversion"] == 1  # 1 worker

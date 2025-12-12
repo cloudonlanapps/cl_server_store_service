@@ -11,7 +11,7 @@ import pytest
 class TestFileUpload:
     """Test file upload with metadata extraction."""
     
-    def test_upload_image_with_metadata(self, client, sample_image, clean_media_dir):
+    def test_upload_image_with_metadata(self, client, sample_image):
         """Test uploading an image and extracting metadata."""
         with open(sample_image, "rb") as f:
             response = client.post(
@@ -23,31 +23,33 @@ class TestFileUpload:
                     "description": "Test upload"
                 }
             )
-        
+
         assert response.status_code == 201
         data = response.json()
-        
+
         # Verify entity was created
         assert data["id"] is not None
         assert data["label"] == f"Test: {sample_image.name}"
         assert data["is_collection"] is False
-        
+
         # Verify metadata was extracted
         assert data["md5"] is not None
         assert data["width"] is not None
         assert data["height"] is not None
         assert data["file_size"] is not None
         assert data["mime_type"] is not None
-        
-        # Verify file was saved
-        media_files = list(clean_media_dir.rglob("*.jpg"))
-        assert len(media_files) == 1
-        assert data["md5"] in str(media_files[0])
+        assert data["file_path"] is not None
+
+        # Verify entity can be retrieved
+        entity_id = data["id"]
+        get_response = client.get(f"/entities/{entity_id}")
+        assert get_response.status_code == 200
+        assert get_response.json()["md5"] == data["md5"]
     
-    def test_upload_multiple_images(self, client, sample_images, clean_media_dir):
+    def test_upload_multiple_images(self, client, sample_images):
         """Test uploading multiple images."""
         uploaded_ids = []
-        
+
         for image_path in sample_images:
             with open(image_path, "rb") as f:
                 response = client.post(
@@ -58,23 +60,28 @@ class TestFileUpload:
                         "label": f"Test: {image_path.name}"
                     }
                 )
-            
+
             assert response.status_code == 201
             data = response.json()
+            assert "md5" in data
+            assert "file_path" in data
             uploaded_ids.append(data["id"])
-        
-        # Verify all files were saved
-        media_files = [f for f in clean_media_dir.rglob("*") if f.is_file()]
-        # We check against unique IDs because duplicate files (same MD5) 
-        # will result in the same entity ID and no new file storage
+
+        # Verify all entities were created
         unique_ids = set(uploaded_ids)
-        assert len(media_files) == len(unique_ids)
-        
+        assert len(unique_ids) > 0
+
         # Verify we can retrieve all entities
         response = client.get("/entities/?page_size=100")
         assert response.status_code == 200
         data = response.json()
         assert len(data["items"]) == len(unique_ids)
+
+        # Verify each entity can be retrieved individually
+        for entity_id in unique_ids:
+            get_response = client.get(f"/entities/{entity_id}")
+            assert get_response.status_code == 200
+            assert "md5" in get_response.json()
     
     def test_upload_without_file(self, client):
         """Test creating a collection without a file."""

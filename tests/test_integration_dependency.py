@@ -52,8 +52,9 @@ def integration_app():
         'src.models',
         'src.routes',
         'src.service',
-        'src.mqtt_client',
+        'src.capability_manager',
         'src.versioning',
+        'cl_server_shared.config',  # CRITICAL: Clear shared config to reload AUTH_DISABLED
     ]
     for module_name in modules_to_remove:
         if module_name in sys.modules:
@@ -65,7 +66,7 @@ def integration_app():
     mock_mqtt_client.capabilities_cache = {}
     mock_mqtt_client.wait_for_capabilities.return_value = True
 
-    with patch("src.mqtt_client._mqtt_client_instance", mock_mqtt_client):
+    with patch("src.capability_manager._capability_manager_instance", mock_mqtt_client):
         # Import app AFTER setting environment variables and clearing cache
         from src import app
         from src.database import engine

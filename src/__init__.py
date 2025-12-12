@@ -9,14 +9,14 @@ from sqlalchemy.orm import configure_mappers
 
 # CRITICAL: Import versioning BEFORE models
 from . import versioning  # noqa: F401
-from .mqtt_client import close_mqtt_client, get_mqtt_client
+from .capability_manager import close_capability_manager, get_capability_manager
 from .routes import router
 
 # Import for cl_ml_tools integration
 from cl_ml_tools import create_master_router
-from cl_server_shared.adapters import SQLAlchemyJobRepository, FileStorageAdapter
+from cl_server_shared.shared_db import SQLAlchemyJobRepository
 from cl_server_shared.file_storage import FileStorageService
-from cl_server_shared.config import MEDIA_STORAGE_DIR
+from cl_server_shared.config import Config
 from .database import SessionLocal
 from .auth import require_permission
 
@@ -30,27 +30,27 @@ configure_mappers()
 async def lifespan(app: FastAPI):
     """Manage app lifecycle - startup and shutdown hooks."""
     # Startup
-    logger.info("Initializing MQTT client for worker capability discovery")
+    logger.info("Initializing capability manager for worker discovery")
     try:
-        mqtt_client = get_mqtt_client()
-        if mqtt_client.wait_for_capabilities(timeout=5):
-            logger.info("MQTT client ready and subscribed to worker capabilities")
+        manager = get_capability_manager()
+        if manager.wait_for_capabilities(timeout=5):
+            logger.info("Capability manager ready and subscribed to workers")
         else:
             logger.warning(
-                "MQTT client connection timeout - proceeding with empty capabilities"
+                "Capability manager timeout - proceeding with empty capabilities"
             )
     except Exception as e:
-        logger.error(f"Failed to initialize MQTT client: {e}")
+        logger.error(f"Failed to initialize capability manager: {e}")
 
     yield
 
     # Shutdown
-    logger.info("Closing MQTT client")
+    logger.info("Closing capability manager")
     try:
-        close_mqtt_client()
-        logger.info("MQTT client closed")
+        close_capability_manager()
+        logger.info("Capability manager closed")
     except Exception as e:
-        logger.error(f"Error closing MQTT client: {e}")
+        logger.error(f"Error closing capability manager: {e}")
 
 
 app = FastAPI(title="CoLAN server", version="v1", lifespan=lifespan)
@@ -60,15 +60,14 @@ app.include_router(router)
 # Mount cl_ml_tools plugin routes
 # Create adapter instances
 repository_adapter = SQLAlchemyJobRepository(SessionLocal)
-file_storage_service = FileStorageService(base_dir=MEDIA_STORAGE_DIR)
-file_storage_adapter = FileStorageAdapter(file_storage_service)
+file_storage_service = FileStorageService(base_dir=Config.MEDIA_STORAGE_DIR)
 
 # Create and mount plugin router
 # NOTE: We pass require_permission("ai_inference_support") instead of get_current_user
 # This enforces proper authentication and authorization for plugin routes
 plugin_router = create_master_router(
     repository=repository_adapter,
-    file_storage=file_storage_adapter,
+    file_storage=file_storage_service,
     get_current_user=require_permission("ai_inference_support"),
 )
 app.include_router(plugin_router, prefix="/compute", tags=["compute-plugins"])

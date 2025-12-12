@@ -61,7 +61,7 @@ class TestAuthenticationLogic:
         }
 
         # Should not raise exception
-        with patch("src.auth.AUTH_DISABLED", False):
+        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             permission_checker = require_permission("media_store_write")
             result = asyncio.run(permission_checker(user))
             assert result == user
@@ -75,7 +75,7 @@ class TestAuthenticationLogic:
 
         user = {"sub": "admin", "permissions": [], "is_admin": True}
 
-        with patch("src.auth.AUTH_DISABLED", False):
+        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             permission_checker = require_permission("media_store_write")
             result = asyncio.run(permission_checker(user))
             assert result == user
@@ -93,7 +93,7 @@ class TestAuthenticationLogic:
             "is_admin": False,
         }
 
-        with patch("src.auth.AUTH_DISABLED", False):
+        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             with pytest.raises(HTTPException) as exc_info:
                 permission_checker = require_permission("media_store_write")
                 asyncio.run(permission_checker(user))
@@ -102,13 +102,13 @@ class TestAuthenticationLogic:
 
     def test_require_permission_rejects_none_user(self):
         """None user (no auth) should be rejected when auth is not disabled."""
-        from src.auth import require_permission, AUTH_DISABLED
+        from src.auth import require_permission
         import asyncio
 
         from unittest.mock import patch
 
         # Only test if auth is enabled
-        with patch("src.auth.AUTH_DISABLED", False):
+        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             with pytest.raises(HTTPException) as exc_info:
                 permission_checker = require_permission("media_store_write")
                 asyncio.run(permission_checker(None))
@@ -128,7 +128,7 @@ class TestAuthenticationLogic:
             "is_admin": False,
         }
 
-        with patch("src.auth.AUTH_DISABLED", False):
+        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             permission_checker = require_permission("media_store_read")
             result = asyncio.run(permission_checker(user))
             assert result == user
@@ -142,7 +142,7 @@ class TestAuthenticationLogic:
 
         user = {"sub": "admin", "permissions": [], "is_admin": True}
 
-        with patch("src.auth.AUTH_DISABLED", False):
+        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             result = asyncio.run(require_admin(user))
             assert result == user
 
@@ -159,7 +159,7 @@ class TestAuthenticationLogic:
             "is_admin": False,
         }
 
-        with patch("src.auth.AUTH_DISABLED", False):
+        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             with pytest.raises(HTTPException) as exc_info:
                 asyncio.run(require_admin(user))
 
@@ -171,18 +171,18 @@ class TestAuthenticationModes:
 
     def test_auth_disabled_flag_defaults_to_false(self):
         """AUTH_DISABLED should default to false."""
-        from cl_server_shared.config import AUTH_DISABLED
+        from cl_server_shared.config import Config
 
         # In test environment without env var, should be False
         # (This may vary based on test setup)
-        assert isinstance(AUTH_DISABLED, bool)
+        assert isinstance(Config.AUTH_DISABLED, bool)
 
     def test_read_auth_enabled_flag_defaults_to_false(self):
         """READ_AUTH_ENABLED should default to false."""
-        from cl_server_shared.config import READ_AUTH_ENABLED
+        from cl_server_shared.config import Config
 
         # In test environment without env var, should be False
-        assert isinstance(READ_AUTH_ENABLED, bool)
+        assert isinstance(Config.READ_AUTH_ENABLED, bool)
 
     def test_demo_mode_bypasses_permission_check(self):
         """When AUTH_DISABLED=true, permission checks should be bypassed."""
@@ -191,7 +191,7 @@ class TestAuthenticationModes:
 
         from unittest.mock import patch
 
-        with patch("src.auth.AUTH_DISABLED", True):
+        with patch("cl_server_shared.config.Config.AUTH_DISABLED", True):
             # In demo mode, None user should be allowed
             permission_checker = require_permission("media_store_write")
             result = asyncio.run(permission_checker(None))
@@ -204,7 +204,7 @@ class TestAuthenticationModes:
 
         from unittest.mock import patch
 
-        with patch("src.auth.AUTH_DISABLED", True):
+        with patch("cl_server_shared.config.Config.AUTH_DISABLED", True):
             # In demo mode, None user should be allowed
             result = asyncio.run(require_admin(None))
             assert result is None
@@ -232,7 +232,7 @@ class TestJWTValidation:
         )
 
         # Mock the public key path to use test key
-        with patch("src.auth.PUBLIC_KEY_PATH", public_key_path):
+        with patch("cl_server_shared.config.Config.PUBLIC_KEY_PATH", public_key_path):
             headers = {"Authorization": f"Bearer {token}"}
             response = auth_client.get("/entities/", headers=headers)
 
@@ -258,7 +258,7 @@ class TestJWTValidation:
             expired=True,  # Token is expired
         )
 
-        with patch("src.auth.PUBLIC_KEY_PATH", public_key_path):
+        with patch("cl_server_shared.config.Config.PUBLIC_KEY_PATH", public_key_path):
             headers = {"Authorization": f"Bearer {token}"}
             response = auth_client.get("/entities/", headers=headers)
 
@@ -283,7 +283,7 @@ class TestJWTValidation:
             jwt_token_generator.generate_invalid_token_wrong_key(),  # Valid format but wrong signature
         ]
 
-        with patch("src.auth.PUBLIC_KEY_PATH", public_key_path):
+        with patch("cl_server_shared.config.Config.PUBLIC_KEY_PATH", public_key_path):
             for invalid_token in invalid_tokens:
                 headers = {"Authorization": f"Bearer {invalid_token}"}
                 response = auth_client.get("/entities/", headers=headers)

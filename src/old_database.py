@@ -1,14 +1,8 @@
-"""Database configuration with WAL mode support for multi-process access."""
-
-from __future__ import annotations
-
-# CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
-from . import versioning  # noqa: F401
+"""Shared database utilities."""
 
 from typing import Generator
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker, DeclarativeBase
-from cl_server_shared.config import Config
 
 
 class Base(DeclarativeBase):
@@ -82,13 +76,3 @@ def get_db_session(session_factory) -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
-
-
-# Create engine with WAL mode
-engine = create_db_engine(Config.STORE_DATABASE_URL, echo=False)
-SessionLocal = create_session_factory(engine)
-
-
-def get_db():
-    """Get database session for FastAPI dependency injection."""
-    yield from get_db_session(SessionLocal)
