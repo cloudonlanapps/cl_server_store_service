@@ -4,12 +4,12 @@ import os
 import time
 from typing import Optional
 
+from cl_server_shared.config import Config
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from cl_server_shared.config import Config
 from .database import get_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", auto_error=False)
@@ -89,7 +89,7 @@ async def get_current_user(
 
     try:
         payload = jwt.decode(token, public_key, algorithms=["ES256"])
-        username: str = payload.get("sub")
+        username: str | None = payload.get("sub")
         if username is None:
             raise credentials_exception
 
@@ -191,7 +191,7 @@ async def require_admin(
     if not current_user.get("is_admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Insufficient permissions. admin access required",
+            detail="Insufficient permissions. admin access required",
         )
 
     return current_user

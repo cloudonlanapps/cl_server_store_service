@@ -3,22 +3,21 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, status
+# Import for cl_ml_tools integration
+from cl_ml_tools import create_master_router
+from cl_server_shared.config import Config
+from cl_server_shared.file_storage import FileStorageService
+from cl_server_shared.shared_db import SQLAlchemyJobRepository
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import configure_mappers
 
 # CRITICAL: Import versioning BEFORE models
 from . import versioning  # noqa: F401
-from .capability_manager import close_capability_manager, get_capability_manager
-from .routes import router
-
-# Import for cl_ml_tools integration
-from cl_ml_tools import create_master_router
-from cl_server_shared.shared_db import SQLAlchemyJobRepository
-from cl_server_shared.file_storage import FileStorageService
-from cl_server_shared.config import Config
-from .database import SessionLocal
 from .auth import require_permission
+from .capability_manager import close_capability_manager, get_capability_manager
+from .database import SessionLocal
+from .routes import router
 
 logger = logging.getLogger(__name__)
 

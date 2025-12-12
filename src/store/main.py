@@ -1,10 +1,10 @@
 # src/store/main.py
 from __future__ import annotations
-import os
-import sys
+
 import argparse
-from pathlib import Path
 import logging
+import os
+from pathlib import Path
 
 logger = logging.getLogger("store")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -17,6 +17,7 @@ def run_alembic_migrations(project_root: Path) -> bool:
     """
     try:
         from alembic.config import Config
+
         from alembic import command
     except Exception as exc:
         logger.warning("Alembic not available: %s", exc)

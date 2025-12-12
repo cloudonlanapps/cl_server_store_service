@@ -14,16 +14,13 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import database
 from . import auth, schemas, service
 from . import config_service as cfg_service
 from .database import get_db
 from .service import EntityService
-
 
 router = APIRouter()
 

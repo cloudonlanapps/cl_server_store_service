@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Optional
 
+# Job Management Schemas (from compute service)
+# Import base Job schema from library for consistency
+from cl_ml_tools import Job as BaseJob
 from pydantic import BaseModel, Field
 
 
@@ -114,11 +117,6 @@ class UpdateReadAuthConfig(BaseModel):
     """Request schema for updating read auth configuration."""
 
     enabled: bool = Field(..., description="Whether to enable read authentication")
-
-
-# Job Management Schemas (from compute service)
-# Import base Job schema from library for consistency
-from cl_ml_tools import Job as BaseJob
 
 
 class JobResponse(BaseJob):

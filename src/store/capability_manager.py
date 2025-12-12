@@ -44,10 +44,7 @@ class CapabilityManager:
 
         # Subscribe to worker capability topics
         topic_pattern = f"{Config.CAPABILITY_TOPIC_PREFIX}/+"
-        self.broadcaster.subscribe(
-            topic=topic_pattern,
-            callback=self._on_message
-        )
+        self.broadcaster.subscribe(topic=topic_pattern, callback=self._on_message)
 
         logger.info(f"Subscribed to capability topics: {topic_pattern}")
         self.ready_event.set()

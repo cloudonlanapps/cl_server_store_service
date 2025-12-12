@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Optional
+from typing import Optional, cast
 
-from sqlalchemy import BigInteger, Boolean, Float, Integer, String, Text
+# Import shared models to ensure they're registered with our Base
+from cl_server_shared.models import Job, QueueEntry
+from sqlalchemy import BigInteger, Boolean, Float, Integer, String, Table
 from sqlalchemy.orm import Mapped, mapped_column
 
 # Import Base from local database module (with WAL mode support)
 from .database import Base
-# Import shared models to ensure they're registered with our Base
-from cl_server_shared.models import Job, QueueEntry
 
 # Register shared model tables with our local Base metadata so alembic can find them
 # This ensures the jobs and queue tables are created in our database
-for table in [Job.__table__, QueueEntry.__table__]:
+for table in [cast(Table, Job.__table__), cast(Table, QueueEntry.__table__)]:
     table.to_metadata(Base.metadata)
 
 

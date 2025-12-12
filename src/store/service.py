@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-import logging
-import tempfile
 import contextlib
 import io
+import json
+import logging
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from cl_server_shared import Config, FileStorageService
 from clmediakit import CLMetaData
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .schemas import BodyCreateEntity, BodyPatchEntity, BodyUpdateEntity, Item
 from .models import Entity
-from cl_server_shared import FileStorageService
-from cl_server_shared import Config
+from .schemas import BodyCreateEntity, BodyPatchEntity, BodyUpdateEntity, Item
 
 
 class DuplicateFileError(Exception):
@@ -256,7 +256,7 @@ class EntityService:
         # Get the specific version
         # SQLAlchemy-Continuum creates a versions relationship on the model
         if hasattr(entity, "versions"):
-            versions_list = entity.versions.all()
+            versions_list = entity.versions.all()  # type: ignore[attr-defined]
             # Versions are 1-indexed for the API
             if 1 <= version <= len(versions_list):
                 version_entity = versions_list[version - 1]
@@ -281,7 +281,7 @@ class EntityService:
         if not hasattr(entity, "versions"):
             return []
 
-        versions_list = entity.versions.all()
+        versions_list = entity.versions.all()  # type: ignore[attr-defined]
         result = []
         for idx, version in enumerate(versions_list, start=1):
             version_info = {
@@ -377,7 +377,7 @@ class EntityService:
             self.db.add(entity)
             self.db.commit()
             self.db.refresh(entity)
-        except IntegrityError as e:
+        except IntegrityError as _:
             self.db.rollback()
             # Clean up file if database insert failed
             if file_path:
@@ -428,7 +428,8 @@ class EntityService:
 
         # Note: image is optional if is_collection is False (for PUT operations)
         # This allows updating metadata without changing the file
-
+        file_path = None
+        file_meta = None
         if image:
             # Extract metadata from new file
             file_meta = self._extract_metadata(image, filename)
@@ -478,7 +479,9 @@ class EntityService:
             # Clean up new file if database update failed
             if file_path:
                 self.file_storage.delete_file(file_path)
-            raise DuplicateFileError(f"Duplicate MD5 detected: {file_meta.get('md5')}")
+            raise DuplicateFileError(
+                f"Duplicate MD5 detected: {file_meta.get('md5') if file_meta else ''}"
+            )
 
         return self._entity_to_item(entity)
 
@@ -573,29 +576,29 @@ class JobService:
         from . import schemas
         from .models import Job
 
-        # Use repository to get job (handles parsing automatically)
-        library_job = self.repository.get_job(job_id)
-        if not library_job:
+        # Get additional metadata from database
+        db_job = self.db.query(Job).filter_by(job_id=job_id).first()
+        if not db_job:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail=f"Job {job_id} not found"
             )
-
-        # Get additional metadata from database
-        db_job = self.db.query(Job).filter_by(job_id=job_id).first()
+        library_job = db_job
 
         return schemas.JobResponse(
             job_id=library_job.job_id,
             task_type=library_job.task_type,
             status=library_job.status,
             progress=library_job.progress,
-            params=library_job.params,  # Already parsed by repository
-            task_output=library_job.task_output,  # Already parsed by repository
-            created_at=db_job.created_at if db_job else None,
-            updated_at=db_job.created_at if db_job else None,
-            started_at=db_job.started_at if db_job else None,
-            completed_at=db_job.completed_at if db_job else None,
+            params=json.loads(library_job.params),  # Already parsed by repository
+            task_output=json.loads(library_job.task_output)
+            if library_job.task_output
+            else None,  # Already parsed by repository
+            created_at=db_job.created_at,
+            updated_at=db_job.created_at,
+            started_at=db_job.started_at,
+            completed_at=db_job.completed_at,
             error_message=library_job.error_message,
-            priority=db_job.priority if db_job else None,
+            priority=db_job.priority,
         )
 
     def delete_job(self, job_id: str) -> None:
