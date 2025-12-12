@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"Error closing capability manager: {e}")
 
 
-app = FastAPI(title="CoLAN server", version="v1", lifespan=lifespan)
+app = FastAPI(title="CoLAN Store", version="v1", lifespan=lifespan)
 
 app.include_router(router)
 

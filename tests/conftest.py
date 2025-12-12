@@ -1,12 +1,12 @@
 """
-Pytest configuration and fixtures for testing the CoLAN server.
+Pytest configuration and fixtures for testing the CoLAN store.
 """
 
 import os
 import shutil
 import sys
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # Set up test environment variables BEFORE importing from store
 # IMPORTANT: Always use a test-specific directory for CL_SERVER_DIR
@@ -24,19 +24,18 @@ os.environ["CL_SERVER_DIR"] = str(test_cl_server_dir)
 sys.path.insert(0, str(Path(__file__).parent))
 
 import pytest
-from fastapi.testclient import TestClient
-from jose import jwt
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.backends import default_backend
+from fastapi.testclient import TestClient
+from jose import jwt
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
-
 from test_config import (
     IMAGES_DIR,
-    TEST_IMAGES,
     TEST_DB_URL,
+    TEST_IMAGES,
     get_all_test_images,
 )
 
@@ -58,8 +57,9 @@ def test_engine():
     )
 
     # Import models and configure versioning BEFORE creating tables
-    from store.models import Base
     from sqlalchemy.orm import configure_mappers
+
+    from store.models import Base
 
     # This must be called before create_all to ensure version tables are created
     configure_mappers()
@@ -91,8 +91,8 @@ def test_db_session(test_engine):
 def client(test_engine, clean_media_dir, monkeypatch):
     """Create a test client with a fresh database and test media directory."""
     print("Clien t was called..........")
-    from unittest.mock import MagicMock, patch
     import importlib
+    from unittest.mock import MagicMock, patch
 
     # Set environment variables for Config to use test directories
     # NOTE: We do NOT reload the config module as it causes issues with
@@ -123,8 +123,8 @@ def client(test_engine, clean_media_dir, monkeypatch):
     with patch("store.capability_manager._capability_manager_instance", mock_manager):
         # Import app and override dependency
         from store import app, repository_adapter
-        from store.database import get_db
         from store.auth import get_current_user
+        from store.database import get_db
 
         # CRITICAL: Reset auth module's public key cache to prevent contamination from auth tests
         # Even though this fixture bypasses auth, we need to clear any cached keys from previous tests
@@ -454,8 +454,8 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     This client does NOT bypass authentication, allowing proper testing of auth flows.
     Uses the key_pair fixture to set up proper JWT validation.
     """
-    import sys
     import importlib
+    import sys
     from unittest.mock import MagicMock, patch
 
     # Set PUBLIC_KEY_PATH environment variable for JWT validation
@@ -494,9 +494,9 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     ):
         # Import app
         from store import app, repository_adapter
+        from store.auth import get_current_user
         from store.database import get_db
         from store.service import EntityService, JobService
-        from store.auth import get_current_user
 
         # CRITICAL: Reset auth module's public key cache AFTER importing
         # This ensures each test uses the fresh key pair from the key_pair fixture
