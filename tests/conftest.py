@@ -95,16 +95,11 @@ def client(test_engine, clean_media_dir, monkeypatch):
     import importlib
 
     # Set environment variables for Config to use test directories
-    # monkeypatch.setenv("Config.MEDIA_STORAGE_DIR", str(clean_media_dir))
-    # monkeypatch.setenv("Config.COMPUTE_STORAGE_DIR", str(clean_media_dir))
+    # NOTE: We do NOT reload the config module as it causes issues with
+    # auth_client tests that need consistent config paths
     monkeypatch.setenv("CL_SERVER_DIR", str(clean_media_dir))
 
-    # Reload Config module to pick up new environment variables
-    from cl_server_shared import config as config_module
-
-    importlib.reload(config_module)
-
-    print(f"root directory now is {config_module.Config.CL_SERVER_DIR}")
+    print(f"root directory now is {clean_media_dir}")
 
     # Create session maker
     TestingSessionLocal = sessionmaker(
