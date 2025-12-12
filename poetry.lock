@@ -321,7 +321,7 @@ dev = ["httpx (>=0.24)", "pytest (>=7.0)", "pytest-asyncio (>=0.21)", "pytest-co
 type = "git"
 url = "https://github.com/cloudonlanapps/cl_ml_tools.git"
 reference = "HEAD"
-resolved_reference = "1dfab644258451ac261cd99d5354b7aac71690d4"
+resolved_reference = "c66804644d7f0c78302afd2b87df99929aae6cd9"
 
 [[package]]
 name = "cl-server-shared"

@@ -45,7 +45,11 @@ def run_alembic_migrations(project_root: Path) -> bool:
 def start_uvicorn(app, host: str, port: int, reload: bool = False):
     import uvicorn
 
-    uvicorn.run(app, host=host, port=port, reload=reload)
+    if reload:
+        # Pass app as import string for reload to work
+        uvicorn.run("store:app", host=host, port=port, reload=reload)
+    else:
+        uvicorn.run(app, host=host, port=port, reload=reload)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -86,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Import your FastAPI app (adjust the import if your app object is elsewhere)
     try:
-        from store.app import app  # adjust if your app module is different
+        from store import app  # adjust if your app module is different
     except Exception as exc:
         logger.error("Failed to import app: %s", exc)
         return 1
