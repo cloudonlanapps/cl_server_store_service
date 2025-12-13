@@ -15,7 +15,7 @@ from .database import get_db
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", auto_error=False)
 
 # Cache public key with retry logic
-_public_key_cache: Optional[str] = None
+_public_key_cache: str | None = None
 _public_key_load_attempts: int = 0
 _max_load_attempts: int = 30  # Try for up to 30 seconds
 
@@ -63,8 +63,8 @@ def get_public_key() -> str:
 
 
 async def get_current_user(
-    token: Optional[str] = Depends(oauth2_scheme),
-) -> Optional[dict]:
+    token: str | None = Depends(oauth2_scheme),
+) -> dict | None:
     """Validate the JWT and return the user payload.
 
     Returns None if AUTH_DISABLED is True (demo mode).

@@ -23,11 +23,11 @@ dependencies = [
     "python-magic>=0.4.27,<0.5.0",
     "requests>=2.32.5,<3.0.0",
     "paho-mqtt>=2.1.0,<3.0.0",
-
     # Git dependencies (uv supports this exactly like this)
     "cl-ml-tools@git+https://github.com/cloudonlanapps/cl_ml_tools.git",
     "cl-server-shared@git+https://github.com/cloudonlanapps/cl_server_shared.git",
-    "clmediakit@git+https://github.com/asarangaram/clmediakit.git"
+    "clmediakit@git+https://github.com/asarangaram/clmediakit.git",
+    "basedpyright>=1.36.1",
 ]
 
 # -------- Dependency groups (uv supports PEP 735 syntax) ----------

@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from typing import Dict, Optional
 
 from cl_ml_tools import get_broadcaster
 from cl_server_shared.config import Config
 
 logger = logging.getLogger(__name__)
 
-_capability_manager_instance: Optional[CapabilityManager] = None
+_capability_manager_instance: CapabilityManager | None = None
 _manager_lock = threading.Lock()
 
 
@@ -31,7 +30,7 @@ class CapabilityManager:
 
     def __init__(self):
         """Initialize capability manager with broadcaster."""
-        self.capabilities_cache: Dict[str, dict] = {}
+        self.capabilities_cache: dict[str, dict] = {}
         self.cache_lock = threading.Lock()
         self.ready_event = threading.Event()
 
@@ -44,6 +43,7 @@ class CapabilityManager:
 
         # Subscribe to worker capability topics
         topic_pattern = f"{Config.CAPABILITY_TOPIC_PREFIX}/+"
+
         self.broadcaster.subscribe(topic=topic_pattern, callback=self._on_message)
 
         logger.info(f"Subscribed to capability topics: {topic_pattern}")
@@ -85,7 +85,7 @@ class CapabilityManager:
         except Exception as e:
             logger.error(f"Error processing capability message: {e}")
 
-    def get_cached_capabilities(self) -> Dict[str, int]:
+    def get_cached_capabilities(self) -> dict[str, int]:
         """Get aggregated idle counts by capability.
 
         Returns:
@@ -122,7 +122,7 @@ class CapabilityManager:
         """
         return self.ready_event.wait(timeout=timeout)
 
-    def get_worker_count_by_capability(self) -> Dict[str, int]:
+    def get_worker_count_by_capability(self) -> dict[str, int]:
         """Get total worker count by capability (not idle count).
 
         Returns:
