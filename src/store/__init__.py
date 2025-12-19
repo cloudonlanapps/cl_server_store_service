@@ -5,9 +5,7 @@ from contextlib import asynccontextmanager
 
 # Import for cl_ml_tools integration
 from cl_ml_tools import create_master_router
-from cl_server_shared.config import Config
-from cl_server_shared.file_storage import FileStorageService
-from cl_server_shared.shared_db import SQLAlchemyJobRepository
+from cl_server_shared import Config, JobRepositoryService, JobStorageService
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import configure_mappers
@@ -58,15 +56,15 @@ app.include_router(router)
 
 # Mount cl_ml_tools plugin routes
 # Create adapter instances
-repository_adapter = SQLAlchemyJobRepository(SessionLocal)
-file_storage_service = FileStorageService(base_dir=Config.MEDIA_STORAGE_DIR)
+repository_adapter = JobRepositoryService(SessionLocal)
+job_storage_service = JobStorageService(base_dir=Config.COMPUTE_STORAGE_DIR)
 
 # Create and mount plugin router
 # NOTE: We pass require_permission("ai_inference_support") instead of get_current_user
 # This enforces proper authentication and authorization for plugin routes
 plugin_router = create_master_router(
     repository=repository_adapter,
-    file_storage=file_storage_service,
+    file_storage=job_storage_service,
     get_current_user=require_permission("ai_inference_support"),
 )
 app.include_router(plugin_router, prefix="/compute", tags=["compute-plugins"])
