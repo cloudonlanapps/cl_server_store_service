@@ -1,0 +1,18 @@
+{
+  "lsp": {
+    "basedpyright": {
+      "settings": {
+        "basedpyright.analysis": {
+          "diagnosticMode": "workspace", // Or 'workspace' 'openFilesOnly'
+          "inlayHints": {
+            "callArgumentNames": false, // Example setting
+            "functionReturnTypes": true, // Example
+          },
+        },
+        // To explicitly set venv for all projects (less ideal)
+        // "basedpyright.venvPath": "/path/to/your/venv/parent",
+        // "basedpyright.venv": "your_venv_name"
+      },
+    },
+  },
+}

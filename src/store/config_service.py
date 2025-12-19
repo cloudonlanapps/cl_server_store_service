@@ -50,7 +50,7 @@ class ConfigService:
         age = (self._now_timestamp() - self._cache_timestamps[key]) / 1000
         return age < self._cache_ttl
 
-    def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
+    def get_config(self, key: str, default: str] = None) -> Optional[str | None:
         """Get configuration value.
 
         Args:
@@ -75,7 +75,7 @@ class ConfigService:
 
         return default
 
-    def set_config(self, key: str, value: str, user_id: Optional[str] = None) -> None:
+    def set_config(self, key: str, value: str, user_id: str | None = None) -> None:
         """Set configuration value.
 
         Args:
@@ -116,7 +116,7 @@ class ConfigService:
         return value.lower() == "true"
 
     def set_read_auth_enabled(
-        self, enabled: bool, user_id: Optional[str] = None
+        self, enabled: bool, user_id: str | None = None
     ) -> None:
         """Set read authentication enabled status.
 
@@ -126,7 +126,7 @@ class ConfigService:
         """
         self.set_config("read_auth_enabled", str(enabled).lower(), user_id)
 
-    def get_config_metadata(self, key: str) -> Optional[dict]:
+    def get_config_metadata(self, key: str) -> dict | None:
         """Get configuration with metadata.
 
         Args:

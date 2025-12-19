@@ -31,24 +31,22 @@ router = APIRouter()
     summary="Get Entities",
     description="Retrieves a paginated list of media entities, optionally at a specific version.",
     operation_id="get_entities",
-    responses={
-        200: {"model": schemas.PaginatedResponse, "description": "Successful Response"}
-    },
+    responses={200: {"model": schemas.PaginatedResponse, "description": "Successful Response"}},
 )
 async def get_entities(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
-    version: Optional[int] = Query(
+    version: int | None = Query(
         None, description="Optional version number to retrieve for all entities"
     ),
-    filter_param: Optional[str] = Query(
+    filter_param: str | None = Query(
         None, title="Filter Param", description="Optional filter string"
     ),
-    search_query: Optional[str] = Query(
+    search_query: str | None = Query(
         None, title="Search Query", description="Optional search query"
     ),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("media_store_read")),
+    user: dict | None = Depends(auth.require_permission("media_store_read")),
 ) -> schemas.PaginatedResponse:
     service = EntityService(db)
     items, total_count = service.get_entities(
@@ -89,12 +87,12 @@ async def get_entities(
 )
 async def create_entity(
     is_collection: bool = Form(..., title="Is Collection"),
-    label: Optional[str] = Form(None, title="Label"),
-    description: Optional[str] = Form(None, title="Description"),
-    parent_id: Optional[int] = Form(None, title="Parent Id"),
-    image: Optional[UploadFile] = File(None, title="Image"),
+    label: str | None = Form(None, title="Label"),
+    description: str | None = Form(None, title="Description"),
+    parent_id: int | None = Form(None, title="Parent Id"),
+    image: UploadFile | None = File(None, title="Image"),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
+    user: dict | None = Depends(auth.require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
 
@@ -119,9 +117,7 @@ async def create_entity(
     try:
         return service.create_entity(body, file_bytes, filename, user_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
 
 @router.delete(
@@ -135,7 +131,7 @@ async def create_entity(
 )
 async def delete_collection(
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
+    user: dict | None = Depends(auth.require_permission("media_store_write")),
 ):
     service = EntityService(db)
     service.delete_all_entities()
@@ -152,14 +148,12 @@ async def delete_collection(
 )
 async def get_entity(
     entity_id: int = Path(..., title="Entity Id"),
-    version: Optional[int] = Query(
+    version: int | None = Query(
         None, title="Version", description="Optional version number to retrieve"
     ),
-    content: Optional[str] = Query(
-        None, title="Content", description="Optional content query"
-    ),
+    content: str | None = Query(None, title="Content", description="Optional content query"),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("media_store_read")),
+    user: dict | None = Depends(auth.require_permission("media_store_read")),
 ) -> schemas.Item:
     service = EntityService(db)
     item = service.get_entity_by_id(entity_id, version=version)
@@ -185,11 +179,11 @@ async def put_entity(
     entity_id: int = Path(..., title="Entity Id"),
     is_collection: bool = Form(..., title="Is Collection"),
     label: str = Form(..., title="Label"),
-    description: Optional[str] = Form(None, title="Description"),
-    parent_id: Optional[int] = Form(None, title="Parent Id"),
-    image: Optional[UploadFile] = File(None, title="Image"),
+    description: str | None = Form(None, title="Description"),
+    parent_id: int | None = Form(None, title="Parent Id"),
+    image: UploadFile | None = File(None, title="Image"),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
+    user: dict | None = Depends(auth.require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
 
@@ -214,14 +208,10 @@ async def put_entity(
     try:
         item = service.update_entity(entity_id, body, file_bytes, filename, user_id)
         if not item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
         return item
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
 
 @router.patch(
@@ -239,7 +229,7 @@ async def patch_entity(
     entity_id: int,
     body: schemas.BodyPatchEntity = Body(..., embed=True),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
+    user: dict | None = Depends(auth.require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
 
@@ -248,9 +238,7 @@ async def patch_entity(
 
     item = service.patch_entity(entity_id, body, user_id)
     if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
     return item
 
 
@@ -269,14 +257,12 @@ async def patch_entity(
 async def delete_entity(
     entity_id: int,
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("media_store_write")),
+    user: dict | None = Depends(auth.require_permission("media_store_write")),
 ):
     service = EntityService(db)
     item = service.delete_entity(entity_id)
     if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
     # No return statement - FastAPI will return 204 automatically
 
 
@@ -291,14 +277,12 @@ async def delete_entity(
 async def get_entity_versions(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("media_store_read")),
+    user: dict | None = Depends(auth.require_permission("media_store_read")),
 ) -> List[dict]:
     service = EntityService(db)
     versions = service.get_entity_versions(entity_id)
     if not versions:
-        raise HTTPException(
-            status_code=404, detail="Entity not found or no versions available"
-        )
+        raise HTTPException(status_code=404, detail="Entity not found or no versions available")
     return versions
 
 
@@ -309,13 +293,11 @@ async def get_entity_versions(
     summary="Get Configuration",
     description="Get current service configuration. Requires admin access.",
     operation_id="get_config_admin_config_get",
-    responses={
-        200: {"model": schemas.ConfigResponse, "description": "Successful Response"}
-    },
+    responses={200: {"model": schemas.ConfigResponse, "description": "Successful Response"}},
 )
 async def get_config(
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_admin),
+    user: dict | None = Depends(auth.require_admin),
 ) -> schemas.ConfigResponse:
     """Get current service configuration.
 
@@ -335,9 +317,7 @@ async def get_config(
         )
 
     # Default if not found
-    return schemas.ConfigResponse(
-        read_auth_enabled=False, updated_at=None, updated_by=None
-    )
+    return schemas.ConfigResponse(read_auth_enabled=False, updated_at=None, updated_by=None)
 
 
 @router.put(
@@ -351,7 +331,7 @@ async def get_config(
 async def update_read_auth_config(
     config: schemas.UpdateReadAuthConfig,
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_admin),
+    user: dict | None = Depends(auth.require_admin),
 ) -> dict:
     """Update read authentication configuration.
 
@@ -388,7 +368,7 @@ async def update_read_auth_config(
 async def get_job(
     job_id: str = Path(..., title="Job ID"),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("ai_inference_support")),
+    user: dict | None = Depends(auth.require_permission("ai_inference_support")),
 ) -> schemas.JobResponse:
     """Get job status and results."""
     job_service = service.JobService(db)
@@ -406,7 +386,7 @@ async def get_job(
 async def delete_job(
     job_id: str = Path(..., title="Job ID"),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_permission("ai_inference_support")),
+    user: dict | None = Depends(auth.require_permission("ai_inference_support")),
 ):
     """Delete job and all associated files."""
     job_service = service.JobService(db)
@@ -420,13 +400,11 @@ async def delete_job(
     summary="Get Storage Size",
     description="Get total storage usage (admin only).",
     operation_id="get_storage_size",
-    responses={
-        200: {"model": schemas.StorageInfo, "description": "Storage information"}
-    },
+    responses={200: {"model": schemas.StorageInfo, "description": "Storage information"}},
 )
 async def get_storage_size(
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_admin),
+    user: dict | None = Depends(auth.require_admin),
 ) -> schemas.StorageInfo:
     """Get total storage usage (admin only)."""
     job_service = service.JobService(db)
@@ -444,7 +422,7 @@ async def get_storage_size(
 async def cleanup_old_jobs(
     days: int = Query(7, ge=0, description="Delete jobs older than N days"),
     db: Session = Depends(get_db),
-    user: Optional[dict] = Depends(auth.require_admin),
+    user: dict | None = Depends(auth.require_admin),
 ) -> schemas.CleanupResult:
     """Clean up jobs older than specified number of days (admin only)."""
     job_service = service.JobService(db)

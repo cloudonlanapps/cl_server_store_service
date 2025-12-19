@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-# CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
-from . import versioning  # noqa: F401
-
 from typing import Generator
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker, DeclarativeBase
+
 from cl_server_shared.config import Config
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+# CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
+from . import versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 
 class Base(DeclarativeBase):
@@ -17,7 +18,7 @@ class Base(DeclarativeBase):
     pass
 
 
-def enable_wal_mode(dbapi_conn, connection_record):
+def enable_wal_mode(dbapi_conn, connection_record) -> None:
     """Enable WAL mode and set optimization pragmas for SQLite.
 
     This function should be registered as an event listener on SQLite engines.
@@ -45,9 +46,7 @@ def create_db_engine(database_url: str, echo: bool = False):
     Returns:
         SQLAlchemy engine instance
     """
-    engine = create_engine(
-        database_url, connect_args={"check_same_thread": False}, echo=echo
-    )
+    engine = create_engine(database_url, connect_args={"check_same_thread": False}, echo=echo)
 
     # Register WAL mode listener for SQLite
     if "sqlite" in database_url.lower():

@@ -129,9 +129,9 @@ def require_permission(permission: str):
     """
 
     async def permission_checker(
-        current_user: Optional[dict] = Depends(get_current_user),
+        current_user: dict | None = Depends(get_current_user),
         db: Session = Depends(get_db),
-    ) -> Optional[dict]:
+    ) -> dict | None:
         # Demo mode: bypass permission check
         if Config.AUTH_DISABLED:
             return current_user
@@ -173,8 +173,8 @@ def require_permission(permission: str):
 
 
 async def require_admin(
-    current_user: Optional[dict] = Depends(get_current_user),
-) -> Optional[dict]:
+    current_user: dict | None = Depends(get_current_user),
+) -> dict | None:
     # Demo mode: bypass permission check
     if Config.AUTH_DISABLED:
         return current_user

@@ -9,75 +9,53 @@ from pydantic import BaseModel, Field
 
 
 class BodyCreateEntity(BaseModel):
-    label: Optional[str] = Field(None, title="Label")
-    description: Optional[str] = Field(None, title="Description")
-    parent_id: Optional[int] = Field(None, title="Parent Id")
+    label: str | None = Field(None, title="Label")
+    description: str | None = Field(None, title="Description")
+    parent_id: int | None = Field(None, title="Parent Id")
     is_collection: bool = Field(..., title="Is Collection")
     # image is part of the multipart body – handled separately
 
 
 class BodyUpdateEntity(BaseModel):
-    label: Optional[str] = Field(None, title="Label")
-    description: Optional[str] = Field(None, title="Description")
-    parent_id: Optional[int] = Field(None, title="Parent Id")
+    label: str | None = Field(None, title="Label")
+    description: str | None = Field(None, title="Description")
+    parent_id: int | None = Field(None, title="Parent Id")
     is_collection: bool = Field(..., title="Is Collection")
     # image is part of the multipart body – handled separately
 
 
 class BodyPatchEntity(BaseModel):
-    label: Optional[str] = Field(None, title="Label")
-    description: Optional[str] = Field(None, title="Description")
-    parent_id: Optional[int] = Field(None, title="Parent Id")
-    is_deleted: Optional[bool] = Field(None, title="Is Deleted")
+    label: str | None = Field(None, title="Label")
+    description: str | None = Field(None, title="Description")
+    parent_id: int | None = Field(None, title="Parent Id")
+    is_deleted: bool | None = Field(None, title="Is Deleted")
 
 
 class Item(BaseModel):
-    id: Optional[int] = Field(None, title="Id", json_schema_extra={"read_only": True})
-    is_collection: Optional[bool] = Field(None, title="Is Collection")
-    label: Optional[str] = Field(None, title="Label")
-    description: Optional[str] = Field(None, title="Description")
-    parent_id: Optional[int] = Field(None, title="Parent Id")
-    added_date: Optional[int] = Field(
-        None, title="Added Date", json_schema_extra={"read_only": True}
-    )
-    updated_date: Optional[int] = Field(
+    id: int | None = Field(None, title="Id", json_schema_extra={"read_only": True})
+    is_collection: bool | None = Field(None, title="Is Collection")
+    label: str | None = Field(None, title="Label")
+    description: str | None = Field(None, title="Description")
+    parent_id: int | None = Field(None, title="Parent Id")
+    added_date: int | None = Field(None, title="Added Date", json_schema_extra={"read_only": True})
+    updated_date: int | None = Field(
         None, title="Updated Date", json_schema_extra={"read_only": True}
     )
-    is_deleted: Optional[bool] = Field(None, title="Is Deleted")
-    create_date: Optional[int] = Field(
+    is_deleted: bool | None = Field(None, title="Is Deleted")
+    create_date: int | None = Field(
         None, title="Create Date", json_schema_extra={"read_only": True}
     )
-    added_by: Optional[str] = Field(
-        None, title="Added By", json_schema_extra={"read_only": True}
-    )
-    updated_by: Optional[str] = Field(
-        None, title="Updated By", json_schema_extra={"read_only": True}
-    )
-    file_size: Optional[int] = Field(
-        None, title="File Size", json_schema_extra={"read_only": True}
-    )
-    height: Optional[int] = Field(
-        None, title="Height", json_schema_extra={"read_only": True}
-    )
-    width: Optional[int] = Field(
-        None, title="Width", json_schema_extra={"read_only": True}
-    )
-    duration: Optional[float] = Field(
-        None, title="Duration", json_schema_extra={"read_only": True}
-    )
-    mime_type: Optional[str] = Field(
-        None, title="Mime Type", json_schema_extra={"read_only": True}
-    )
-    type: Optional[str] = Field(
-        None, title="Type", json_schema_extra={"read_only": True}
-    )
-    extension: Optional[str] = Field(
-        None, title="Extension", json_schema_extra={"read_only": True}
-    )
-    md5: Optional[str] = Field(None, title="Md5", json_schema_extra={"read_only": True})
-    file_path: Optional[str] = Field(
-        None, title="File Path", json_schema_extra={"read_only": True}
-    )
+    added_by: str | None = Field(None, title="Added By", json_schema_extra={"read_only": True})
+    updated_by: str | None = Field(None, title="Updated By", json_schema_extra={"read_only": True})
+    file_size: int | None = Field(None, title="File Size", json_schema_extra={"read_only": True})
+    height: int | None = Field(None, title="Height", json_schema_extra={"read_only": True})
+    width: int | None = Field(None, title="Width", json_schema_extra={"read_only": True})
+    duration: float | None = Field(None, title="Duration", json_schema_extra={"read_only": True})
+    mime_type: str | None = Field(None, title="Mime Type", json_schema_extra={"read_only": True})
+    type: str | None = Field(None, title="Type", json_schema_extra={"read_only": True})
+    extension: str | None = Field(None, title="Extension", json_schema_extra={"read_only": True})
+    md5: str | None = Field(None, title="Md5", json_schema_extra={"read_only": True})
+    file_path: str | None = Field(None, title="File Path", json_schema_extra={"read_only": True})
 
 
 class PaginationMetadata(BaseModel):
@@ -102,15 +80,9 @@ class PaginatedResponse(BaseModel):
 class ConfigResponse(BaseModel):
     """Response schema for configuration."""
 
-    read_auth_enabled: bool = Field(
-        ..., description="Whether read authentication is enabled"
-    )
-    updated_at: Optional[int] = Field(
-        None, description="Last update timestamp (milliseconds)"
-    )
-    updated_by: Optional[str] = Field(
-        None, description="User ID who last updated the config"
-    )
+    read_auth_enabled: bool = Field(..., description="Whether read authentication is enabled")
+    updated_at: int | None = Field(None, description="Last update timestamp (milliseconds)")
+    updated_by: str | None = Field(None, description="User ID who last updated the config")
 
 
 class UpdateReadAuthConfig(BaseModel):
@@ -128,15 +100,9 @@ class JobResponse(BaseJob):
 
     priority: int = Field(5, description="Job priority (0-10)")
     created_at: int = Field(..., description="Job creation timestamp (milliseconds)")
-    updated_at: Optional[int] = Field(
-        None, description="Job last update timestamp (milliseconds)"
-    )
-    started_at: Optional[int] = Field(
-        None, description="Job start timestamp (milliseconds)"
-    )
-    completed_at: Optional[int] = Field(
-        None, description="Job completion timestamp (milliseconds)"
-    )
+    updated_at: int | None = Field(None, description="Job last update timestamp (milliseconds)")
+    started_at: int | None = Field(None, description="Job start timestamp (milliseconds)")
+    completed_at: int | None = Field(None, description="Job completion timestamp (milliseconds)")
 
 
 class StorageInfo(BaseModel):

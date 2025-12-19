@@ -231,6 +231,72 @@ dependencies = [
 ]
 
 [[package]]
+name = "cl-server-store"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "alembic" },
+    { name = "basedpyright" },
+    { name = "cl-ml-tools" },
+    { name = "cl-server-shared" },
+    { name = "clmediakit" },
+    { name = "fastapi" },
+    { name = "m3u8" },
+    { name = "marshmallow" },
+    { name = "paho-mqtt" },
+    { name = "python-magic" },
+    { name = "python-multipart" },
+    { name = "requests" },
+    { name = "sqlalchemy" },
+    { name = "sqlalchemy-continuum" },
+    { name = "uvicorn", extra = ["standard"] },
+    { name = "werkzeug" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "python-jose", extra = ["cryptography"] },
+]
+dev = [
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "python-jose", extra = ["cryptography"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.17.2,<2.0.0" },
+    { name = "basedpyright", specifier = ">=1.36.1" },
+    { name = "cl-ml-tools", git = "https://github.com/cloudonlanapps/cl_ml_tools.git" },
+    { name = "cl-server-shared", git = "https://github.com/cloudonlanapps/cl_server_shared.git" },
+    { name = "cl-server-store", extras = ["dev"], marker = "extra == 'all'" },
+    { name = "clmediakit", git = "https://github.com/asarangaram/clmediakit.git" },
+    { name = "fastapi", specifier = ">=0.124.2,<0.125.0" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "m3u8", specifier = ">=6.0.0,<7.0.0" },
+    { name = "marshmallow", specifier = ">=4.1.1,<5.0.0" },
+    { name = "paho-mqtt", specifier = ">=2.1.0,<3.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "python-jose", extras = ["cryptography"], marker = "extra == 'dev'", specifier = ">=3.5.0,<4.0.0" },
+    { name = "python-magic", specifier = ">=0.4.27,<0.5.0" },
+    { name = "python-multipart", specifier = ">=0.0.20,<0.0.21" },
+    { name = "requests", specifier = ">=2.32.5,<3.0.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.45,<3.0.0" },
+    { name = "sqlalchemy-continuum", specifier = ">=1.5.2,<2.0.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0,<0.39.0" },
+    { name = "werkzeug", specifier = ">=3.1.4,<4.0.0" },
+]
+provides-extras = ["dev", "all"]
+
+[[package]]
 name = "click"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1444,64 +1510,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/ba/b8/73a0e6a6e079a9d9c
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d9/52/1064f510b141bd54025f9b55105e26d1fa970b9be67ad766380a3c9b74b0/starlette-0.50.0-py3-none-any.whl", hash = "sha256:9e5391843ec9b6e472eed1365a78c8098cfceb7a74bfd4d6b1c0c0095efb3bca", size = 74033, upload-time = "2025-11-01T15:25:25.461Z" },
 ]
-
-[[package]]
-name = "store"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "alembic" },
-    { name = "basedpyright" },
-    { name = "cl-ml-tools" },
-    { name = "cl-server-shared" },
-    { name = "clmediakit" },
-    { name = "fastapi" },
-    { name = "m3u8" },
-    { name = "marshmallow" },
-    { name = "paho-mqtt" },
-    { name = "python-magic" },
-    { name = "python-multipart" },
-    { name = "requests" },
-    { name = "sqlalchemy" },
-    { name = "sqlalchemy-continuum" },
-    { name = "uvicorn", extra = ["standard"] },
-    { name = "werkzeug" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "python-jose", extra = ["cryptography"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.17.2,<2.0.0" },
-    { name = "basedpyright", specifier = ">=1.36.1" },
-    { name = "cl-ml-tools", git = "https://github.com/cloudonlanapps/cl_ml_tools.git" },
-    { name = "cl-server-shared", git = "https://github.com/cloudonlanapps/cl_server_shared.git" },
-    { name = "clmediakit", git = "https://github.com/asarangaram/clmediakit.git" },
-    { name = "fastapi", specifier = ">=0.124.2,<0.125.0" },
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.1,<0.29.0" },
-    { name = "m3u8", specifier = ">=6.0.0,<7.0.0" },
-    { name = "marshmallow", specifier = ">=4.1.1,<5.0.0" },
-    { name = "paho-mqtt", specifier = ">=2.1.0,<3.0.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2,<10.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.3.0,<2.0.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.0.0,<8.0.0" },
-    { name = "python-jose", extras = ["cryptography"], marker = "extra == 'dev'", specifier = ">=3.5.0,<4.0.0" },
-    { name = "python-magic", specifier = ">=0.4.27,<0.5.0" },
-    { name = "python-multipart", specifier = ">=0.0.20,<0.0.21" },
-    { name = "requests", specifier = ">=2.32.5,<3.0.0" },
-    { name = "sqlalchemy", specifier = ">=2.0.45,<3.0.0" },
-    { name = "sqlalchemy-continuum", specifier = ">=1.5.2,<2.0.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0,<0.39.0" },
-    { name = "werkzeug", specifier = ">=3.1.4,<4.0.0" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "sympy"

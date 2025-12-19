@@ -58,9 +58,7 @@ class EntityService:
         import mimetypes
 
         # Create temporary file for CLMetaData processing
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=Path(filename).suffix
-        ) as tmp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp_file:
             tmp_file.write(file_bytes)
             tmp_path = tmp_file.name
 
@@ -103,9 +101,7 @@ class EntityService:
             if "CreateDate" in metadata and metadata["CreateDate"]:
                 try:
                     # Attempt to parse EXIF date format: YYYY:MM:DD HH:MM:SS
-                    dt = datetime.strptime(
-                        str(metadata["CreateDate"]), "%Y:%m:%d %H:%M:%S"
-                    )
+                    dt = datetime.strptime(str(metadata["CreateDate"]), "%Y:%m:%d %H:%M:%S")
                     metadata["CreateDate"] = int(dt.timestamp() * 1000)
                 except ValueError:
                     # Fallback or ignore if format is different
@@ -116,9 +112,7 @@ class EntityService:
             # Clean up temporary file
             Path(tmp_path).unlink(missing_ok=True)
 
-    def _check_duplicate_md5(
-        self, md5: str, exclude_entity_id: Optional[int] = None
-    ) -> Optional[Entity]:
+    def _check_duplicate_md5(self, md5: str, exclude_entity_id: int | None = None) -> Entity | None:
         """
         Check if an entity with the given MD5 already exists.
 
@@ -174,9 +168,9 @@ class EntityService:
         self,
         page: int = 1,
         page_size: int = 20,
-        version: Optional[int] = None,
-        filter_param: Optional[str] = None,
-        search_query: Optional[str] = None,
+        version: int | None = None,
+        filter_param: str | None = None,
+        search_query: str | None = None,
     ) -> Tuple[List[Item], int]:
         """
         Retrieve all entities with optional pagination and versioning.
@@ -217,9 +211,7 @@ class EntityService:
 
         return items, total_count
 
-    def get_entity_by_id(
-        self, entity_id: int, version: Optional[int] = None
-    ) -> Optional[Item]:
+    def get_entity_by_id(self, entity_id: int, version: int | None = None) -> Item | None:
         """
         Retrieve a single entity by ID, optionally at a specific version.
 
@@ -238,7 +230,7 @@ class EntityService:
             return self._entity_to_item(entity)
         return None
 
-    def get_entity_version(self, entity_id: int, version: int) -> Optional[Item]:
+    def get_entity_version(self, entity_id: int, version: int) -> Item | None:
         """
         Retrieve a specific version of an entity.
 
@@ -288,9 +280,7 @@ class EntityService:
             version_info = {
                 "version": idx,
                 "transaction_id": (
-                    version.transaction_id
-                    if hasattr(version, "transaction_id")
-                    else None
+                    version.transaction_id if hasattr(version, "transaction_id") else None
                 ),
                 "updated_date": (
                     version.updated_date if hasattr(version, "updated_date") else None
@@ -303,9 +293,9 @@ class EntityService:
     def create_entity(
         self,
         body: BodyCreateEntity,
-        image: Optional[bytes] = None,
+        image: bytes | None = None,
         filename: str = "file",
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
     ) -> Item:
         """
         Create a new entity.
@@ -393,8 +383,8 @@ class EntityService:
         body: BodyUpdateEntity,
         image: bytes,
         filename: str = "file",
-        user_id: Optional[str] = None,
-    ) -> Optional[Item]:
+        user_id: str | None = None,
+    ) -> Item | None:
         """
         Fully update an existing entity (PUT) - requires file upload.
 
@@ -437,9 +427,7 @@ class EntityService:
 
             # Check for duplicate MD5 (excluding current entity)
             if file_meta.get("md5"):
-                duplicate = self._check_duplicate_md5(
-                    file_meta["md5"], exclude_entity_id=entity_id
-                )
+                duplicate = self._check_duplicate_md5(file_meta["md5"], exclude_entity_id=entity_id)
                 if duplicate:
                     # Return the existing item instead of raising an error
                     return self._entity_to_item(duplicate)
@@ -487,8 +475,8 @@ class EntityService:
         return self._entity_to_item(entity)
 
     def patch_entity(
-        self, entity_id: int, body: BodyPatchEntity, user_id: Optional[str] = None
-    ) -> Optional[Item]:
+        self, entity_id: int, body: BodyPatchEntity, user_id: str | None = None
+    ) -> Item | None:
         """
         Partially update an existing entity (PATCH).
 
@@ -516,7 +504,7 @@ class EntityService:
 
         return self._entity_to_item(entity)
 
-    def delete_entity(self, entity_id: int) -> Optional[Item]:
+    def delete_entity(self, entity_id: int) -> Item | None:
         """
         Soft delete an entity (set is_deleted=True).
 

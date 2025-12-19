@@ -1,6 +1,6 @@
 
 [project]
-name = "store"
+name = "cl-server-store"
 version = "0.1.0"
 description = "FastAPI-based microservice for managing media entities, jobs"
 readme = "README.md"
