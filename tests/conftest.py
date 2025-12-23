@@ -5,7 +5,7 @@ Pytest configuration and fixtures for testing the CoLAN store.
 import os
 import shutil
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # Set up test environment variables BEFORE importing from store
@@ -36,6 +36,7 @@ from test_config import (
     IMAGES_DIR,
     TEST_DB_URL,
     TEST_IMAGES,
+    TEST_MEDIA_DIR,
     get_all_test_images,
 )
 
@@ -77,7 +78,9 @@ def test_engine():
 @pytest.fixture(scope="function")
 def test_db_session(test_engine):
     """Create a test database session."""
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    TestingSessionLocal = sessionmaker(
+        autocommit=False, autoflush=False, bind=test_engine
+    )
     session = TestingSessionLocal()
 
     yield session
@@ -100,7 +103,9 @@ def client(test_engine, clean_media_dir, monkeypatch):
     print(f"root directory now is {clean_media_dir}")
 
     # Create session maker
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    TestingSessionLocal = sessionmaker(
+        autocommit=False, autoflush=False, bind=test_engine
+    )
 
     # Override the get_db dependency
     def override_get_db():
@@ -111,7 +116,7 @@ def client(test_engine, clean_media_dir, monkeypatch):
             db.close()
 
     # Import app and override dependency
-    from store import app, repository_adapter
+    from store import app
     from store.auth import get_current_user
     from store.database import get_db
 
@@ -133,17 +138,11 @@ def client(test_engine, clean_media_dir, monkeypatch):
 
     app.dependency_overrides[get_current_user] = override_auth
 
-    # CRITICAL: Patch the repository adapter to use test session factory
-    # The plugin routes use this adapter, which was created with production SessionLocal
-    original_session_factory = repository_adapter.session_factory
-    repository_adapter.session_factory = TestingSessionLocal
-
     # Create test client
     with TestClient(app) as test_client:
         yield test_client
 
     # Cleanup
-    repository_adapter.session_factory = original_session_factory
     app.dependency_overrides.clear()
 
 
@@ -236,18 +235,6 @@ def file_storage_service(clean_media_dir):
     return EntityStorageService(base_dir=str(clean_media_dir))
 
 
-@pytest.fixture
-def job_service(test_db_session):
-    """Create a JobService instance for testing.
-
-    Returns:
-        JobService: Service instance with test database
-    """
-    from store.service import JobService
-
-    return JobService(db=test_db_session)
-
-
 @pytest.fixture(scope="function")
 def key_pair(tmp_path):
     """Generate ES256 key pair for JWT testing.
@@ -294,7 +281,9 @@ def jwt_token_generator(key_pair):
             """Initialize with private key for signing tokens."""
             self.private_key = private_key_pem
 
-        def generate_token(self, sub="testuser", permissions=None, is_admin=False, expired=False):
+        def generate_token(
+            self, sub="testuser", permissions=None, is_admin=False, expired=False
+        ):
             """Generate a JWT token with specified claims.
 
             Args:
@@ -311,16 +300,16 @@ def jwt_token_generator(key_pair):
 
             # Calculate expiration
             if expired:
-                exp = datetime.utcnow() - timedelta(hours=1)
+                exp = datetime.now(UTC) - timedelta(hours=1)
             else:
-                exp = datetime.utcnow() + timedelta(hours=1)
+                exp = datetime.now(UTC) + timedelta(hours=1)
 
             payload = {
                 "sub": sub,
                 "permissions": permissions,
                 "is_admin": is_admin,
                 "exp": exp,
-                "iat": datetime.utcnow(),
+                "iat": datetime.now(UTC),
             }
 
             # Encode with ES256 algorithm
@@ -353,8 +342,8 @@ def jwt_token_generator(key_pair):
                 "sub": "testuser",
                 "permissions": ["media_store_write"],
                 "is_admin": False,
-                "exp": datetime.utcnow() + timedelta(hours=1),
-                "iat": datetime.utcnow(),
+                "exp": datetime.now(UTC) + timedelta(hours=1),
+                "iat": datetime.now(UTC),
             }
 
             token = jwt.encode(payload, wrong_key_pem.decode(), algorithm="ES256")
@@ -449,7 +438,9 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     shutil.copy(public_key_path, expected_key_path)
 
     # Create session maker
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    TestingSessionLocal = sessionmaker(
+        autocommit=False, autoflush=False, bind=test_engine
+    )
 
     # Override the get_db dependency
     def override_get_db():
@@ -460,12 +451,11 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
             db.close()
 
     # Import app
-    from store import app, repository_adapter
+    from store import app
     from store.auth import get_current_user
     from store.database import get_db
-    from store.service import EntityService, JobService
+    from store.service import EntityService
 
-    # CRITICAL: Reset auth module's public key cache AFTER importing
     # This ensures each test uses the fresh key pair from the key_pair fixture
     # Use sys.modules to ensure we get the actual module instance being used
     if "store.auth" in sys.modules:
@@ -479,21 +469,10 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    # CRITICAL: Patch the repository adapter to use test session factory
-    # The plugin routes use this adapter, which was created with production SessionLocal
-    original_session_factory = repository_adapter.session_factory
-    repository_adapter.session_factory = TestingSessionLocal
-
     # Patch Config.MEDIA_STORAGE_DIR to use test media directory
     # EntityService reads this config value internally
     monkeypatch.setattr(
         "cl_server_shared.config.Config.MEDIA_STORAGE_DIR", str(clean_media_dir)
-    )
-
-    # Patch Config.COMPUTE_STORAGE_DIR to use test media directory
-    # JobService reads this config value internally
-    monkeypatch.setattr(
-        "cl_server_shared.config.Config.COMPUTE_STORAGE_DIR", str(clean_media_dir)
     )
 
     # Create test client
@@ -506,5 +485,4 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
         sys.modules["store.auth"]._public_key_cache = None
         sys.modules["store.auth"]._public_key_load_attempts = 0
 
-    repository_adapter.session_factory = original_session_factory
     app.dependency_overrides.clear()

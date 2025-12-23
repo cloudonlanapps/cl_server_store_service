@@ -74,8 +74,6 @@ markers = [
 ]
 addopts = "--cov=store --cov-report=html --cov-report=term-missing --cov-fail-under=90"
 
-# Custom test storage directory (optional, overridden by TEST_STORAGE_DIR env var)
-test_storage_base_dir = "/tmp/store_test_storage"
 
 [tool.coverage.run]
 source = ["src/store"]

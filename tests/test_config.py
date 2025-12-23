@@ -30,37 +30,37 @@ TEST_MEDIA_DIR = TEST_ARTIFACTS_DIR / "media_files"
 def load_test_files() -> List[Path]:
     """
     Load test file paths from test_files.txt.
-    
+
     Returns:
         List of absolute Path objects for test images
     """
     if not TEST_FILES_LIST.exists():
         return []
-    
+
     test_files = []
-    with open(TEST_FILES_LIST, 'r') as f:
+    with open(TEST_FILES_LIST, "r") as f:
         for line in f:
             line = line.strip()
             # Skip empty lines and comments
-            if not line or line.startswith('#'):
+            if not line or line.startswith("#"):
                 continue
-            
+
             # Convert relative path to absolute
             # Paths in test_files.txt are relative to media_store directory
             file_path = MEDIA_STORE_DIR / line
-            
+
             if file_path.exists():
                 test_files.append(file_path.absolute())
-    
+
     return test_files
 
 
 def get_all_test_images() -> List[Path]:
     """
     Get all available test images.
-    
+
     Loads test file paths from test_files.txt.
-    
+
     Returns:
         List of absolute Path objects for test images
     """
@@ -80,18 +80,17 @@ TERTIARY_TEST_IMAGE = TEST_IMAGES[2] if len(TEST_IMAGES) > 2 else None
 TEST_DB_URL = "sqlite:///:memory:"
 
 __all__ = [
-    'TESTS_DIR',
-    'MEDIA_STORE_DIR',
-    'IMAGES_DIR',
-    'TEST_FILES_LIST',
-    'TEST_ARTIFACTS_DIR',
-    'TEST_MEDIA_DIR',
-    'TEST_IMAGES',
-    'PRIMARY_TEST_IMAGE',
-    'SECONDARY_TEST_IMAGE',
-    'TERTIARY_TEST_IMAGE',
-    'TEST_DB_URL',
-    'load_test_files',
-    'get_all_test_images',
+    "TESTS_DIR",
+    "MEDIA_STORE_DIR",
+    "IMAGES_DIR",
+    "TEST_FILES_LIST",
+    "TEST_ARTIFACTS_DIR",
+    "TEST_MEDIA_DIR",
+    "TEST_IMAGES",
+    "PRIMARY_TEST_IMAGE",
+    "SECONDARY_TEST_IMAGE",
+    "TERTIARY_TEST_IMAGE",
+    "TEST_DB_URL",
+    "load_test_files",
+    "get_all_test_images",
 ]
-
