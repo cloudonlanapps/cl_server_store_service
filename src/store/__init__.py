@@ -1,7 +1,6 @@
 """CoLAN Store Server."""
 
 import logging
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -9,12 +8,6 @@ from sqlalchemy.orm import configure_mappers
 
 # CRITICAL: Import versioning BEFORE models
 from . import versioning  # noqa: F401
-from .compute import (
-    close_capability_manager,
-    compute_router,
-    create_compute_plugin_router,
-    get_capability_manager,
-)
 from .routes import router
 
 logger = logging.getLogger(__name__)
@@ -23,32 +16,7 @@ logger = logging.getLogger(__name__)
 configure_mappers()
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Manage app lifecycle - startup and shutdown hooks."""
-    # Startup
-    logger.info("Initializing capability manager for worker discovery")
-    try:
-        manager = get_capability_manager()
-        if manager.wait_for_capabilities(timeout=5):
-            logger.info("Capability manager ready and subscribed to workers")
-        else:
-            logger.warning("Capability manager timeout - proceeding with empty capabilities")
-    except Exception as e:
-        logger.error(f"Failed to initialize capability manager: {e}")
-
-    yield
-
-    # Shutdown
-    logger.info("Closing capability manager")
-    try:
-        close_capability_manager()
-        logger.info("Capability manager closed")
-    except Exception as e:
-        logger.error(f"Error closing capability manager: {e}")
-
-
-app = FastAPI(title="CoLAN Store", version="v1", lifespan=lifespan)
+app = FastAPI(title="CoLAN Store", version="v1")
 
 app.include_router(router)
 

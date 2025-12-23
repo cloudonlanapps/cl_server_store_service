@@ -115,7 +115,7 @@ async def create_entity(
     try:
         return service.create_entity(body, file_bytes, filename, user_id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
 @router.delete(
@@ -209,7 +209,7 @@ async def put_entity(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
         return item
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
 @router.patch(
@@ -350,9 +350,6 @@ async def update_read_auth_config(
         "read_auth_enabled": config.enabled,
         "message": "Configuration updated successfully",
     }
-
-
-# Job Management Endpoints (from compute service)
 
 
 class RootResponse(BaseModel):
