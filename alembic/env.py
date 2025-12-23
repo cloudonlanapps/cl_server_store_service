@@ -1,15 +1,13 @@
+# Import the Base and models for autogenerate support
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 from sqlalchemy.orm import configure_mappers
 from sqlalchemy_continuum import make_versioned
 
 from alembic import context
-
-# Import the Base and models for autogenerate support
-import sys
-from pathlib import Path
 
 # Add parent directory to path to import entity module
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -17,8 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # Initialize versioning before importing models
 make_versioned(user_cls=None)
 
-from store.models import Base
 from cl_server_shared.config import Config as AppConfig
+
+from store.models import Base
 
 # Configure mappers after models are imported
 configure_mappers()
