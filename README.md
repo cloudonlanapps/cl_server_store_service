@@ -1,39 +1,77 @@
-# CL Server Unified Service
+# CL Server Store Service
 
 A FastAPI-based microservice for managing media entities and compute jobs. This service combines media entity management with metadata extraction, versioning, and duplicate detection, along with job management and task processing capabilities. It provides a comprehensive API for organizing and retrieving media files, managing compute jobs, and supporting the CL Server ecosystem.
 
-**Server Port:** 8001
+**Server Port:** 8001 (default, configurable)
 **Authentication Method:** JWT with ES256 (ECDSA) signature (optional)
-**Merged Services:** Store Service (media management) + Compute Service (job management)
+**Package Manager:** uv
+**Database:** SQLite with WAL mode
+
+> **For Developers:** See [INTERNALS.md](INTERNALS.md) for package structure, development workflow, and contribution guidelines.
 
 ## Quick Start
 
-### Starting the Server
+### Prerequisites
 
-Start the store service from the root directory:
+- Python 3.12+
+- [uv](https://github.com/astral-sh/uv) package manager
+- Set `CL_SERVER_DIR` environment variable
 
 ```bash
-uv venv .venv 
-uv sync 
-uv run store [--reload --no-auth]
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Set required environment variable
+export CL_SERVER_DIR=~/.data/cl_server_data
+```
+
+### Installation
+
+```bash
+# Clone and navigate to the store service
+cd services/store
+
+# Install dependencies (uv will create .venv automatically)
+uv sync
+
+# Run database migrations
+uv run alembic upgrade head
+```
+
+### Starting the Server
+
+```bash
+# Development mode (with auto-reload)
+uv run store --reload
+
+# Production mode
+uv run store --port 8001
+
+# Custom configuration
+uv run store --host 0.0.0.0 --port 8080 --no-auth
 ```
 
 The service will:
-1. Run database migrations
-2. Start the FastAPI server on port 8001
+1. Run database migrations (unless --no-migrate is specified)
+2. Start the FastAPI server
+3. Be accessible at `http://localhost:8001`
 
-Server will be accessible at: `http://localhost:8001`
+### Available Commands
+
+```bash
+uv run store --help             # Show all options
+uv run pytest                   # Run tests
+uv run alembic upgrade head     # Run migrations
+uv run alembic revision --autogenerate -m "description"  # Create migration
+```
 
 ## Environment Variables
 
 ### Required
 
-Before running `./start.sh`, set these environment variables:
-
-| Variable | Description | Example |
+| Variable | Description | Default |
 |----------|-------------|---------|
-| `CL_VENV_DIR` | Path to Python virtual environments directory | `/opt/venv` |
-| `CL_SERVER_DIR` | Path to persistent data directory (database, media, logs) | `/opt/cl_server_data` |
+| `CL_SERVER_DIR` | Path to persistent data directory (database, media, logs) | **Required** |
 
 ### Optional Configuration
 

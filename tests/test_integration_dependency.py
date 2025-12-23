@@ -27,74 +27,58 @@ import shutil
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def integration_app():
     """Create app with in-memory database but WITHOUT overriding get_db().
 
     This ensures we test the real dependency injection path.
-    The critical difference: we set environment variables before importing,
-    rather than overriding dependencies after import.
+    Uses the auth service pattern: patch database objects, don't mess with modules.
     """
     from unittest.mock import MagicMock, patch
 
-    # Create temp directory for media storage
-    temp_media_dir = tempfile.mkdtemp()
+    from cl_server_shared.models import Base
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import configure_mappers, sessionmaker
+    from sqlalchemy.pool import StaticPool
 
-    # Set environment variables BEFORE importing app
-    os.environ["STORE_DATABASE_URL"] = "sqlite:///:memory:"
-    os.environ["MEDIA_STORAGE_DIR"] = temp_media_dir
-    os.environ["AUTH_DISABLED"] = "true"  # Disable auth for integration tests
+    from store import app, database
 
-    # Remove cached modules to force fresh import with new env vars
-    modules_to_remove = [
-        "src",
-        "store.auth",
-        "store.config",
-        "store.database",
-        "store.models",
-        "store.routes",
-        "store.service",
-        "store.capability_manager",
-        "store.versioning",
-        "cl_server_shared.config",  # CRITICAL: Clear shared config to reload AUTH_DISABLED
-    ]
-    for module_name in modules_to_remove:
-        if module_name in sys.modules:
-            del sys.modules[module_name]
+    # Create test engine
+    test_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
-    # Mock MQTT client before importing app
+    # Configure versioning
+    configure_mappers()
+
+    # Create tables in test database
+    Base.metadata.create_all(bind=test_engine)
+
+    # Mock MQTT client
     mock_mqtt_client = MagicMock()
     mock_mqtt_client.get_cached_capabilities.return_value = {}
     mock_mqtt_client.capabilities_cache = {}
     mock_mqtt_client.wait_for_capabilities.return_value = True
 
-    with patch(
-        "store.capability_manager._capability_manager_instance", mock_mqtt_client
+    # Patch the module-level engine, SessionLocal, MQTT client, and Config
+    from cl_server_shared import Config
+
+    with (
+        patch.object(database, "engine", test_engine),
+        patch.object(database, "SessionLocal", TestSessionLocal),
+        patch("store.capability_manager._capability_manager_instance", mock_mqtt_client),
+        patch.object(Config, "AUTH_DISABLED", True),
     ):
-        # Import app AFTER setting environment variables and clearing cache
-        from store import app
-        from store.database import engine
-        from store.models import Base
-
-        # Create tables (including versioning tables)
-        Base.metadata.create_all(bind=engine)
-
         yield app
 
     # Cleanup
-    from store.models import Base
-    from store.database import engine
-
-    Base.metadata.drop_all(bind=engine)
-    shutil.rmtree(temp_media_dir, ignore_errors=True)
-
-    # Clean up environment
-    for key in ["STORE_DATABASE_URL", "MEDIA_STORAGE_DIR", "AUTH_DISABLED"]:
-        if key in os.environ:
-            del os.environ[key]
+    Base.metadata.drop_all(bind=test_engine)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def integration_client(integration_app):
     """Test client with NO dependency overrides.
 

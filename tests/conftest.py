@@ -149,13 +149,13 @@ def client(test_engine, clean_media_dir, monkeypatch):
         original_session_factory = repository_adapter.session_factory
         repository_adapter.session_factory = TestingSessionLocal
 
-        # CRITICAL: Patch the file_storage_service used by plugin routes
-        # The plugin routes use the module-level file_storage_service which points to production dir
+        # CRITICAL: Patch the job_storage_service used by plugin routes
+        # The plugin routes use the module-level job_storage_service which points to production dir
         # We need to patch its base_dir to use the test directory
-        from store import file_storage_service as production_file_storage
+        from store import job_storage_service as production_job_storage
 
-        original_file_storage_base_dir = production_file_storage.base_dir
-        production_file_storage.base_dir = clean_media_dir
+        original_job_storage_base_dir = production_job_storage.base_dir
+        production_job_storage.base_dir = clean_media_dir
 
         # Create test client
         with TestClient(app) as test_client:
@@ -163,7 +163,7 @@ def client(test_engine, clean_media_dir, monkeypatch):
 
         # Cleanup
         repository_adapter.session_factory = original_session_factory
-        production_file_storage.base_dir = original_file_storage_base_dir
+        production_job_storage.base_dir = original_job_storage_base_dir
         app.dependency_overrides.clear()
 
 
@@ -250,22 +250,22 @@ def sample_job_data_high_priority():
 
 @pytest.fixture
 def file_storage_service(clean_media_dir):
-    """Create a FileStorageService instance using the clean media directory."""
-    from cl_server_shared.file_storage import FileStorageService
+    """Create an EntityStorageService instance using the clean media directory."""
+    from store.entity_storage import EntityStorageService
 
-    return FileStorageService(base_dir=str(clean_media_dir))
+    return EntityStorageService(base_dir=str(clean_media_dir))
 
 
 @pytest.fixture
-def job_service(test_db_session, file_storage_service):
+def job_service(test_db_session):
     """Create a JobService instance for testing.
 
     Returns:
-        JobService: Service instance with test database and file storage
+        JobService: Service instance with test database
     """
     from store.service import JobService
 
-    return JobService(db=test_db_session, base_dir=str(file_storage_service.base_dir))
+    return JobService(db=test_db_session)
 
 
 @pytest.fixture(scope="function")
@@ -517,13 +517,13 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
         original_session_factory = repository_adapter.session_factory
         repository_adapter.session_factory = TestingSessionLocal
 
-        # CRITICAL: Patch the file_storage_service used by plugin routes
-        # The plugin routes use the module-level file_storage_service which points to production dir
+        # CRITICAL: Patch the job_storage_service used by plugin routes
+        # The plugin routes use the module-level job_storage_service which points to production dir
         # We need to patch its base_dir to use the test directory
-        from store import file_storage_service as production_file_storage
+        from store import job_storage_service as production_job_storage
 
-        original_file_storage_base_dir = production_file_storage.base_dir
-        production_file_storage.base_dir = clean_media_dir
+        original_job_storage_base_dir = production_job_storage.base_dir
+        production_job_storage.base_dir = clean_media_dir
 
         # Patch Config.MEDIA_STORAGE_DIR to use test media directory
         # EntityService reads this config value internally
@@ -548,5 +548,5 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
             sys.modules["store.auth"]._public_key_load_attempts = 0
 
         repository_adapter.session_factory = original_session_factory
-        production_file_storage.base_dir = original_file_storage_base_dir
+        production_job_storage.base_dir = original_job_storage_base_dir
         app.dependency_overrides.clear()
