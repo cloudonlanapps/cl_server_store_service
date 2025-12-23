@@ -5,17 +5,12 @@ from __future__ import annotations
 from typing import Generator
 
 from cl_server_shared.config import Config
+from cl_server_shared.models import Base
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 # CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
 from . import versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
-
-
-class Base(DeclarativeBase):
-    """Base class for all SQLAlchemy models."""
-
-    pass
 
 
 def enable_wal_mode(dbapi_conn, connection_record) -> None:

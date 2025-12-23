@@ -2,18 +2,13 @@ from __future__ import annotations
 
 from typing import Optional, cast
 
-# Import shared models to ensure they're registered with our Base
-from cl_server_shared.models import Job, QueueEntry
-from sqlalchemy import BigInteger, Boolean, Float, Integer, String, Table
+# CRITICAL: Import versioning BEFORE defining models with __versioned__
+from . import versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
+
+# Import shared models and Base
+from cl_server_shared.models import Base, Job, QueueEntry
+from sqlalchemy import BigInteger, Boolean, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
-
-# Import Base from local database module (with WAL mode support)
-from .database import Base
-
-# Register shared model tables with our local Base metadata so alembic can find them
-# This ensures the jobs and queue tables are created in our database
-for table in [cast(Table, Job.__table__), cast(Table, QueueEntry.__table__)]:
-    table.to_metadata(Base.metadata)
 
 
 class Entity(Base):
