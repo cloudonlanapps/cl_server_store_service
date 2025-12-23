@@ -77,9 +77,7 @@ def test_engine():
 @pytest.fixture(scope="function")
 def test_db_session(test_engine):
     """Create a test database session."""
-    TestingSessionLocal = sessionmaker(
-        autocommit=False, autoflush=False, bind=test_engine
-    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     session = TestingSessionLocal()
 
     yield session
@@ -102,9 +100,7 @@ def client(test_engine, clean_media_dir, monkeypatch):
     print(f"root directory now is {clean_media_dir}")
 
     # Create session maker
-    TestingSessionLocal = sessionmaker(
-        autocommit=False, autoflush=False, bind=test_engine
-    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
     # Override the get_db dependency
     def override_get_db():
@@ -314,9 +310,7 @@ def jwt_token_generator(key_pair):
             """Initialize with private key for signing tokens."""
             self.private_key = private_key_pem
 
-        def generate_token(
-            self, sub="testuser", permissions=None, is_admin=False, expired=False
-        ):
+        def generate_token(self, sub="testuser", permissions=None, is_admin=False, expired=False):
             """Generate a JWT token with specified claims.
 
             Args:
@@ -471,9 +465,7 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     shutil.copy(public_key_path, expected_key_path)
 
     # Create session maker
-    TestingSessionLocal = sessionmaker(
-        autocommit=False, autoflush=False, bind=test_engine
-    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
     # Override the get_db dependency
     def override_get_db():
@@ -489,9 +481,7 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     mock_mqtt_client.capabilities_cache = {}
     mock_mqtt_client.wait_for_capabilities.return_value = True
 
-    with patch(
-        "store.capability_manager._capability_manager_instance", mock_mqtt_client
-    ):
+    with patch("store.capability_manager._capability_manager_instance", mock_mqtt_client):
         # Import app
         from store import app, repository_adapter
         from store.auth import get_current_user

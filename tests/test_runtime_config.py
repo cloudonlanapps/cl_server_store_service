@@ -82,11 +82,7 @@ class TestConfigService:
         assert value1 == "value1"
 
         # Manually update database (bypass cache)
-        config = (
-            db_session.query(ServiceConfig)
-            .filter(ServiceConfig.key == "cached_key")
-            .first()
-        )
+        config = db_session.query(ServiceConfig).filter(ServiceConfig.key == "cached_key").first()
         config.value = "value2"
         db_session.commit()
 

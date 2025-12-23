@@ -3,18 +3,18 @@
 import logging
 from contextlib import asynccontextmanager
 
-# Import for cl_ml_tools integration
-from cl_ml_tools import create_master_router
-from cl_server_shared import Config, JobRepositoryService, JobStorageService
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import configure_mappers
 
 # CRITICAL: Import versioning BEFORE models
 from . import versioning  # noqa: F401
-from .auth import require_permission
-from .capability_manager import close_capability_manager, get_capability_manager
-from .database import SessionLocal
+from .compute import (
+    close_capability_manager,
+    compute_router,
+    create_compute_plugin_router,
+    get_capability_manager,
+)
 from .routes import router
 
 logger = logging.getLogger(__name__)
@@ -54,20 +54,12 @@ app = FastAPI(title="CoLAN Store", version="v1", lifespan=lifespan)
 
 app.include_router(router)
 
-# Mount cl_ml_tools plugin routes
-# Create adapter instances
-repository_adapter = JobRepositoryService(SessionLocal)
-job_storage_service = JobStorageService(base_dir=Config.COMPUTE_STORAGE_DIR)
-
-# Create and mount plugin router
-# NOTE: We pass require_permission("ai_inference_support") instead of get_current_user
-# This enforces proper authentication and authorization for plugin routes
-plugin_router = create_master_router(
-    repository=repository_adapter,
-    file_storage=job_storage_service,
-    get_current_user=require_permission("ai_inference_support"),
-)
+# Mount compute plugin routes (from cl_ml_tools)
+plugin_router, repository_adapter = create_compute_plugin_router()
 app.include_router(plugin_router, prefix="/compute", tags=["compute-plugins"])
+
+# Mount compute management routes
+app.include_router(compute_router, prefix="/compute", tags=["compute"])
 
 
 @app.exception_handler(HTTPException)
