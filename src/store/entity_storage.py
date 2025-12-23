@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -36,7 +36,7 @@ class EntityStorageService:
             Path object for the file storage location
         """
         # Use current date for organization
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         year = now.strftime("%Y")
         month = now.strftime("%m")
         day = now.strftime("%d")

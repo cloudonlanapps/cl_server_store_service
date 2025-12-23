@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List, Optional
-
 from fastapi import (
     APIRouter,
     Body,
@@ -17,7 +15,7 @@ from fastapi import (
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import auth, schemas, service
+from . import auth, schemas
 from . import config_service as cfg_service
 from .database import get_db
 from .service import EntityService
@@ -272,13 +270,13 @@ async def delete_entity(
     summary="Get Entity Versions",
     description="Retrieves all versions of a specific entity.",
     operation_id="get_entity_versions",
-    responses={200: {"model": List[dict], "description": "Successful Response"}},
+    responses={200: {"model": list[dict], "description": "Successful Response"}},
 )
 async def get_entity_versions(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
     user: dict | None = Depends(auth.require_permission("media_store_read")),
-) -> List[dict]:
+) -> list[dict]:
     service = EntityService(db)
     versions = service.get_entity_versions(entity_id)
     if not versions:

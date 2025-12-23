@@ -5,9 +5,8 @@ import io
 import json
 import logging
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from cl_server_shared import Config
 from clmediakit import CLMetaData
@@ -42,9 +41,9 @@ class EntityService:
     @staticmethod
     def _now_timestamp() -> int:
         """Return current UTC timestamp in milliseconds."""
-        return int(datetime.now(timezone.utc).timestamp() * 1000)
+        return int(datetime.now(UTC).timestamp() * 1000)
 
-    def _extract_metadata(self, file_bytes: bytes, filename: str = "file") -> Dict:
+    def _extract_metadata(self, file_bytes: bytes, filename: str = "file") -> dict:
         """
         Extract metadata from file using CLMetaData.
 
@@ -171,7 +170,7 @@ class EntityService:
         version: int | None = None,
         filter_param: str | None = None,
         search_query: str | None = None,
-    ) -> Tuple[List[Item], int]:
+    ) -> tuple[list[Item], int]:
         """
         Retrieve all entities with optional pagination and versioning.
 
@@ -257,7 +256,7 @@ class EntityService:
 
         return None
 
-    def get_entity_versions(self, entity_id: int) -> List[Dict]:
+    def get_entity_versions(self, entity_id: int) -> list[dict]:
         """
         Get all versions of an entity with metadata.
 
@@ -679,7 +678,7 @@ class JobService:
                         deleted_count += 1
 
         # Remove cleaned up jobs from database using repository
-        current_time_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        current_time_ms = int(datetime.now(UTC).timestamp() * 1000)
         cutoff_time_ms = current_time_ms - (days * 24 * 60 * 60 * 1000)
 
         old_jobs = self.db.query(Job).filter(Job.created_at < cutoff_time_ms).all()

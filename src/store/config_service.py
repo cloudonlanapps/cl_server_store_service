@@ -6,8 +6,7 @@ Provides database-backed configuration with in-memory caching for performance.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -33,7 +32,7 @@ class ConfigService:
     @staticmethod
     def _now_timestamp() -> int:
         """Return current UTC timestamp in milliseconds."""
-        return int(datetime.now(timezone.utc).timestamp() * 1000)
+        return int(datetime.now(UTC).timestamp() * 1000)
 
     def _is_cache_valid(self, key: str) -> bool:
         """Check if cached value is still valid.
@@ -95,9 +94,7 @@ class ConfigService:
             config.updated_by = user_id
         else:
             # Create new
-            config = ServiceConfig(
-                key=key, value=value, updated_at=now, updated_by=user_id
-            )
+            config = ServiceConfig(key=key, value=value, updated_at=now, updated_by=user_id)
             self.db.add(config)
 
         self.db.commit()
@@ -115,9 +112,7 @@ class ConfigService:
         value = self.get_config("read_auth_enabled", "false")
         return value.lower() == "true"
 
-    def set_read_auth_enabled(
-        self, enabled: bool, user_id: str | None = None
-    ) -> None:
+    def set_read_auth_enabled(self, enabled: bool, user_id: str | None = None) -> None:
         """Set read authentication enabled status.
 
         Args:

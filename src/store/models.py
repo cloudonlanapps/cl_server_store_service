@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from typing import Optional, cast
-
-# CRITICAL: Import versioning BEFORE defining models with __versioned__
-from . import versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
-
 # Import shared Base
 from cl_server_shared.models import Base
 from sqlalchemy import BigInteger, Boolean, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
+
+# CRITICAL: Import versioning BEFORE defining models with __versioned__
+from . import versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 
 class Entity(Base):
