@@ -120,7 +120,7 @@ class TestAuthenticationLogic:
         from store.auth import require_permission
         import asyncio
 
-        from unittest.mock import patch
+        from unittest.mock import patch, MagicMock
 
         user = {
             "sub": "testuser",
@@ -129,9 +129,16 @@ class TestAuthenticationLogic:
         }
 
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
-            permission_checker = require_permission("media_store_read")
-            result = asyncio.run(permission_checker(user))
-            assert result == user
+            # Mock ConfigService to return True for read_auth_enabled
+            # This ensures the permission check proceeds normally
+            with patch("store.config_service.ConfigService") as mock_config_service_class:
+                mock_config_service = MagicMock()
+                mock_config_service.get_read_auth_enabled.return_value = True
+                mock_config_service_class.return_value = mock_config_service
+                
+                permission_checker = require_permission("media_store_read")
+                result = asyncio.run(permission_checker(user))
+                assert result == user
 
     def test_require_admin_allows_admin_user(self):
         """Admin user should be allowed by require_admin."""

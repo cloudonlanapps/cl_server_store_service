@@ -110,57 +110,41 @@ def client(test_engine, clean_media_dir, monkeypatch):
         finally:
             db.close()
 
-    # Mock capability_manager before importing app
-    mock_manager = MagicMock()
-    mock_manager.get_cached_capabilities.return_value = {}
-    mock_manager.capabilities_cache = {}  # Empty cache = 0 workers
-    mock_manager.wait_for_capabilities.return_value = True
+    # Import app and override dependency
+    from store import app, repository_adapter
+    from store.auth import get_current_user
+    from store.database import get_db
 
-    with patch("store.capability_manager._capability_manager_instance", mock_manager):
-        # Import app and override dependency
-        from store import app, repository_adapter
-        from store.auth import get_current_user
-        from store.database import get_db
+    # CRITICAL: Reset auth module's public key cache to prevent contamination from auth tests
+    # Even though this fixture bypasses auth, we need to clear any cached keys from previous tests
+    if "store.auth" in sys.modules:
+        sys.modules["store.auth"]._public_key_cache = None
+        sys.modules["store.auth"]._public_key_load_attempts = 0
 
-        # CRITICAL: Reset auth module's public key cache to prevent contamination from auth tests
-        # Even though this fixture bypasses auth, we need to clear any cached keys from previous tests
-        if "store.auth" in sys.modules:
-            sys.modules["store.auth"]._public_key_cache = None
-            sys.modules["store.auth"]._public_key_load_attempts = 0
+    app.dependency_overrides[get_db] = override_get_db
 
-        app.dependency_overrides[get_db] = override_get_db
+    # Override auth dependency to bypass authentication in tests
+    def override_auth():
+        return {
+            "sub": "testuser",
+            "permissions": ["media_store_write", "ai_inference_support"],
+            "is_admin": True,
+        }
 
-        # Override auth dependency to bypass authentication in tests
-        def override_auth():
-            return {
-                "sub": "testuser",
-                "permissions": ["media_store_write", "ai_inference_support"],
-                "is_admin": True,
-            }
+    app.dependency_overrides[get_current_user] = override_auth
 
-        app.dependency_overrides[get_current_user] = override_auth
+    # CRITICAL: Patch the repository adapter to use test session factory
+    # The plugin routes use this adapter, which was created with production SessionLocal
+    original_session_factory = repository_adapter.session_factory
+    repository_adapter.session_factory = TestingSessionLocal
 
-        # CRITICAL: Patch the repository adapter to use test session factory
-        # The plugin routes use this adapter, which was created with production SessionLocal
-        original_session_factory = repository_adapter.session_factory
-        repository_adapter.session_factory = TestingSessionLocal
+    # Create test client
+    with TestClient(app) as test_client:
+        yield test_client
 
-        # CRITICAL: Patch the job_storage_service used by plugin routes
-        # The plugin routes use the module-level job_storage_service which points to production dir
-        # We need to patch its base_dir to use the test directory
-        from store import job_storage_service as production_job_storage
-
-        original_job_storage_base_dir = production_job_storage.base_dir
-        production_job_storage.base_dir = clean_media_dir
-
-        # Create test client
-        with TestClient(app) as test_client:
-            yield test_client
-
-        # Cleanup
-        repository_adapter.session_factory = original_session_factory
-        production_job_storage.base_dir = original_job_storage_base_dir
-        app.dependency_overrides.clear()
+    # Cleanup
+    repository_adapter.session_factory = original_session_factory
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture(scope="function")
@@ -475,68 +459,52 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
         finally:
             db.close()
 
-    # Mock get_mqtt_client before importing app
-    mock_mqtt_client = MagicMock()
-    mock_mqtt_client.get_cached_capabilities.return_value = {}
-    mock_mqtt_client.capabilities_cache = {}
-    mock_mqtt_client.wait_for_capabilities.return_value = True
+    # Import app
+    from store import app, repository_adapter
+    from store.auth import get_current_user
+    from store.database import get_db
+    from store.service import EntityService, JobService
 
-    with patch("store.capability_manager._capability_manager_instance", mock_mqtt_client):
-        # Import app
-        from store import app, repository_adapter
-        from store.auth import get_current_user
-        from store.database import get_db
-        from store.service import EntityService, JobService
+    # CRITICAL: Reset auth module's public key cache AFTER importing
+    # This ensures each test uses the fresh key pair from the key_pair fixture
+    # Use sys.modules to ensure we get the actual module instance being used
+    if "store.auth" in sys.modules:
+        sys.modules["store.auth"]._public_key_cache = None
+        sys.modules["store.auth"]._public_key_load_attempts = 0
 
-        # CRITICAL: Reset auth module's public key cache AFTER importing
-        # This ensures each test uses the fresh key pair from the key_pair fixture
-        # Use sys.modules to ensure we get the actual module instance being used
-        if "store.auth" in sys.modules:
-            sys.modules["store.auth"]._public_key_cache = None
-            sys.modules["store.auth"]._public_key_load_attempts = 0
+    # CRITICAL: Clear any existing auth override from previous tests
+    # This ensures auth tests actually test authentication, not bypassed auth
+    if get_current_user in app.dependency_overrides:
+        del app.dependency_overrides[get_current_user]
 
-        # CRITICAL: Clear any existing auth override from previous tests
-        # This ensures auth tests actually test authentication, not bypassed auth
-        if get_current_user in app.dependency_overrides:
-            del app.dependency_overrides[get_current_user]
+    app.dependency_overrides[get_db] = override_get_db
 
-        app.dependency_overrides[get_db] = override_get_db
+    # CRITICAL: Patch the repository adapter to use test session factory
+    # The plugin routes use this adapter, which was created with production SessionLocal
+    original_session_factory = repository_adapter.session_factory
+    repository_adapter.session_factory = TestingSessionLocal
 
-        # CRITICAL: Patch the repository adapter to use test session factory
-        # The plugin routes use this adapter, which was created with production SessionLocal
-        original_session_factory = repository_adapter.session_factory
-        repository_adapter.session_factory = TestingSessionLocal
+    # Patch Config.MEDIA_STORAGE_DIR to use test media directory
+    # EntityService reads this config value internally
+    monkeypatch.setattr(
+        "cl_server_shared.config.Config.MEDIA_STORAGE_DIR", str(clean_media_dir)
+    )
 
-        # CRITICAL: Patch the job_storage_service used by plugin routes
-        # The plugin routes use the module-level job_storage_service which points to production dir
-        # We need to patch its base_dir to use the test directory
-        from store import job_storage_service as production_job_storage
+    # Patch Config.COMPUTE_STORAGE_DIR to use test media directory
+    # JobService reads this config value internally
+    monkeypatch.setattr(
+        "cl_server_shared.config.Config.COMPUTE_STORAGE_DIR", str(clean_media_dir)
+    )
 
-        original_job_storage_base_dir = production_job_storage.base_dir
-        production_job_storage.base_dir = clean_media_dir
+    # Create test client
+    with TestClient(app) as test_client:
+        yield test_client
 
-        # Patch Config.MEDIA_STORAGE_DIR to use test media directory
-        # EntityService reads this config value internally
-        monkeypatch.setattr(
-            "cl_server_shared.config.Config.MEDIA_STORAGE_DIR", str(clean_media_dir)
-        )
+    # Cleanup - CRITICAL: Reset cache again after test completes
+    # This ensures the next test doesn't use a stale cached key
+    if "store.auth" in sys.modules:
+        sys.modules["store.auth"]._public_key_cache = None
+        sys.modules["store.auth"]._public_key_load_attempts = 0
 
-        # Patch Config.COMPUTE_STORAGE_DIR to use test media directory
-        # JobService reads this config value internally
-        monkeypatch.setattr(
-            "cl_server_shared.config.Config.COMPUTE_STORAGE_DIR", str(clean_media_dir)
-        )
-
-        # Create test client
-        with TestClient(app) as test_client:
-            yield test_client
-
-        # Cleanup - CRITICAL: Reset cache again after test completes
-        # This ensures the next test doesn't use a stale cached key
-        if "store.auth" in sys.modules:
-            sys.modules["store.auth"]._public_key_cache = None
-            sys.modules["store.auth"]._public_key_load_attempts = 0
-
-        repository_adapter.session_factory = original_session_factory
-        production_job_storage.base_dir = original_job_storage_base_dir
-        app.dependency_overrides.clear()
+    repository_adapter.session_factory = original_session_factory
+    app.dependency_overrides.clear()

@@ -17,11 +17,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
 import os
-from fastapi.testclient import TestClient
-import tempfile
 import shutil
+import tempfile
+
+import pytest
+from fastapi.testclient import TestClient
 
 # Mark all tests in this module to be run separately
 pytestmark = pytest.mark.integration
@@ -69,7 +70,6 @@ def integration_app():
     with (
         patch.object(database, "engine", test_engine),
         patch.object(database, "SessionLocal", TestSessionLocal),
-        patch("store.capability_manager._capability_manager_instance", mock_mqtt_client),
         patch.object(Config, "AUTH_DISABLED", True),
     ):
         yield app
@@ -110,9 +110,9 @@ class TestDependencyInjection:
         )
 
         # If get_db() is broken, this will return 500
-        assert (
-            response.status_code == 201
-        ), f"Entity creation failed: {response.json() if response.status_code != 500 else response.text}"
+        assert response.status_code == 201, (
+            f"Entity creation failed: {response.json() if response.status_code != 500 else response.text}"
+        )
         assert response.json()["label"] == "Test Collection"
         assert response.json()["is_collection"] is True
 
@@ -159,9 +159,7 @@ class TestEntityOperations:
         # Update entity
         update_response = integration_client.patch(
             f"/entities/{entity_id}",
-            json={
-                "body": {"label": "Updated Name", "description": "Updated description"}
-            },
+            json={"body": {"label": "Updated Name", "description": "Updated description"}},
         )
         assert update_response.status_code == 200
         assert update_response.json()["label"] == "Updated Name"

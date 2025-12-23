@@ -33,9 +33,7 @@ async def lifespan(app: FastAPI):
         if manager.wait_for_capabilities(timeout=5):
             logger.info("Capability manager ready and subscribed to workers")
         else:
-            logger.warning(
-                "Capability manager timeout - proceeding with empty capabilities"
-            )
+            logger.warning("Capability manager timeout - proceeding with empty capabilities")
     except Exception as e:
         logger.error(f"Failed to initialize capability manager: {e}")
 
@@ -53,13 +51,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="CoLAN Store", version="v1", lifespan=lifespan)
 
 app.include_router(router)
-
-# Mount compute plugin routes (from cl_ml_tools)
-plugin_router, repository_adapter = create_compute_plugin_router()
-app.include_router(plugin_router, prefix="/compute", tags=["compute-plugins"])
-
-# Mount compute management routes
-app.include_router(compute_router, prefix="/compute", tags=["compute"])
 
 
 @app.exception_handler(HTTPException)
