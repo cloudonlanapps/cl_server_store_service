@@ -50,7 +50,7 @@ class ConfigService:
         age = (self._now_timestamp() - self._cache_timestamps[key]) / 1000
         return age < self._cache_ttl
 
-    def get_config(self, key: str, default: str] = None) -> Optional[str | None:
+    def get_config(self, key: str, default: str | None = None) -> str | None:
         """Get configuration value.
 
         Args:
