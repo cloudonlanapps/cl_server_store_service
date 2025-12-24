@@ -59,7 +59,7 @@ def main() -> int:
     try:
         # Pass app as import string for reload to work
         uvicorn.run(
-            "store:app",
+            "store.store:app",
             host=args.host,
             port=args.port,
             reload=args.reload,

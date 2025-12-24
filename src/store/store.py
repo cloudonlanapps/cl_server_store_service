@@ -6,8 +6,6 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import configure_mappers
 
-# CRITICAL: Import versioning BEFORE models
-from . import versioning  # noqa: F401
 from .routes import router
 
 logger = logging.getLogger(__name__)

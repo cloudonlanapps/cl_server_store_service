@@ -116,8 +116,8 @@ def client(test_engine, clean_media_dir, monkeypatch):
             db.close()
 
     # Import app and override dependency
-    from store import app
-    from store.auth import get_current_user
+    from store.store import app
+    from store.auth import get_current_user, UserPayload
     from store.database import get_db
 
     # CRITICAL: Reset auth module's public key cache to prevent contamination from auth tests
@@ -130,11 +130,11 @@ def client(test_engine, clean_media_dir, monkeypatch):
 
     # Override auth dependency to bypass authentication in tests
     def override_auth():
-        return {
-            "sub": "testuser",
-            "permissions": ["media_store_write", "ai_inference_support"],
-            "is_admin": True,
-        }
+        return UserPayload(
+            sub="testuser",
+            permissions=["media_store_write", "ai_inference_support"],
+            is_admin=True,
+        )
 
     app.dependency_overrides[get_current_user] = override_auth
 
@@ -451,7 +451,7 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
             db.close()
 
     # Import app
-    from store import app
+    from store.store import app
     from store.auth import get_current_user
     from store.database import get_db
     from store.service import EntityService

@@ -421,17 +421,17 @@ class EntityService:
         self,
         entity_id: int,
         body: BodyUpdateEntity,
-        image: bytes,
+        image: bytes | None,
         filename: str = "file",
         user_id: str | None = None,
     ) -> Item | None:
         """
-        Fully update an existing entity (PUT) - requires file upload.
+        Fully update an existing entity (PUT) - file upload is optional for non-collections.
 
         Args:
             entity_id: Entity ID
             body: Entity update data
-            image: Image file bytes (mandatory for PUT)
+            image: Image file bytes (optional - if None, only metadata is updated)
             filename: Original filename
             user_id: Optional user identifier from JWT (None in demo mode)
 

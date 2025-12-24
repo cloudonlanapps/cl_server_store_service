@@ -48,17 +48,17 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_correct_permission(self):
         """User with the required permission should be allowed."""
-        from store.auth import require_permission
+        from store.auth import require_permission, UserPayload
         import asyncio
 
         from unittest.mock import patch
 
         # Mock user with write permission
-        user = {
-            "sub": "testuser",
-            "permissions": ["media_store_write"],
-            "is_admin": False,
-        }
+        user = UserPayload(
+            sub="testuser",
+            permissions=["media_store_write"],
+            is_admin=False,
+        )
 
         # Should not raise exception
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
@@ -68,12 +68,12 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_admin(self):
         """Admin user should be allowed even without specific permission."""
-        from store.auth import require_permission
+        from store.auth import require_permission, UserPayload
         import asyncio
 
         from unittest.mock import patch
 
-        user = {"sub": "admin", "permissions": [], "is_admin": True}
+        user = UserPayload(sub="admin", permissions=[], is_admin=True)
 
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             permission_checker = require_permission("media_store_write")
@@ -82,16 +82,16 @@ class TestAuthenticationLogic:
 
     def test_require_permission_rejects_wrong_permission(self):
         """User with only read permission should be rejected when write is required."""
-        from store.auth import require_permission
+        from store.auth import require_permission, UserPayload
         import asyncio
 
         from unittest.mock import patch
 
-        user = {
-            "sub": "testuser",
-            "permissions": ["media_store_read"],
-            "is_admin": False,
-        }
+        user = UserPayload(
+            sub="testuser",
+            permissions=["media_store_read"],
+            is_admin=False,
+        )
 
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             with pytest.raises(HTTPException) as exc_info:
@@ -117,16 +117,16 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_read_permission(self):
         """User with media_store_read permission should be allowed."""
-        from store.auth import require_permission
+        from store.auth import require_permission, UserPayload
         import asyncio
 
         from unittest.mock import patch, MagicMock
 
-        user = {
-            "sub": "testuser",
-            "permissions": ["media_store_read"],
-            "is_admin": False,
-        }
+        user = UserPayload(
+            sub="testuser",
+            permissions=["media_store_read"],
+            is_admin=False,
+        )
 
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             # Mock ConfigService to return True for read_auth_enabled
@@ -135,19 +135,19 @@ class TestAuthenticationLogic:
                 mock_config_service = MagicMock()
                 mock_config_service.get_read_auth_enabled.return_value = True
                 mock_config_service_class.return_value = mock_config_service
-                
+
                 permission_checker = require_permission("media_store_read")
                 result = asyncio.run(permission_checker(user))
                 assert result == user
 
     def test_require_admin_allows_admin_user(self):
         """Admin user should be allowed by require_admin."""
-        from store.auth import require_admin
+        from store.auth import require_admin, UserPayload
         import asyncio
 
         from unittest.mock import patch
 
-        user = {"sub": "admin", "permissions": [], "is_admin": True}
+        user = UserPayload(sub="admin", permissions=[], is_admin=True)
 
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             result = asyncio.run(require_admin(user))
@@ -155,16 +155,16 @@ class TestAuthenticationLogic:
 
     def test_require_admin_rejects_non_admin(self):
         """Non-admin user should be rejected by require_admin."""
-        from store.auth import require_admin
+        from store.auth import require_admin, UserPayload
         import asyncio
 
         from unittest.mock import patch
 
-        user = {
-            "sub": "testuser",
-            "permissions": ["media_store_write"],
-            "is_admin": False,
-        }
+        user = UserPayload(
+            sub="testuser",
+            permissions=["media_store_write"],
+            is_admin=False,
+        )
 
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             with pytest.raises(HTTPException) as exc_info:
@@ -271,7 +271,7 @@ class TestJWTValidation:
 
             # Expired token should be rejected with 401
             assert response.status_code == 401
-            assert "invalid" in response.json().get("detail", "").lower()
+            assert "expired" in response.json().get("detail", "").lower()
 
     def test_invalid_token_format_is_rejected(
         self, auth_client, jwt_token_generator, key_pair

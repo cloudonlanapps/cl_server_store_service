@@ -1,3 +1,7 @@
-from .store import app
+"""CoLAN Store package.
 
-__all__ = ["app"]
+To use the FastAPI app, import from store.store:
+    from store.store import app
+"""
+
+__all__ = []

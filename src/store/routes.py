@@ -207,14 +207,13 @@ async def put_entity(
         filename = image.filename or "file"
 
     try:
-        if file_bytes:
-            item = service.update_entity(entity_id, body, file_bytes, filename, user_id)
-            if not item:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
-                )
-            return item
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file provided")
+        # Update entity (file is optional - None updates only metadata)
+        item = service.update_entity(entity_id, body, file_bytes, filename, user_id)
+        if not item:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+            )
+        return item
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
