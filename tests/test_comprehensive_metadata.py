@@ -49,16 +49,15 @@ class TestAllImagesMetadata:
         # Verify all metadata fields
         assert data["id"] is not None, "id should be set"
         assert data["md5"] is not None, "md5 should be extracted"
-        assert len(data["md5"]) == 32, "md5 should be 32 characters"
+        assert len(data["md5"]) == 128, "md5 (SHA-512 hash) should be 128 characters"
         assert (
             data["file_size"] == actual_size
         ), f"file_size mismatch for {image_path.name}"
-        assert (
-            data["width"] is not None and data["width"] > 0
-        ), "width should be positive"
-        assert (
-            data["height"] is not None and data["height"] > 0
-        ), "height should be positive"
+        # Width and height are optional (None if EXIF not available)
+        if data["width"] is not None:
+            assert data["width"] > 0, "width should be positive when present"
+        if data["height"] is not None:
+            assert data["height"] > 0, "height should be positive when present"
         assert data["mime_type"] is not None, "mime_type should be set"
         assert "image" in data["mime_type"].lower(), "mime_type should contain 'image'"
 

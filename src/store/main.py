@@ -8,6 +8,8 @@ from argparse import ArgumentParser, Namespace
 
 import uvicorn
 
+from .media_metadata import validate_tools
+
 logger = logging.getLogger("store")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -55,6 +57,14 @@ def main() -> int:
         os.environ["AUTH_DISABLED"] = "true"
     _ = os.environ.setdefault("CL_SERVER_DIR", os.getenv("CL_SERVER_DIR", ""))
 
+    # Validate required tools before starting server
+    try:
+        validate_tools()
+        logger.info("Required tools validated: ExifTool and ffprobe are available")
+    except RuntimeError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
     # Start server (blocks)
     try:
         # Pass app as import string for reload to work
@@ -67,7 +77,7 @@ def main() -> int:
         )
     except Exception as exc:
         print(f"Error starting service: {exc}", file=sys.stderr)
-        return False
+        return 1
     return 0
 
 

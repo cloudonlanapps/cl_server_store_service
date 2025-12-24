@@ -117,7 +117,14 @@ async def create_entity(
     try:
         return service.create_entity(body, file_bytes, filename, user_id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
+        # Validation errors or invalid file format
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except RuntimeError as e:
+        # Tool execution failure (ExifTool, ffprobe)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception as e:
+        # General extraction failure
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
 
 @router.delete(
@@ -215,7 +222,17 @@ async def put_entity(
             )
         return item
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
+        # Validation errors or invalid file format
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except RuntimeError as e:
+        # Tool execution failure (ExifTool, ffprobe)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except HTTPException:
+        # Re-raise HTTPException (like 404) without wrapping
+        raise
+    except Exception as e:
+        # General extraction failure
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
 
 @router.patch(

@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import contextlib
-import io
 import logging
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 from cl_server_shared import Config
-from clmediakit import CLMetaData
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .entity_storage import EntityStorageService
+from .media_metadata import MediaMetadataExtractor
 from .models import Entity
 from .schemas import BodyCreateEntity, BodyPatchEntity, BodyUpdateEntity, Item
 
@@ -37,84 +34,13 @@ class EntityService:
         self.file_storage: EntityStorageService = EntityStorageService(
             base_dir=Config.MEDIA_STORAGE_DIR
         )
+        # Initialize metadata extractor
+        self.metadata_extractor: MediaMetadataExtractor = MediaMetadataExtractor()
 
     @staticmethod
     def _now_timestamp() -> int:
         """Return current UTC timestamp in milliseconds."""
         return int(datetime.now(UTC).timestamp() * 1000)
-
-    def _extract_metadata(
-        self, file_bytes: bytes, filename: str = "file"
-    ) -> dict[str, str | int | float | None]:
-        """
-        Extract metadata from file using CLMetaData.
-
-        Args:
-            file_bytes: File content as bytes
-            filename: Original filename for extension detection
-
-        Returns:
-            Dictionary containing file metadata
-        """
-        import mimetypes
-
-        # Create temporary file for CLMetaData processing
-        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp_file:
-            _ = tmp_file.write(file_bytes)
-            tmp_path = tmp_file.name
-
-        try:
-            # Extract metadata using CLMetaData
-            try:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    cl_metadata = CLMetaData.from_media(tmp_path)
-                    metadata = cl_metadata.to_dict()
-            except Exception as e:
-                # If CLMetaData fails (e.g., invalid image), return minimal metadata with file size
-                import hashlib
-
-                print(f"Warning: CLMetaData extraction failed for {filename}: {e}")
-                ext = Path(filename).suffix.lstrip(".").lower()
-                mime_type, _ = mimetypes.guess_type(filename)
-
-                # Compute MD5 hash for duplicate detection
-                md5_hash = hashlib.md5(file_bytes).hexdigest()
-
-                metadata: dict[str, str | int | float | None] = {
-                    "extension": ext,
-                    "FileSize": len(file_bytes),
-                    "md5": md5_hash,
-                }
-                if mime_type:
-                    metadata["MIMEType"] = mime_type
-
-            # Ensure file size is always present (handle both FileSize and file_size keys)
-            file_size = metadata.get("FileSize")
-            if not file_size:
-                metadata["FileSize"] = len(file_bytes)
-
-            # Ensure MD5 is computed if not present
-            md5_val = metadata.get("md5")
-            if not md5_val:
-                import hashlib
-
-                metadata["md5"] = hashlib.md5(file_bytes).hexdigest()
-
-            # Convert CreateDate to timestamp (ms) if present
-            create_date = metadata.get("CreateDate")
-            if create_date:
-                try:
-                    # Attempt to parse EXIF date format: YYYY:MM:DD HH:MM:SS
-                    dt = datetime.strptime(str(create_date), "%Y:%m:%d %H:%M:%S")
-                    metadata["CreateDate"] = int(dt.timestamp() * 1000)
-                except ValueError:
-                    # Fallback or ignore if format is different
-                    pass
-
-            return metadata
-        finally:
-            # Clean up temporary file
-            Path(tmp_path).unlink(missing_ok=True)
 
     def _check_duplicate_md5(self, md5: str, exclude_entity_id: int | None = None) -> Entity | None:
         """
@@ -330,8 +256,8 @@ class EntityService:
 
         # Extract metadata and save file if provided
         if image:
-            # Extract metadata using CLMetaData
-            file_meta = self._extract_metadata(image, filename)
+            # Extract metadata using MediaMetadataExtractor
+            file_meta = self.metadata_extractor.extract_metadata(image, filename)
 
             # Check for duplicate MD5
             md5_value = file_meta.get("md5")
@@ -463,7 +389,7 @@ class EntityService:
         file_meta = None
         if image:
             # Extract metadata from new file
-            file_meta = self._extract_metadata(image, filename)
+            file_meta = self.metadata_extractor.extract_metadata(image, filename)
 
             # Check for duplicate MD5 (excluding current entity)
             md5_value = file_meta.get("md5")

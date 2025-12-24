@@ -15,11 +15,20 @@ A FastAPI-based microservice for managing media entities and compute jobs. This 
 
 - Python 3.12+
 - [uv](https://github.com/astral-sh/uv) package manager
+- **ExifTool** - Required for EXIF metadata extraction
+- **ffprobe** (part of FFmpeg) - Required for video duration extraction
 - Set `CL_SERVER_DIR` environment variable
 
 ```bash
 # Install uv (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install ExifTool and FFmpeg
+# macOS:
+brew install exiftool ffmpeg
+
+# Linux (Debian/Ubuntu):
+# sudo apt-get install libimage-exiftool-perl ffmpeg
 
 # Set required environment variable
 export CL_SERVER_DIR=~/.data/cl_server_data
@@ -90,9 +99,9 @@ uv run alembic revision --autogenerate -m "description"  # Create migration
 ### Media Management
 - **Media Management**: Upload, update, and delete media files (images, videos)
 - **Collections**: Organize media into hierarchical collections
-- **Metadata Extraction**: Automatic extraction of file metadata (dimensions, duration, MIME type, etc.)
+- **Metadata Extraction**: Automatic extraction of file metadata (dimensions, duration, MIME type, etc.) using ExifTool and ffprobe
 - **Versioning**: Track changes to entities with SQLAlchemy-Continuum
-- **Duplicate Detection**: MD5-based duplicate detection
+- **Duplicate Detection**: Perceptual hash-based duplicate detection (SHA-512 for images/videos, MD5 for other files)
 - **Pagination**: Efficient pagination for large media libraries
 - **Search**: Query and filter media entities
 
@@ -1074,7 +1083,8 @@ except requests.exceptions.HTTPError as e:
 - **Framework:** FastAPI
 - **Database:** SQLite with SQLAlchemy ORM
 - **Versioning:** SQLAlchemy-Continuum
-- **Media Processing:** clmediakit (custom media processing library)
+- **Media Processing:** cl_ml_tools.algorithms (perceptual hashing, EXIF extraction)
+- **Metadata Tools:** ExifTool (EXIF data), ffprobe (video duration)
 - **Authentication:** JWT with ES256 (ECDSA) signature verification
 
 ### Directory Structure
