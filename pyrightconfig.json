@@ -5,4 +5,5 @@
   "ignore": [],
   "include": ["src"],
   "reportCallInDefaultInitializer": "none",
+  "extraPaths": ["src"],
 }

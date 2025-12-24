@@ -3,10 +3,7 @@ Comprehensive metadata tests for all images in the images directory.
 Tests all Entity table fields including timestamps and file paths.
 """
 
-import os
 from datetime import datetime
-from pathlib import Path
-from venv import logger
 
 import pytest
 

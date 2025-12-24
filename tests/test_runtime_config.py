@@ -3,14 +3,9 @@ Tests for runtime configuration API and JWT user ID.
 """
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from store.store import app
 from store.config_service import ConfigService
-from store.database import get_db
-from store.models import Base, ServiceConfig
+from store.models import ServiceConfig
 
 
 @pytest.fixture(scope="function")
@@ -131,7 +126,6 @@ class TestJWTUserID:
 
         # Decode the token to verify structure (simulating what auth middleware does)
         # We use the same verify logic as the application
-        from cl_server_shared.config import Config
         from jose import jwt
 
         # In tests, we might not have the actual public key file, but we can verify

@@ -30,12 +30,11 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 from jose import jwt
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from test_config import (
     IMAGES_DIR,
     TEST_DB_URL,
-    TEST_IMAGES,
     TEST_MEDIA_DIR,
     get_all_test_images,
 )
@@ -92,8 +91,6 @@ def test_db_session(test_engine):
 def client(test_engine, clean_media_dir, monkeypatch):
     """Create a test client with a fresh database and test media directory."""
     print("Clien t was called..........")
-    import importlib
-    from unittest.mock import MagicMock, patch
 
     # Set environment variables for Config to use test directories
     # NOTE: We do NOT reload the config module as it causes issues with
@@ -116,9 +113,9 @@ def client(test_engine, clean_media_dir, monkeypatch):
             db.close()
 
     # Import app and override dependency
-    from store.store import app
-    from store.auth import get_current_user, UserPayload
+    from store.auth import UserPayload, get_current_user
     from store.database import get_db
+    from store.store import app
 
     # CRITICAL: Reset auth module's public key cache to prevent contamination from auth tests
     # Even though this fixture bypasses auth, we need to clear any cached keys from previous tests
@@ -149,7 +146,6 @@ def client(test_engine, clean_media_dir, monkeypatch):
 @pytest.fixture(scope="function")
 def clean_media_dir():
     """Clean up media files directory before and after tests."""
-    from test_config import TEST_MEDIA_DIR
 
     # Clean before test
     if TEST_MEDIA_DIR.exists():
@@ -421,9 +417,7 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     This client does NOT bypass authentication, allowing proper testing of auth flows.
     Uses the key_pair fixture to set up proper JWT validation.
     """
-    import importlib
     import sys
-    from unittest.mock import MagicMock, patch
 
     # Set PUBLIC_KEY_PATH environment variable for JWT validation
     _, public_key_path = key_pair
@@ -451,10 +445,9 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
             db.close()
 
     # Import app
-    from store.store import app
     from store.auth import get_current_user
     from store.database import get_db
-    from store.service import EntityService
+    from store.store import app
 
     # This ensures each test uses the fresh key pair from the key_pair fixture
     # Use sys.modules to ensure we get the actual module instance being used

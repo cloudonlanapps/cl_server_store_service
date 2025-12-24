@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import override
+from typing import TYPE_CHECKING, override
 
 # Import shared Base
 from cl_server_shared.models import Base
@@ -9,6 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 # CRITICAL: Import versioning BEFORE defining models with __versioned__
 from . import versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
+
+if TYPE_CHECKING:
+    from typings.sqlalchemy_continuum import VersionsRelationship
 
 
 class Entity(Base):
@@ -50,6 +53,12 @@ class Entity(Base):
 
     # Soft delete flag
     is_deleted: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
+
+    # SQLAlchemy-Continuum adds this relationship dynamically
+    if TYPE_CHECKING:
+        from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
+
+        versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
 
     @override
     def __repr__(self) -> str:

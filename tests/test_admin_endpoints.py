@@ -1,6 +1,5 @@
 """Admin configuration endpoint tests with JWT authentication."""
 
-import pytest
 
 
 class TestAdminConfigGetEndpoint:

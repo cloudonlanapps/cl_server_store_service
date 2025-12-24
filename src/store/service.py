@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from pathlib import Path
 
 from cl_server_shared import Config
 from sqlalchemy.exc import IntegrityError
@@ -63,10 +62,10 @@ class EntityService:
     @staticmethod
     def _entity_to_item(entity: Entity) -> Item:
         """
-        Convert SQLAlchemy Entity model to Pydantic Item schema.
+        Convert SQLAlchemy Entity to Pydantic Item schema.
 
         Args:
-            entity: SQLAlchemy Entity instance
+            entity: SQLAlchemy Entity instance (or version object from SQLAlchemy-Continuum)
 
         Returns:
             Pydantic Item instance
@@ -182,8 +181,8 @@ class EntityService:
             versions_list = entity.versions.all()
             # Versions are 1-indexed for the API
             if 1 <= version <= len(versions_list):
-                version_entity = versions_list[version - 1]
-                return self._entity_to_item(version_entity)
+                version_entity = versions_list[version - 1]  # pyright: ignore[reportAny]
+                return self._entity_to_item(version_entity)  # pyright: ignore[reportAny]
 
         return None
 
@@ -205,15 +204,15 @@ class EntityService:
             return []
 
         versions_list = entity.versions.all()
-        result = []
-        for idx, version in enumerate(versions_list, start=1):
-            version_info = {
+        result: list[dict[str, int | None]] = []
+        for idx, version in enumerate(versions_list, start=1):  # pyright: ignore[reportAny]
+            version_info: dict[str, int | None] = {
                 "version": idx,
                 "transaction_id": (
-                    version.transaction_id if hasattr(version, "transaction_id") else None
+                    version.transaction_id if hasattr(version, "transaction_id") else None  # pyright: ignore[reportAny]
                 ),
                 "updated_date": (
-                    version.updated_date if hasattr(version, "updated_date") else None
+                    version.updated_date if hasattr(version, "updated_date") else None  # pyright: ignore[reportAny]
                 ),
             }
             result.append(version_info)
@@ -243,7 +242,7 @@ class EntityService:
             DuplicateFileError: If file with same MD5 already exists
         """
         now = self._now_timestamp()
-        file_meta = {}
+        file_meta = None
         file_path = None
 
         # Validation: image is required if is_collection is False
@@ -260,53 +259,37 @@ class EntityService:
             file_meta = self.metadata_extractor.extract_metadata(image, filename)
 
             # Check for duplicate MD5
-            md5_value = file_meta.get("md5")
-            if md5_value and isinstance(md5_value, str):
-                duplicate = self._check_duplicate_md5(md5_value)
-                if duplicate:
-                    # Return the existing item instead of raising an error
-                    return self._entity_to_item(duplicate)
+            duplicate = self._check_duplicate_md5(file_meta.md5)
+            if duplicate:
+                # Return the existing item instead of raising an error
+                return self._entity_to_item(duplicate)
 
-            # Save file to storage
-            logging.error(f"{filename} is sent for saving with metadata {file_meta}")
-            file_path = self.file_storage.save_file(image, file_meta, filename)
+            # Save file to storage (convert Pydantic model to dict for storage)
+            logging.error(f"{filename} is sent for saving with metadata {file_meta.model_dump()}")
+            file_path = self.file_storage.save_file(image, file_meta.model_dump(), filename)
             logging.error(f"filepath received: {file_path}")
             logging.error(self.file_storage.base_dir)
 
-        # Extract and convert metadata values to correct types
-        file_size_val = file_meta.get("FileSize")
-        file_size = (
-            int(file_size_val)
-            if file_size_val is not None and not isinstance(file_size_val, str)
-            else None
-        )
-
-        height_val = file_meta.get("ImageHeight")
-        height = (
-            int(height_val) if height_val is not None and not isinstance(height_val, str) else None
-        )
-
-        width_val = file_meta.get("ImageWidth")
-        width = int(width_val) if width_val is not None and not isinstance(width_val, str) else None
-
-        duration_val = file_meta.get("Duration")
-        duration = (
-            float(duration_val)
-            if duration_val is not None and not isinstance(duration_val, str)
-            else None
-        )
-
-        mime_type_val = file_meta.get("MIMEType")
-        mime_type = str(mime_type_val) if mime_type_val is not None else None
-
-        type_val = file_meta.get("type")
-        type_str = str(type_val) if type_val is not None else None
-
-        extension_val = file_meta.get("extension")
-        extension = str(extension_val) if extension_val is not None else None
-
-        md5_val = file_meta.get("md5")
-        md5 = str(md5_val) if md5_val is not None else None
+        # Extract metadata values from Pydantic model (or None for collections)
+        if file_meta:
+            file_size = file_meta.file_size
+            height = file_meta.height
+            width = file_meta.width
+            duration = file_meta.duration
+            mime_type = file_meta.mime_type
+            type_str = file_meta.type
+            extension = file_meta.extension
+            md5 = file_meta.md5
+        else:
+            # No file metadata for collections
+            file_size = None
+            height = None
+            width = None
+            duration = None
+            mime_type = None
+            type_str = None
+            extension = None
+            md5 = None
 
         entity = Entity(
             is_collection=body.is_collection,
@@ -339,7 +322,9 @@ class EntityService:
             # Clean up file if database insert failed
             if file_path:
                 _ = self.file_storage.delete_file(file_path)
-            raise DuplicateFileError(f"Duplicate MD5 detected: {file_meta.get('md5')}")
+            raise DuplicateFileError(
+                f"Duplicate MD5 detected: {file_meta.md5 if file_meta else 'unknown'}"
+            )
 
         return self._entity_to_item(entity)
 
@@ -392,60 +377,28 @@ class EntityService:
             file_meta = self.metadata_extractor.extract_metadata(image, filename)
 
             # Check for duplicate MD5 (excluding current entity)
-            md5_value = file_meta.get("md5")
-            if md5_value and isinstance(md5_value, str):
-                duplicate = self._check_duplicate_md5(md5_value, exclude_entity_id=entity_id)
-                if duplicate:
-                    # Return the existing item instead of raising an error
-                    return self._entity_to_item(duplicate)
+            duplicate = self._check_duplicate_md5(file_meta.md5, exclude_entity_id=entity_id)
+            if duplicate:
+                # Return the existing item instead of raising an error
+                return self._entity_to_item(duplicate)
 
             # Delete old file if exists
             old_file_path = entity.file_path
             if old_file_path:
                 _ = self.file_storage.delete_file(old_file_path)
 
-            # Save new file
-            file_path = self.file_storage.save_file(image, file_meta, filename)
+            # Save new file (convert Pydantic model to dict for storage)
+            file_path = self.file_storage.save_file(image, file_meta.model_dump(), filename)
 
-            # Update file metadata with proper type conversion
-            file_size_val = file_meta.get("FileSize")
-            entity.file_size = (
-                int(file_size_val)
-                if file_size_val is not None and not isinstance(file_size_val, str)
-                else None
-            )
-
-            height_val = file_meta.get("ImageHeight")
-            entity.height = (
-                int(height_val)
-                if height_val is not None and not isinstance(height_val, str)
-                else None
-            )
-
-            width_val = file_meta.get("ImageWidth")
-            entity.width = (
-                int(width_val) if width_val is not None and not isinstance(width_val, str) else None
-            )
-
-            duration_val = file_meta.get("Duration")
-            entity.duration = (
-                float(duration_val)
-                if duration_val is not None and not isinstance(duration_val, str)
-                else None
-            )
-
-            mime_type_val = file_meta.get("MIMEType")
-            entity.mime_type = str(mime_type_val) if mime_type_val is not None else None
-
-            type_val = file_meta.get("type")
-            entity.type = str(type_val) if type_val is not None else None
-
-            extension_val = file_meta.get("extension")
-            entity.extension = str(extension_val) if extension_val is not None else None
-
-            md5_val = file_meta.get("md5")
-            entity.md5 = str(md5_val) if md5_val is not None else None
-
+            # Update file metadata from Pydantic model
+            entity.file_size = file_meta.file_size
+            entity.height = file_meta.height
+            entity.width = file_meta.width
+            entity.duration = file_meta.duration
+            entity.mime_type = file_meta.mime_type
+            entity.type = file_meta.type
+            entity.extension = file_meta.extension
+            entity.md5 = file_meta.md5
             entity.file_path = file_path
 
         # Update entity with new metadata and client-provided fields
@@ -466,7 +419,7 @@ class EntityService:
             if file_path:
                 _ = self.file_storage.delete_file(file_path)
             raise DuplicateFileError(
-                f"Duplicate MD5 detected: {file_meta.get('md5') if file_meta else ''}"
+                f"Duplicate MD5 detected: {file_meta.md5 if file_meta else ''}"
             )
 
         return self._entity_to_item(entity)
@@ -489,9 +442,9 @@ class EntityService:
         if not entity:
             return None
 
-        # Update only provided fields
-        for field, value in body.model_dump(exclude_unset=True).items():
-            setattr(entity, field, value)
+        # Update only provided fields (get values from Pydantic model to preserve types)
+        for field_name in body.model_dump(exclude_unset=True):
+            setattr(entity, field_name, getattr(body, field_name))
 
         entity.updated_date = self._now_timestamp()
         entity.updated_by = user_id

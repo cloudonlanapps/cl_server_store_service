@@ -1,6 +1,5 @@
 """Tests for database configuration and WAL mode."""
 
-import pytest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.pool import StaticPool
 
@@ -10,10 +9,10 @@ class TestWALMode:
 
     def test_enable_wal_mode_sets_pragmas(self):
         """Test that enable_wal_mode sets all required SQLite pragmas."""
-        from store.database import enable_wal_mode
-
         # Create a mock connection and cursor
         from unittest.mock import MagicMock
+
+        from store.database import enable_wal_mode
 
         mock_cursor = MagicMock()
         mock_conn = MagicMock()

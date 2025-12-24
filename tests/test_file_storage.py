@@ -7,7 +7,7 @@ from pathlib import Path
 
 class TestFileStorage:
     """Test file storage organization."""
-    
+
     def test_file_storage_structure(self, client, sample_image, clean_media_dir):
         """Test that files are stored in YYYY/MM/DD structure."""
         with open(sample_image, "rb") as f:
@@ -16,17 +16,17 @@ class TestFileStorage:
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Storage Test"}
             )
-        
+
         assert response.status_code == 201
         data = response.json()
-        
+
         # Check file path in response (should be relative)
         file_path = Path(data["file_path"])
-        
+
         # Check structure: YYYY/MM/DD/{md5}.{ext}
         # Parts: [YYYY, MM, DD, filename]
         assert len(file_path.parts) >= 4
-        
+
         # Verify filename format (MD5 + extension)
         filename = file_path.name
         md5 = data["md5"]
@@ -40,9 +40,9 @@ class TestFileStorage:
         file_bytes = b"test content"
         metadata = {"md5": "abc1234567890def", "extension": "jpg"}
         original_filename = "test_image.jpg"
-        
+
         relative_path = file_storage_service.save_file(file_bytes, metadata, original_filename)
-        
+
         # Should contain MD5
         assert "abc1234567890def" in relative_path
         # Should NOT contain original filename
@@ -51,7 +51,7 @@ class TestFileStorage:
         assert relative_path.endswith(".jpg")
         # Should be in YYYY/MM/DD structure
         assert len(Path(relative_path).parts) >= 4
-    
+
     def test_md5_prefix_in_filename(self, client, sample_image):
         """Test that file metadata includes MD5 hash and file can be retrieved."""
         with open(sample_image, "rb") as f:
@@ -78,7 +78,7 @@ class TestFileStorage:
         entity_id = data["id"]
         get_response = client.get(f"/entities/{entity_id}")
         assert get_response.status_code == 200
-    
+
     def test_multiple_files_organization(self, client, sample_images):
         """Test that multiple files can be uploaded and retrieved."""
         entity_ids = []
@@ -102,7 +102,7 @@ class TestFileStorage:
             assert get_response.status_code == 200
             assert "md5" in get_response.json()
             assert "file_path" in get_response.json()
-    
+
     def test_file_deletion_on_entity_update(self, client, sample_images):
         """Test that entity can be updated with a new file."""
         if len(sample_images) < 2:

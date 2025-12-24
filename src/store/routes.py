@@ -118,13 +118,13 @@ async def create_entity(
         return service.create_entity(body, file_bytes, filename, user_id)
     except ValueError as e:
         # Validation errors or invalid file format
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
     except RuntimeError as e:
         # Tool execution failure (ExifTool, ffprobe)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     except Exception as e:
         # General extraction failure
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
 @router.delete(
@@ -217,13 +217,11 @@ async def put_entity(
         # Update entity (file is optional - None updates only metadata)
         item = service.update_entity(entity_id, body, file_bytes, filename, user_id)
         if not item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
         return item
     except ValueError as e:
         # Validation errors or invalid file format
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
     except RuntimeError as e:
         # Tool execution failure (ExifTool, ffprobe)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -232,7 +230,7 @@ async def put_entity(
         raise
     except Exception as e:
         # General extraction failure
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
 @router.patch(

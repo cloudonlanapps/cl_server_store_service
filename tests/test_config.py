@@ -8,7 +8,6 @@ This module provides centralized configuration for all tests, including:
 """
 
 from pathlib import Path
-from typing import List
 
 # Get the absolute path to the tests directory
 TESTS_DIR = Path(__file__).parent.absolute()
@@ -27,7 +26,7 @@ TEST_ARTIFACTS_DIR = MEDIA_STORE_DIR.parent / "test_artifacts" / "media_store"
 TEST_MEDIA_DIR = TEST_ARTIFACTS_DIR / "media_files"
 
 
-def load_test_files() -> List[Path]:
+def load_test_files() -> list[Path]:
     """
     Load test file paths from test_files.txt.
 
@@ -38,7 +37,7 @@ def load_test_files() -> List[Path]:
         return []
 
     test_files = []
-    with open(TEST_FILES_LIST, "r") as f:
+    with open(TEST_FILES_LIST) as f:
         for line in f:
             line = line.strip()
             # Skip empty lines and comments
@@ -55,7 +54,7 @@ def load_test_files() -> List[Path]:
     return test_files
 
 
-def get_all_test_images() -> List[Path]:
+def get_all_test_images() -> list[Path]:
     """
     Get all available test images.
 

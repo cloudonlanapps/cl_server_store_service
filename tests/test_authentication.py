@@ -9,12 +9,10 @@ tests with a running authentication service are recommended.
 from __future__ import annotations
 
 import pytest
-from datetime import datetime, timedelta
-from fastapi import HTTPException
-from jose import jwt
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.backends import default_backend
+from fastapi import HTTPException
 
 
 class TestAuthenticationLogic:
@@ -48,10 +46,10 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_correct_permission(self):
         """User with the required permission should be allowed."""
-        from store.auth import require_permission, UserPayload
         import asyncio
-
         from unittest.mock import patch
+
+        from store.auth import UserPayload, require_permission
 
         # Mock user with write permission
         user = UserPayload(
@@ -68,10 +66,10 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_admin(self):
         """Admin user should be allowed even without specific permission."""
-        from store.auth import require_permission, UserPayload
         import asyncio
-
         from unittest.mock import patch
+
+        from store.auth import UserPayload, require_permission
 
         user = UserPayload(sub="admin", permissions=[], is_admin=True)
 
@@ -82,10 +80,10 @@ class TestAuthenticationLogic:
 
     def test_require_permission_rejects_wrong_permission(self):
         """User with only read permission should be rejected when write is required."""
-        from store.auth import require_permission, UserPayload
         import asyncio
-
         from unittest.mock import patch
+
+        from store.auth import UserPayload, require_permission
 
         user = UserPayload(
             sub="testuser",
@@ -102,10 +100,10 @@ class TestAuthenticationLogic:
 
     def test_require_permission_rejects_none_user(self):
         """None user (no auth) should be rejected when auth is not disabled."""
-        from store.auth import require_permission
         import asyncio
-
         from unittest.mock import patch
+
+        from store.auth import require_permission
 
         # Only test if auth is enabled
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
@@ -117,10 +115,10 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_read_permission(self):
         """User with media_store_read permission should be allowed."""
-        from store.auth import require_permission, UserPayload
         import asyncio
+        from unittest.mock import MagicMock, patch
 
-        from unittest.mock import patch, MagicMock
+        from store.auth import UserPayload, require_permission
 
         user = UserPayload(
             sub="testuser",
@@ -142,10 +140,10 @@ class TestAuthenticationLogic:
 
     def test_require_admin_allows_admin_user(self):
         """Admin user should be allowed by require_admin."""
-        from store.auth import require_admin, UserPayload
         import asyncio
-
         from unittest.mock import patch
+
+        from store.auth import UserPayload, require_admin
 
         user = UserPayload(sub="admin", permissions=[], is_admin=True)
 
@@ -155,10 +153,10 @@ class TestAuthenticationLogic:
 
     def test_require_admin_rejects_non_admin(self):
         """Non-admin user should be rejected by require_admin."""
-        from store.auth import require_admin, UserPayload
         import asyncio
-
         from unittest.mock import patch
+
+        from store.auth import UserPayload, require_admin
 
         user = UserPayload(
             sub="testuser",
@@ -193,10 +191,10 @@ class TestAuthenticationModes:
 
     def test_demo_mode_bypasses_permission_check(self):
         """When AUTH_DISABLED=true, permission checks should be bypassed."""
-        from store.auth import require_permission
         import asyncio
-
         from unittest.mock import patch
+
+        from store.auth import require_permission
 
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", True):
             # In demo mode, None user should be allowed
@@ -206,10 +204,10 @@ class TestAuthenticationModes:
 
     def test_demo_mode_bypasses_admin_check(self):
         """When AUTH_DISABLED=true, admin checks should be bypassed."""
-        from store.auth import require_admin
         import asyncio
-
         from unittest.mock import patch
+
+        from store.auth import require_admin
 
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", True):
             # In demo mode, None user should be allowed

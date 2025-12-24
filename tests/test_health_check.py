@@ -1,6 +1,5 @@
 """Health check endpoint tests."""
 
-import pytest
 
 
 class TestHealthCheck:

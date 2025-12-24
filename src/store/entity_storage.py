@@ -22,7 +22,9 @@ class EntityStorageService:
         self.base_dir: Path = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def get_storage_path(self, metadata: dict[str, str | int | float | None], original_filename: str) -> Path:
+    def get_storage_path(
+        self, metadata: dict[str, str | int | float | None], original_filename: str
+    ) -> Path:
         """
         Generate organized file path based on metadata and current date.
 
@@ -61,7 +63,10 @@ class EntityStorageService:
         return dir_path / filename
 
     def save_file(
-        self, file_bytes: bytes, metadata: dict[str, str | int | float | None], original_filename: str = "file"
+        self,
+        file_bytes: bytes,
+        metadata: dict[str, str | int | float | None],
+        original_filename: str = "file",
     ) -> str:
         """
         Save file to storage with organized directory structure.

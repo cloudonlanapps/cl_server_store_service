@@ -1,6 +1,5 @@
 """User tracking field tests (added_by, updated_by)."""
 
-import pytest
 
 
 class TestUserTracking:

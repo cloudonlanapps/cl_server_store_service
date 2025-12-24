@@ -17,9 +17,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import os
-import shutil
-import tempfile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,15 +32,15 @@ def integration_app():
     This ensures we test the real dependency injection path.
     Uses the auth service pattern: patch database objects, don't mess with modules.
     """
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import patch
 
     from cl_server_shared.models import Base
     from sqlalchemy import create_engine
     from sqlalchemy.orm import configure_mappers, sessionmaker
     from sqlalchemy.pool import StaticPool
 
-    from store.store import app
     import store.database as database
+    from store.store import app
 
     # Create test engine
     test_engine = create_engine(
@@ -58,12 +55,6 @@ def integration_app():
 
     # Create tables in test database
     Base.metadata.create_all(bind=test_engine)
-
-    # Mock MQTT client
-    mock_mqtt_client = MagicMock()
-    mock_mqtt_client.get_cached_capabilities.return_value = {}
-    mock_mqtt_client.capabilities_cache = {}
-    mock_mqtt_client.wait_for_capabilities.return_value = True
 
     # Patch the module-level engine, SessionLocal, MQTT client, and Config
     from cl_server_shared import Config
