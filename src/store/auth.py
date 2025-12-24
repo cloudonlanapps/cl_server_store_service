@@ -1,153 +1,175 @@
 from __future__ import annotations
 
+import asyncio
 import os
-import time
-from typing import Optional
+from typing import Annotated, ClassVar, Literal
 
 from cl_server_shared.config import Config
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", auto_error=False)
+# ─────────────────────────────────────
+# Permissions
+# ─────────────────────────────────────
 
-# Cache public key with retry logic
+Permission = Literal[
+    "media_store_read",
+    "media_store_write",
+    "ai_inference_support",
+    "admin",
+]
+
+Permissions = Annotated[list[str], Field(default_factory=list)]
+
+
+# ─────────────────────────────────────
+# JWT payload model
+# ─────────────────────────────────────
+
+
+class UserPayload(BaseModel):
+    """JWT token payload for authenticated users."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        extra="forbid",
+        strict=True,
+    )
+
+    sub: str
+    is_admin: bool = Field(default=False, strict=True)
+    permissions: Permissions
+
+    @field_validator("permissions")
+    @classmethod
+    def unique_permissions(cls, v: list[str]) -> list[str]:
+        return list(dict.fromkeys(v))
+
+
+# ─────────────────────────────────────
+# OAuth2
+# ─────────────────────────────────────
+
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="auth/token",
+    auto_error=False,
+)
+
+
+# ─────────────────────────────────────
+# Public key loader (cached)
+# ─────────────────────────────────────
+
 _public_key_cache: str | None = None
-_public_key_load_attempts: int = 0
-_max_load_attempts: int = 30  # Try for up to 30 seconds
+_max_load_attempts: int = 30  # ~30 seconds
 
 
-def get_public_key() -> str:
-    """Load the public key from file with caching and retry logic.
+async def get_public_key() -> str:
+    """Load and cache the public key with retry during startup."""
 
-    Waits for the public key file to be created by the authentication service.
-    Returns the cached public key on subsequent calls.
-    Raises HTTPException if key cannot be loaded.
-    """
-    global _public_key_cache, _public_key_load_attempts
+    global _public_key_cache
 
-    # Return cached key if available
     if _public_key_cache:
         return _public_key_cache
 
-    # Try to load the key
-    retry_count = 0
-    while retry_count < _max_load_attempts:
+    for attempt in range(_max_load_attempts):
         if os.path.exists(Config.PUBLIC_KEY_PATH):
             try:
-                with open(Config.PUBLIC_KEY_PATH, "r") as f:
-                    _public_key_cache = f.read()
-                    if _public_key_cache:
-                        return _public_key_cache
-            except IOError as e:
+                with open(Config.PUBLIC_KEY_PATH) as f:
+                    key = f.read().strip()
+                    if key:
+                        _public_key_cache = key
+                        return key
+            except OSError as exc:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to read public key file: {str(e)}",
+                    detail=f"Failed to read public key file: {exc}",
                 )
 
-        # Key file not found yet, wait and retry (up to 30 seconds for service startup)
-        retry_count += 1
-        if retry_count < _max_load_attempts:
-            time.sleep(1)
-        else:
-            break
+        if attempt < _max_load_attempts - 1:
+            await asyncio.sleep(1)
 
-    # If we get here, public key still doesn't exist
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail=f"Public key not found at {Config.PUBLIC_KEY_PATH}. Is the authentication service running?",
+        detail=f"Public key not found at {Config.PUBLIC_KEY_PATH}. "
+        + "Is the authentication service running?",
     )
+
+
+# ─────────────────────────────────────
+# Current user dependency
+# ─────────────────────────────────────
 
 
 async def get_current_user(
     token: str | None = Depends(oauth2_scheme),
-) -> dict | None:
-    """Validate the JWT and return the user payload.
+) -> UserPayload | None:
+    """Validate the JWT and return the user payload."""
 
-    Returns None if AUTH_DISABLED is True (demo mode).
-    Returns None if token is not provided and auto_error is False.
-    """
-    # Demo mode: bypass authentication
     if Config.AUTH_DISABLED:
         return None
 
-    # No token provided
     if token is None:
         return None
 
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    # This will raise HTTPException with detailed message if key can't be loaded
-    public_key = get_public_key()
+    public_key = await get_public_key()
 
     try:
-        payload = jwt.decode(token, public_key, algorithms=["ES256"])
-        username: str | None = payload.get("sub")
-        if username is None:
-            raise credentials_exception
+        raw = jwt.decode(
+            token,
+            public_key,
+            algorithms=["ES256"],
+            options={"require": ["sub", "exp"]},
+        )
+        return UserPayload.model_validate(raw)
 
-        # Debug: Log the payload to understand what claims are in the token
-        print(f"DEBUG: JWT Payload = {payload}")
-        print(f"DEBUG: is_admin in payload = {'is_admin' in payload}")
-        print(f"DEBUG: is_admin value = {payload.get('is_admin')}")
-
-        # Ensure required fields are present in token
-        if "is_admin" not in payload:
-            # Token missing is_admin field - set default
-            payload["is_admin"] = False
-
-        print(f"DEBUG: Final payload is_admin = {payload.get('is_admin')}")
-        return payload
-    except JWTError as e:
-        # Provide more detailed error for debugging
+    except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}",
+            detail="JWT token has expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    except ValidationError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="JWT payload is invalid",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
 
-def require_permission(permission: str):
-    """Dependency to require a specific permission.
+# ─────────────────────────────────────
+# Permission dependencies
+# ─────────────────────────────────────
 
-    Supports all permission types: media_store_read, media_store_write, ai_inference_support, admin.
-    Checks if user has the required permission or admin status.
-    In demo mode (AUTH_DISABLED=True), always allows access.
-    For media_store_read permission, checks runtime configuration to allow bypass when read auth is disabled.
 
-    Usage:
-        @app.get("/protected")
-        async def protected_endpoint(user: dict = Depends(require_permission("ai_inference_support"))):
-            return {"message": f"Hello {user.get('sub')}"}
-    """
+def require_permission(permission: Permission):
+    """Require a specific permission."""
 
     async def permission_checker(
-        current_user: dict | None = Depends(get_current_user),
+        current_user: UserPayload | None = Depends(get_current_user),
         db: Session = Depends(get_db),
-    ) -> dict | None:
-        # Demo mode: bypass permission check
+    ) -> UserPayload | None:
         if Config.AUTH_DISABLED:
             return current_user
 
-        # Check runtime read auth configuration for read permissions
         if permission == "media_store_read":
             from .config_service import ConfigService
 
-            config_service = ConfigService(db)
-            read_auth_enabled = config_service.get_read_auth_enabled()
-
-            # If read auth is disabled, allow access without authentication
-            if not read_auth_enabled:
+            if not ConfigService(db).get_read_auth_enabled():
                 return current_user
 
-        # No user provided but auth is required
         if current_user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -155,13 +177,10 @@ def require_permission(permission: str):
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Admin users bypass permission checks
-        if current_user.get("is_admin"):
+        if current_user.is_admin:
             return current_user
 
-        # Check if user has the required permission
-        user_permissions = current_user.get("permissions", [])
-        if permission not in user_permissions:
+        if permission not in current_user.permissions:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Insufficient permissions. Required: {permission}",
@@ -173,13 +192,11 @@ def require_permission(permission: str):
 
 
 async def require_admin(
-    current_user: dict | None = Depends(get_current_user),
-) -> dict | None:
-    # Demo mode: bypass permission check
+    current_user: UserPayload | None = Depends(get_current_user),
+) -> UserPayload | None:
     if Config.AUTH_DISABLED:
         return current_user
 
-    # No user provided but auth is required
     if current_user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -187,11 +204,10 @@ async def require_admin(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Admin users bypass permission checks
-    if not current_user.get("is_admin"):
+    if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions. admin access required",
+            detail="Insufficient permissions. Admin access required",
         )
 
     return current_user

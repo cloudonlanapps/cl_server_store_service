@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import override
+
 # Import shared Base
 from cl_server_shared.models import Base
 from sqlalchemy import BigInteger, Boolean, Float, Integer, String
@@ -12,8 +14,8 @@ from . import versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
 class Entity(Base):
     """SQLAlchemy model for media entities."""
 
-    __tablename__ = "entities"
-    __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning
+    __tablename__ = "entities"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning  # pyright: ignore[reportUnannotatedClassAttribute]
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -49,6 +51,7 @@ class Entity(Base):
     # Soft delete flag
     is_deleted: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
 
+    @override
     def __repr__(self) -> str:
         return f"<Entity(id={self.id}, label={self.label})>"
 
@@ -56,7 +59,7 @@ class Entity(Base):
 class ServiceConfig(Base):
     """SQLAlchemy model for service configuration."""
 
-    __tablename__ = "service_config"
+    __tablename__ = "service_config"  # pyright: ignore[reportUnannotatedClassAttribute]
 
     # Primary key
     key: Mapped[str] = mapped_column(String, primary_key=True)
@@ -68,6 +71,7 @@ class ServiceConfig(Base):
     updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    @override
     def __repr__(self) -> str:
         return f"<ServiceConfig(key={self.key}, value={self.value})>"
 

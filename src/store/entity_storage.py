@@ -22,7 +22,7 @@ class EntityStorageService:
         self.base_dir: Path = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def get_storage_path(self, metadata: dict[str, str], original_filename: str) -> Path:
+    def get_storage_path(self, metadata: dict[str, str | int | float | None], original_filename: str) -> Path:
         """
         Generate organized file path based on metadata and current date.
 
@@ -46,14 +46,13 @@ class EntityStorageService:
         dir_path.mkdir(parents=True, exist_ok=True)
 
         # Generate filename with MD5 and extension
-        md5 = metadata.get("md5", "unknown")
+        md5_value = metadata.get("md5", "unknown")
+        md5 = str(md5_value) if md5_value else "unknown"
         # Extract extension from original filename if not in metadata
-        if "extension" in metadata and metadata["extension"]:
-            ext = (
-                f".{metadata['extension']}"
-                if not metadata["extension"].startswith(".")
-                else metadata["extension"]
-            )
+        extension_value = metadata.get("extension")
+        if extension_value:
+            ext_str = str(extension_value)
+            ext = f".{ext_str}" if not ext_str.startswith(".") else ext_str
         else:
             ext = Path(original_filename).suffix
 
@@ -62,7 +61,7 @@ class EntityStorageService:
         return dir_path / filename
 
     def save_file(
-        self, file_bytes: bytes, metadata: dict[str, str], original_filename: str = "file"
+        self, file_bytes: bytes, metadata: dict[str, str | int | float | None], original_filename: str = "file"
     ) -> str:
         """
         Save file to storage with organized directory structure.

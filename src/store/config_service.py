@@ -17,9 +17,9 @@ class ConfigService:
     """Service for managing runtime configuration."""
 
     # Simple in-memory cache
-    _cache = {}
-    _cache_ttl = 60  # seconds
-    _cache_timestamps = {}
+    _cache: dict[str, str] = {}
+    _cache_ttl: int = 60  # seconds
+    _cache_timestamps: dict[str, int] = {}
 
     def __init__(self, db: Session):
         """Initialize config service.
@@ -27,7 +27,7 @@ class ConfigService:
         Args:
             db: SQLAlchemy database session
         """
-        self.db = db
+        self.db: Session = db
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -110,7 +110,7 @@ class ConfigService:
             True if read auth is enabled, False otherwise
         """
         value = self.get_config("read_auth_enabled", "false")
-        return value.lower() == "true"
+        return value.lower() == "true" if value else False
 
     def set_read_auth_enabled(self, enabled: bool, user_id: str | None = None) -> None:
         """Set read authentication enabled status.
@@ -121,7 +121,7 @@ class ConfigService:
         """
         self.set_config("read_auth_enabled", str(enabled).lower(), user_id)
 
-    def get_config_metadata(self, key: str) -> dict | None:
+    def get_config_metadata(self, key: str) -> dict[str, str | int | None] | None:
         """Get configuration with metadata.
 
         Args:

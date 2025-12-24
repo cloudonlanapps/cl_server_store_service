@@ -32,16 +32,20 @@ class EntityService:
         Args:
             db: SQLAlchemy database session
         """
-        self.db = db
+        self.db: Session = db
         # Use MEDIA_STORAGE_DIR for entity files (organized by date)
-        self.file_storage = EntityStorageService(base_dir=Config.MEDIA_STORAGE_DIR)
+        self.file_storage: EntityStorageService = EntityStorageService(
+            base_dir=Config.MEDIA_STORAGE_DIR
+        )
 
     @staticmethod
     def _now_timestamp() -> int:
         """Return current UTC timestamp in milliseconds."""
         return int(datetime.now(UTC).timestamp() * 1000)
 
-    def _extract_metadata(self, file_bytes: bytes, filename: str = "file") -> dict:
+    def _extract_metadata(
+        self, file_bytes: bytes, filename: str = "file"
+    ) -> dict[str, str | int | float | None]:
         """
         Extract metadata from file using CLMetaData.
 
@@ -56,7 +60,7 @@ class EntityService:
 
         # Create temporary file for CLMetaData processing
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp_file:
-            tmp_file.write(file_bytes)
+            _ = tmp_file.write(file_bytes)
             tmp_path = tmp_file.name
 
         try:
@@ -76,7 +80,7 @@ class EntityService:
                 # Compute MD5 hash for duplicate detection
                 md5_hash = hashlib.md5(file_bytes).hexdigest()
 
-                metadata = {
+                metadata: dict[str, str | int | float | None] = {
                     "extension": ext,
                     "FileSize": len(file_bytes),
                     "md5": md5_hash,
@@ -85,20 +89,23 @@ class EntityService:
                     metadata["MIMEType"] = mime_type
 
             # Ensure file size is always present (handle both FileSize and file_size keys)
-            if "FileSize" not in metadata or not metadata["FileSize"]:
+            file_size = metadata.get("FileSize")
+            if not file_size:
                 metadata["FileSize"] = len(file_bytes)
 
             # Ensure MD5 is computed if not present
-            if "md5" not in metadata or not metadata["md5"]:
+            md5_val = metadata.get("md5")
+            if not md5_val:
                 import hashlib
 
                 metadata["md5"] = hashlib.md5(file_bytes).hexdigest()
 
             # Convert CreateDate to timestamp (ms) if present
-            if "CreateDate" in metadata and metadata["CreateDate"]:
+            create_date = metadata.get("CreateDate")
+            if create_date:
                 try:
                     # Attempt to parse EXIF date format: YYYY:MM:DD HH:MM:SS
-                    dt = datetime.strptime(str(metadata["CreateDate"]), "%Y:%m:%d %H:%M:%S")
+                    dt = datetime.strptime(str(create_date), "%Y:%m:%d %H:%M:%S")
                     metadata["CreateDate"] = int(dt.timestamp() * 1000)
                 except ValueError:
                     # Fallback or ignore if format is different
@@ -166,8 +173,8 @@ class EntityService:
         page: int = 1,
         page_size: int = 20,
         version: int | None = None,
-        filter_param: str | None = None,
-        search_query: str | None = None,
+        filter_param: str | None = None,  # pyright: ignore[reportUnusedParameter]
+        search_query: str | None = None,  # pyright: ignore[reportUnusedParameter]
     ) -> tuple[list[Item], int]:
         """
         Retrieve all entities with optional pagination and versioning.
@@ -198,7 +205,7 @@ class EntityService:
 
         # If version is specified, get that version of each entity
         if version is not None:
-            items = []
+            items: list[Item] = []
             for entity in entities:
                 versioned_item = self.get_entity_version(entity.id, version)
                 if versioned_item:  # Only include if version exists
@@ -246,7 +253,7 @@ class EntityService:
         # Get the specific version
         # SQLAlchemy-Continuum creates a versions relationship on the model
         if hasattr(entity, "versions"):
-            versions_list = entity.versions.all()  # type: ignore[attr-defined]
+            versions_list = entity.versions.all()
             # Versions are 1-indexed for the API
             if 1 <= version <= len(versions_list):
                 version_entity = versions_list[version - 1]
@@ -254,7 +261,7 @@ class EntityService:
 
         return None
 
-    def get_entity_versions(self, entity_id: int) -> list[dict]:
+    def get_entity_versions(self, entity_id: int) -> list[dict[str, int | None]]:
         """
         Get all versions of an entity with metadata.
 
@@ -271,7 +278,7 @@ class EntityService:
         if not hasattr(entity, "versions"):
             return []
 
-        versions_list = entity.versions.all()  # type: ignore[attr-defined]
+        versions_list = entity.versions.all()
         result = []
         for idx, version in enumerate(versions_list, start=1):
             version_info = {
@@ -327,8 +334,9 @@ class EntityService:
             file_meta = self._extract_metadata(image, filename)
 
             # Check for duplicate MD5
-            if file_meta.get("md5"):
-                duplicate = self._check_duplicate_md5(file_meta["md5"])
+            md5_value = file_meta.get("md5")
+            if md5_value and isinstance(md5_value, str):
+                duplicate = self._check_duplicate_md5(md5_value)
                 if duplicate:
                     # Return the existing item instead of raising an error
                     return self._entity_to_item(duplicate)
@@ -339,6 +347,41 @@ class EntityService:
             logging.error(f"filepath received: {file_path}")
             logging.error(self.file_storage.base_dir)
 
+        # Extract and convert metadata values to correct types
+        file_size_val = file_meta.get("FileSize")
+        file_size = (
+            int(file_size_val)
+            if file_size_val is not None and not isinstance(file_size_val, str)
+            else None
+        )
+
+        height_val = file_meta.get("ImageHeight")
+        height = (
+            int(height_val) if height_val is not None and not isinstance(height_val, str) else None
+        )
+
+        width_val = file_meta.get("ImageWidth")
+        width = int(width_val) if width_val is not None and not isinstance(width_val, str) else None
+
+        duration_val = file_meta.get("Duration")
+        duration = (
+            float(duration_val)
+            if duration_val is not None and not isinstance(duration_val, str)
+            else None
+        )
+
+        mime_type_val = file_meta.get("MIMEType")
+        mime_type = str(mime_type_val) if mime_type_val is not None else None
+
+        type_val = file_meta.get("type")
+        type_str = str(type_val) if type_val is not None else None
+
+        extension_val = file_meta.get("extension")
+        extension = str(extension_val) if extension_val is not None else None
+
+        md5_val = file_meta.get("md5")
+        md5 = str(md5_val) if md5_val is not None else None
+
         entity = Entity(
             is_collection=body.is_collection,
             label=body.label,
@@ -347,14 +390,14 @@ class EntityService:
             added_date=now,
             updated_date=now,
             create_date=now,
-            file_size=file_meta.get("FileSize"),
-            height=file_meta.get("ImageHeight"),
-            width=file_meta.get("ImageWidth"),
-            duration=file_meta.get("Duration"),
-            mime_type=file_meta.get("MIMEType"),
-            type=file_meta.get("type"),
-            extension=file_meta.get("extension"),
-            md5=file_meta.get("md5"),
+            file_size=file_size,
+            height=height,
+            width=width,
+            duration=duration,
+            mime_type=mime_type,
+            type=type_str,
+            extension=extension,
+            md5=md5,
             file_path=file_path,
             is_deleted=False,
             added_by=user_id,
@@ -369,7 +412,7 @@ class EntityService:
             self.db.rollback()
             # Clean up file if database insert failed
             if file_path:
-                self.file_storage.delete_file(file_path)
+                _ = self.file_storage.delete_file(file_path)
             raise DuplicateFileError(f"Duplicate MD5 detected: {file_meta.get('md5')}")
 
         return self._entity_to_item(entity)
@@ -407,7 +450,7 @@ class EntityService:
         if body.is_collection != entity.is_collection:
             raise ValueError(
                 f"Cannot change is_collection from {entity.is_collection} to {body.is_collection}. "
-                "is_collection is immutable after entity creation."
+                + "is_collection is immutable after entity creation."
             )
 
         # Validation: image should not be present if is_collection is True
@@ -423,8 +466,9 @@ class EntityService:
             file_meta = self._extract_metadata(image, filename)
 
             # Check for duplicate MD5 (excluding current entity)
-            if file_meta.get("md5"):
-                duplicate = self._check_duplicate_md5(file_meta["md5"], exclude_entity_id=entity_id)
+            md5_value = file_meta.get("md5")
+            if md5_value and isinstance(md5_value, str):
+                duplicate = self._check_duplicate_md5(md5_value, exclude_entity_id=entity_id)
                 if duplicate:
                     # Return the existing item instead of raising an error
                     return self._entity_to_item(duplicate)
@@ -432,20 +476,50 @@ class EntityService:
             # Delete old file if exists
             old_file_path = entity.file_path
             if old_file_path:
-                self.file_storage.delete_file(old_file_path)
+                _ = self.file_storage.delete_file(old_file_path)
 
             # Save new file
             file_path = self.file_storage.save_file(image, file_meta, filename)
 
-            # Update file metadata
-            entity.file_size = file_meta.get("FileSize")
-            entity.height = file_meta.get("ImageHeight")
-            entity.width = file_meta.get("ImageWidth")
-            entity.duration = file_meta.get("Duration")
-            entity.mime_type = file_meta.get("MIMEType")
-            entity.type = file_meta.get("type")
-            entity.extension = file_meta.get("extension")
-            entity.md5 = file_meta.get("md5")
+            # Update file metadata with proper type conversion
+            file_size_val = file_meta.get("FileSize")
+            entity.file_size = (
+                int(file_size_val)
+                if file_size_val is not None and not isinstance(file_size_val, str)
+                else None
+            )
+
+            height_val = file_meta.get("ImageHeight")
+            entity.height = (
+                int(height_val)
+                if height_val is not None and not isinstance(height_val, str)
+                else None
+            )
+
+            width_val = file_meta.get("ImageWidth")
+            entity.width = (
+                int(width_val) if width_val is not None and not isinstance(width_val, str) else None
+            )
+
+            duration_val = file_meta.get("Duration")
+            entity.duration = (
+                float(duration_val)
+                if duration_val is not None and not isinstance(duration_val, str)
+                else None
+            )
+
+            mime_type_val = file_meta.get("MIMEType")
+            entity.mime_type = str(mime_type_val) if mime_type_val is not None else None
+
+            type_val = file_meta.get("type")
+            entity.type = str(type_val) if type_val is not None else None
+
+            extension_val = file_meta.get("extension")
+            entity.extension = str(extension_val) if extension_val is not None else None
+
+            md5_val = file_meta.get("md5")
+            entity.md5 = str(md5_val) if md5_val is not None else None
+
             entity.file_path = file_path
 
         # Update entity with new metadata and client-provided fields
@@ -464,7 +538,7 @@ class EntityService:
             self.db.rollback()
             # Clean up new file if database update failed
             if file_path:
-                self.file_storage.delete_file(file_path)
+                _ = self.file_storage.delete_file(file_path)
             raise DuplicateFileError(
                 f"Duplicate MD5 detected: {file_meta.get('md5') if file_meta else ''}"
             )
@@ -517,14 +591,14 @@ class EntityService:
 
         # Hard delete: remove file and database record
         if entity.file_path:
-            self.file_storage.delete_file(entity.file_path)
+            _ = self.file_storage.delete_file(entity.file_path)
 
         self.db.delete(entity)
-        self.db.commit()
+        _ = self.db.commit()
 
         return self._entity_to_item(entity)
 
     def delete_all_entities(self) -> None:
         """Delete all entities from the database."""
-        self.db.query(Entity).delete()
-        self.db.commit()
+        _ = self.db.query(Entity).delete()
+        _ = self.db.commit()

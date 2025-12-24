@@ -15,8 +15,9 @@ from fastapi import (
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import auth, schemas
 from . import config_service as cfg_service
+from . import schemas
+from .auth import UserPayload, require_admin, require_permission
 from .database import get_db
 from .service import EntityService
 
@@ -44,8 +45,9 @@ async def get_entities(
         None, title="Search Query", description="Optional search query"
     ),
     db: Session = Depends(get_db),
-    user: dict | None = Depends(auth.require_permission("media_store_read")),
+    user: UserPayload | None = Depends(require_permission("media_store_read")),
 ) -> schemas.PaginatedResponse:
+    _ = user
     service = EntityService(db)
     items, total_count = service.get_entities(
         page=page,
@@ -90,12 +92,12 @@ async def create_entity(
     parent_id: int | None = Form(None, title="Parent Id"),
     image: UploadFile | None = File(None, title="Image"),
     db: Session = Depends(get_db),
-    user: dict | None = Depends(auth.require_permission("media_store_write")),
+    user: UserPayload | None = Depends(require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
 
     # Extract user_id from JWT payload (None in demo mode)
-    user_id = user.get("sub") if user else None
+    user_id = user.sub if user else None
 
     # Create body object from form fields
     body = schemas.BodyCreateEntity(
@@ -129,8 +131,9 @@ async def create_entity(
 )
 async def delete_collection(
     db: Session = Depends(get_db),
-    user: dict | None = Depends(auth.require_permission("media_store_write")),
+    user: UserPayload | None = Depends(require_permission("media_store_write")),
 ):
+    _ = user
     service = EntityService(db)
     service.delete_all_entities()
     # No return statement - FastAPI will return 204 automatically
@@ -149,10 +152,10 @@ async def get_entity(
     version: int | None = Query(
         None, title="Version", description="Optional version number to retrieve"
     ),
-    content: str | None = Query(None, title="Content", description="Optional content query"),
     db: Session = Depends(get_db),
-    user: dict | None = Depends(auth.require_permission("media_store_read")),
+    user: UserPayload | None = Depends(require_permission("media_store_read")),
 ) -> schemas.Item:
+    _ = user
     service = EntityService(db)
     item = service.get_entity_by_id(entity_id, version=version)
     if not item:
@@ -181,12 +184,12 @@ async def put_entity(
     parent_id: int | None = Form(None, title="Parent Id"),
     image: UploadFile | None = File(None, title="Image"),
     db: Session = Depends(get_db),
-    user: dict | None = Depends(auth.require_permission("media_store_write")),
+    user: UserPayload | None = Depends(require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
 
     # Extract user_id from JWT payload (None in demo mode)
-    user_id = user.get("sub") if user else None
+    user_id = user.sub if user else None
 
     # Create body object from form fields
     body = schemas.BodyUpdateEntity(
@@ -197,17 +200,21 @@ async def put_entity(
     )
 
     # Read file bytes and filename if provided
-    file_bytes = None
+    file_bytes: bytes | None = None
     filename = "file"
     if image:
         file_bytes = await image.read()
         filename = image.filename or "file"
 
     try:
-        item = service.update_entity(entity_id, body, file_bytes, filename, user_id)
-        if not item:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
-        return item
+        if file_bytes:
+            item = service.update_entity(entity_id, body, file_bytes, filename, user_id)
+            if not item:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found"
+                )
+            return item
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No file provided")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
@@ -227,12 +234,12 @@ async def patch_entity(
     entity_id: int,
     body: schemas.BodyPatchEntity = Body(..., embed=True),
     db: Session = Depends(get_db),
-    user: dict | None = Depends(auth.require_permission("media_store_write")),
+    user: UserPayload | None = Depends(require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
 
     # Extract user_id from JWT payload (None in demo mode)
-    user_id = user.get("sub") if user else None
+    user_id = user.sub if user else None
 
     item = service.patch_entity(entity_id, body, user_id)
     if not item:
@@ -255,8 +262,9 @@ async def patch_entity(
 async def delete_entity(
     entity_id: int,
     db: Session = Depends(get_db),
-    user: dict | None = Depends(auth.require_permission("media_store_write")),
+    user: UserPayload | None = Depends(require_permission("media_store_write")),
 ):
+    _ = user
     service = EntityService(db)
     item = service.delete_entity(entity_id)
     if not item:
@@ -270,13 +278,14 @@ async def delete_entity(
     summary="Get Entity Versions",
     description="Retrieves all versions of a specific entity.",
     operation_id="get_entity_versions",
-    responses={200: {"model": list[dict], "description": "Successful Response"}},
+    responses={200: {"description": "Successful Response"}},
 )
 async def get_entity_versions(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
-    user: dict | None = Depends(auth.require_permission("media_store_read")),
-) -> list[dict]:
+    user: UserPayload | None = Depends(require_permission("media_store_read")),
+) -> list[dict[str, int | None]]:
+    _ = user
     service = EntityService(db)
     versions = service.get_entity_versions(entity_id)
     if not versions:
@@ -295,23 +304,30 @@ async def get_entity_versions(
 )
 async def get_config(
     db: Session = Depends(get_db),
-    user: dict | None = Depends(auth.require_admin),
+    user: UserPayload | None = Depends(require_admin),
 ) -> schemas.ConfigResponse:
     """Get current service configuration.
 
     Requires admin access.
     """
-
+    _ = user
     config_service = cfg_service.ConfigService(db)
 
     # Get config metadata
     metadata = config_service.get_config_metadata("read_auth_enabled")
 
     if metadata:
+        value_str = str(metadata["value"]) if metadata["value"] is not None else "false"
+        updated_at = metadata["updated_at"]
+        updated_by = metadata["updated_by"]
         return schemas.ConfigResponse(
-            read_auth_enabled=metadata["value"].lower() == "true",
-            updated_at=metadata["updated_at"],
-            updated_by=metadata["updated_by"],
+            read_auth_enabled=value_str.lower() == "true",
+            updated_at=int(updated_at)
+            if updated_at is not None and not isinstance(updated_at, str)
+            else None,
+            updated_by=str(updated_by)
+            if updated_by is not None and not isinstance(updated_by, int)
+            else None,
         )
 
     # Default if not found
@@ -324,13 +340,13 @@ async def get_config(
     summary="Update Read Auth Configuration",
     description="Toggle read authentication requirement. Requires admin access.",
     operation_id="update_read_auth_config_admin_config_read_auth_put",
-    responses={200: {"model": dict, "description": "Successful Response"}},
+    responses={200: {"description": "Successful Response"}},
 )
 async def update_read_auth_config(
     config: schemas.UpdateReadAuthConfig,
     db: Session = Depends(get_db),
-    user: dict | None = Depends(auth.require_admin),
-) -> dict:
+    user: UserPayload | None = Depends(require_admin),
+) -> dict[str, bool | str]:
     """Update read authentication configuration.
 
     Requires admin access. Changes are persistent and take effect immediately.
@@ -341,7 +357,7 @@ async def update_read_auth_config(
     config_service = ConfigService(db)
 
     # Get user ID from JWT
-    user_id = user.get("sub") if user else None
+    user_id = user.sub if user else None
 
     # Update configuration
     config_service.set_read_auth_enabled(config.enabled, user_id)
