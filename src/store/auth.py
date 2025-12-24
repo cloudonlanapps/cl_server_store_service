@@ -36,7 +36,7 @@ class UserPayload(BaseModel):
     """JWT token payload for authenticated users."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
-        extra="forbid",
+        extra="ignore",
         strict=True,
     )
 

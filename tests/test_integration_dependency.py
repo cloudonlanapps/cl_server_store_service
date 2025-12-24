@@ -42,7 +42,8 @@ def integration_app():
     from sqlalchemy.orm import configure_mappers, sessionmaker
     from sqlalchemy.pool import StaticPool
 
-    from store import app, database
+    from store import app
+    from store.database import database
 
     # Create test engine
     test_engine = create_engine(
