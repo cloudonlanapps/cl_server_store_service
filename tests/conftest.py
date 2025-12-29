@@ -5,8 +5,10 @@ Pytest configuration and fixtures for testing the CoLAN store.
 import os
 import shutil
 import sys
+from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 # Set up test environment variables BEFORE importing from store
 # IMPORTANT: Always use a test-specific directory for CL_SERVER_DIR
@@ -29,8 +31,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 from jose import jwt
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from test_config import (
     IMAGES_DIR,
@@ -41,13 +43,13 @@ from test_config import (
 
 
 @pytest.fixture(scope="session")
-def test_images_dir():
+def test_images_dir() -> Path:
     """Path to test images directory (absolute path)."""
     return IMAGES_DIR
 
 
 @pytest.fixture(scope="function")
-def test_engine():
+def test_engine() -> Generator[Engine, None, None]:
     """Create a test database engine with versioning support."""
     # Use in-memory SQLite with StaticPool for thread safety
     engine = create_engine(
@@ -75,7 +77,7 @@ def test_engine():
 
 
 @pytest.fixture(scope="function")
-def test_db_session(test_engine):
+def test_db_session(test_engine: Engine) -> Generator[Session, None, None]:
     """Create a test database session."""
     TestingSessionLocal = sessionmaker(
         autocommit=False, autoflush=False, bind=test_engine
@@ -88,7 +90,9 @@ def test_db_session(test_engine):
 
 
 @pytest.fixture(scope="function")
-def client(test_engine, clean_media_dir, monkeypatch):
+def client(
+    test_engine: Engine, clean_media_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> Generator[TestClient, None, None]:
     """Create a test client with a fresh database and test media directory."""
     print("Clien t was called..........")
 
@@ -105,9 +109,9 @@ def client(test_engine, clean_media_dir, monkeypatch):
     )
 
     # Override the get_db dependency
-    def override_get_db():
+    def override_get_db() -> Generator[Session, None, None]:
+        db = TestingSessionLocal()
         try:
-            db = TestingSessionLocal()
             yield db
         finally:
             db.close()
@@ -144,7 +148,7 @@ def client(test_engine, clean_media_dir, monkeypatch):
 
 
 @pytest.fixture(scope="function")
-def clean_media_dir():
+def clean_media_dir() -> Generator[Path, None, None]:
     """Clean up media files directory before and after tests."""
 
     # Clean before test
@@ -160,7 +164,7 @@ def clean_media_dir():
 
 
 @pytest.fixture
-def sample_image(test_images_dir):
+def sample_image(test_images_dir: Path) -> Path:
     """Get a sample image file for testing (absolute path)."""
     images = get_all_test_images()
     if not images:
@@ -171,7 +175,7 @@ def sample_image(test_images_dir):
 
 
 @pytest.fixture
-def sample_images(test_images_dir):
+def sample_images(test_images_dir: Path) -> list[Path]:
     """Get multiple sample images for testing (absolute paths)."""
     images = get_all_test_images()
     if len(images) < 2:
@@ -182,7 +186,7 @@ def sample_images(test_images_dir):
 
 
 @pytest.fixture
-def sample_job_data():
+def sample_job_data() -> dict[str, Any]:
     """Sample job data for testing job endpoints.
 
     Returns:
@@ -224,7 +228,7 @@ def sample_job_data_high_priority():
 
 
 @pytest.fixture
-def file_storage_service(clean_media_dir):
+def file_storage_service(clean_media_dir: Path) -> Any:
     """Create an EntityStorageService instance using the clean media directory."""
     from store.entity_storage import EntityStorageService
 
@@ -232,7 +236,7 @@ def file_storage_service(clean_media_dir):
 
 
 @pytest.fixture(scope="function")
-def key_pair(tmp_path):
+def key_pair(tmp_path: Path) -> tuple[bytes, str]:
     """Generate ES256 key pair for JWT testing.
 
     Returns:
@@ -264,7 +268,7 @@ def key_pair(tmp_path):
 
 
 @pytest.fixture(scope="function")
-def jwt_token_generator(key_pair):
+def jwt_token_generator(key_pair: tuple[bytes, str]) -> Any:
     """Generate JWT tokens with configurable claims for testing.
 
     Provides a TestTokenGenerator that can create valid, expired, or invalid tokens.
@@ -273,13 +277,19 @@ def jwt_token_generator(key_pair):
     class TestTokenGenerator:
         """Helper class to generate JWT tokens for testing."""
 
-        def __init__(self, private_key_pem):
+        private_key: bytes | str
+
+        def __init__(self, private_key_pem: bytes) -> None:
             """Initialize with private key for signing tokens."""
             self.private_key = private_key_pem
 
         def generate_token(
-            self, sub="testuser", permissions=None, is_admin=False, expired=False
-        ):
+            self,
+            sub: str = "testuser",
+            permissions: list[str] | None = None,
+            is_admin: bool = False,
+            expired: bool = False,
+        ) -> str:
             """Generate a JWT token with specified claims.
 
             Args:
@@ -300,7 +310,7 @@ def jwt_token_generator(key_pair):
             else:
                 exp = datetime.now(UTC) + timedelta(hours=1)
 
-            payload = {
+            payload: dict[str, str | list[str] | bool | datetime] = {
                 "sub": sub,
                 "permissions": permissions,
                 "is_admin": is_admin,
@@ -309,7 +319,7 @@ def jwt_token_generator(key_pair):
             }
 
             # Encode with ES256 algorithm
-            token = jwt.encode(
+            token: str = jwt.encode(
                 payload,
                 (
                     self.private_key.decode()
@@ -320,7 +330,7 @@ def jwt_token_generator(key_pair):
             )
             return token
 
-        def generate_invalid_token_wrong_key(self):
+        def generate_invalid_token_wrong_key(self) -> str:
             """Generate a token signed with a different private key (invalid signature).
 
             Returns:
@@ -334,7 +344,7 @@ def jwt_token_generator(key_pair):
                 encryption_algorithm=serialization.NoEncryption(),
             )
 
-            payload = {
+            payload: dict[str, str | list[str] | bool | datetime] = {
                 "sub": "testuser",
                 "permissions": ["media_store_write"],
                 "is_admin": False,
@@ -342,14 +352,14 @@ def jwt_token_generator(key_pair):
                 "iat": datetime.now(UTC),
             }
 
-            token = jwt.encode(payload, wrong_key_pem.decode(), algorithm="ES256")
+            token: str = jwt.encode(payload, wrong_key_pem.decode(), algorithm="ES256")
             return token
 
     return TestTokenGenerator(key_pair[0])
 
 
 @pytest.fixture(scope="function")
-def admin_token(jwt_token_generator):
+def admin_token(jwt_token_generator: Any) -> str:
     """Generate a valid admin token for testing.
 
     Returns:
@@ -363,7 +373,7 @@ def admin_token(jwt_token_generator):
 
 
 @pytest.fixture(scope="function")
-def write_token(jwt_token_generator):
+def write_token(jwt_token_generator: Any) -> str:
     """Generate a valid write-only token for testing.
 
     Returns:
@@ -375,7 +385,7 @@ def write_token(jwt_token_generator):
 
 
 @pytest.fixture(scope="function")
-def read_token(jwt_token_generator):
+def read_token(jwt_token_generator: Any) -> str:
     """Generate a valid read-only token for testing.
 
     Returns:
@@ -387,7 +397,7 @@ def read_token(jwt_token_generator):
 
 
 @pytest.fixture(scope="function")
-def inference_token(jwt_token_generator):
+def inference_token(jwt_token_generator: Any) -> str:
     """Generate a token with ai_inference_support permission for job testing.
 
     Returns:
@@ -399,7 +409,7 @@ def inference_token(jwt_token_generator):
 
 
 @pytest.fixture(scope="function")
-def inference_admin_token(jwt_token_generator):
+def inference_admin_token(jwt_token_generator: Any) -> str:
     """Generate an admin token with ai_inference_support permission.
 
     Returns:
@@ -411,7 +421,12 @@ def inference_admin_token(jwt_token_generator):
 
 
 @pytest.fixture(scope="function")
-def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
+def auth_client(
+    test_engine: Engine,
+    clean_media_dir: Path,
+    key_pair: tuple[bytes, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[TestClient, None, None]:
     """Create a test client WITHOUT auth override for testing authentication.
 
     This client does NOT bypass authentication, allowing proper testing of auth flows.
@@ -429,7 +444,7 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     Path(expected_key_path).parent.mkdir(parents=True, exist_ok=True)
     import shutil
 
-    shutil.copy(public_key_path, expected_key_path)
+    _ = shutil.copy(public_key_path, expected_key_path)
 
     # Create session maker
     TestingSessionLocal = sessionmaker(
@@ -437,9 +452,9 @@ def auth_client(test_engine, clean_media_dir, key_pair, monkeypatch):
     )
 
     # Override the get_db dependency
-    def override_get_db():
+    def override_get_db() -> Generator[Session, None, None]:
+        db = TestingSessionLocal()
         try:
-            db = TestingSessionLocal()
             yield db
         finally:
             db.close()

@@ -2,11 +2,16 @@
 Tests for CRUD operations on entities.
 """
 
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+from store.schemas import Item, PaginatedResponse
+
 
 class TestEntityCRUD:
     """Test Create, Read, Update, Delete operations."""
 
-    def test_create_collection(self, client):
+    def test_create_collection(self, client: TestClient) -> None:
         """Test creating a collection without files."""
         response = client.post(
             "/entities/",
@@ -18,12 +23,14 @@ class TestEntityCRUD:
         )
 
         assert response.status_code == 201
-        data = response.json()
-        assert data["id"] is not None
-        assert data["is_collection"] is True
-        assert data["label"] == "Test Collection"
+        item = Item.model_validate(response.json())
+        assert item.id is not None
+        assert item.is_collection is True
+        assert item.label == "Test Collection"
 
-    def test_get_entity_by_id(self, client, sample_image, clean_media_dir):
+    def test_get_entity_by_id(
+        self, client: TestClient, sample_image: Path, clean_media_dir: Path
+    ) -> None:
         """Test retrieving a specific entity by ID."""
         # Create entity
         with open(sample_image, "rb") as f:
@@ -33,16 +40,20 @@ class TestEntityCRUD:
                 data={"is_collection": "false", "label": "Test Entity"}
             )
 
-        entity_id = create_response.json()["id"]
+        created_item = Item.model_validate(create_response.json())
+        assert created_item.id is not None
+        entity_id = created_item.id
 
         # Get entity
         get_response = client.get(f"/entities/{entity_id}")
         assert get_response.status_code == 200
-        data = get_response.json()
-        assert data["id"] == entity_id
-        assert data["label"] == "Test Entity"
+        item = Item.model_validate(get_response.json())
+        assert item.id == entity_id
+        assert item.label == "Test Entity"
 
-    def test_get_all_entities(self, client, sample_images, clean_media_dir):
+    def test_get_all_entities(
+        self, client: TestClient, sample_images: list[Path], clean_media_dir: Path
+    ) -> None:
         """Test retrieving all entities."""
         # Create multiple entities
         for image_path in sample_images:
@@ -56,13 +67,11 @@ class TestEntityCRUD:
         # Get all entities (request large page size to ensure we get all)
         response = client.get("/entities/?page_size=100")
         assert response.status_code == 200
-        data = response.json()
-        assert "items" in data
-        assert "pagination" in data
-        assert len(data["items"]) == len(sample_images)
-        assert data["pagination"]["total_items"] == len(sample_images)
+        paginated = PaginatedResponse.model_validate(response.json())
+        assert len(paginated.items) == len(sample_images)
+        assert paginated.pagination.total_items == len(sample_images)
 
-    def test_patch_entity(self, client):
+    def test_patch_entity(self, client: TestClient) -> None:
         """Test partially updating an entity."""
         # Create entity
         create_response = client.post(
@@ -73,7 +82,9 @@ class TestEntityCRUD:
                 "description": "Original Description"
             }
         )
-        entity_id = create_response.json()["id"]
+        created_item = Item.model_validate(create_response.json())
+        assert created_item.id is not None
+        entity_id = created_item.id
 
         # Patch entity (update only label)
         patch_response = client.patch(
@@ -82,26 +93,30 @@ class TestEntityCRUD:
         )
 
         assert patch_response.status_code == 200
-        data = patch_response.json()
-        assert data["label"] == "Updated Label"
-        assert data["description"] == "Original Description"  # Should remain unchanged
-        assert isinstance(data["updated_date"], int)
+        patched_item = Item.model_validate(patch_response.json())
+        assert patched_item.label == "Updated Label"
+        assert patched_item.description == "Original Description"  # Should remain unchanged
+        assert isinstance(patched_item.updated_date, int)
 
-    def test_patch_hierarchy(self, client):
+    def test_patch_hierarchy(self, client: TestClient) -> None:
         """Test modifying entity hierarchy (parent_id)."""
         # Create parent collection
         parent_resp = client.post(
             "/entities/",
             data={"is_collection": "true", "label": "Parent Collection"}
         )
-        parent_id = parent_resp.json()["id"]
+        parent_item = Item.model_validate(parent_resp.json())
+        assert parent_item.id is not None
+        parent_id = parent_item.id
 
         # Create child entity
         child_resp = client.post(
             "/entities/",
             data={"is_collection": "true", "label": "Child Entity"}
         )
-        child_id = child_resp.json()["id"]
+        child_item = Item.model_validate(child_resp.json())
+        assert child_item.id is not None
+        child_id = child_item.id
 
         # 1. Move child to parent
         resp = client.patch(
@@ -109,7 +124,8 @@ class TestEntityCRUD:
             json={"body": {"parent_id": parent_id}}
         )
         assert resp.status_code == 200
-        assert resp.json()["parent_id"] == parent_id
+        updated_child = Item.model_validate(resp.json())
+        assert updated_child.parent_id == parent_id
 
         # 2. Remove child from parent (nullify parent_id)
         resp = client.patch(
@@ -117,9 +133,12 @@ class TestEntityCRUD:
             json={"body": {"parent_id": None}}
         )
         assert resp.status_code == 200
-        assert resp.json()["parent_id"] is None
+        updated_child = Item.model_validate(resp.json())
+        assert updated_child.parent_id is None
 
-    def test_delete_entity(self, client, sample_image, clean_media_dir):
+    def test_delete_entity(
+        self, client: TestClient, sample_image: Path, clean_media_dir: Path
+    ) -> None:
         """Test hard deleting an entity."""
         # Create entity
         with open(sample_image, "rb") as f:
@@ -128,7 +147,9 @@ class TestEntityCRUD:
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Delete Test"}
             )
-        entity_id = response.json()["id"]
+        created_item = Item.model_validate(response.json())
+        assert created_item.id is not None
+        entity_id = created_item.id
 
         # Delete entity
         response = client.delete(f"/entities/{entity_id}")
@@ -138,7 +159,9 @@ class TestEntityCRUD:
         response = client.get(f"/entities/{entity_id}")
         assert response.status_code == 404
 
-    def test_soft_delete_and_restore(self, client, sample_image, clean_media_dir):
+    def test_soft_delete_and_restore(
+        self, client: TestClient, sample_image: Path, clean_media_dir: Path
+    ) -> None:
         """Test soft delete and restore via PATCH."""
         # Create entity
         with open(sample_image, "rb") as f:
@@ -147,7 +170,9 @@ class TestEntityCRUD:
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Soft Delete Test"}
             )
-        entity_id = response.json()["id"]
+        created_item = Item.model_validate(response.json())
+        assert created_item.id is not None
+        entity_id = created_item.id
 
         # Soft Delete (PATCH is_deleted=True)
         response = client.patch(
@@ -155,12 +180,14 @@ class TestEntityCRUD:
             json={"body": {"is_deleted": True}}
         )
         assert response.status_code == 200
-        assert response.json()["is_deleted"] is True
+        deleted_item = Item.model_validate(response.json())
+        assert deleted_item.is_deleted is True
 
         # Verify entity still exists but is marked deleted
         response = client.get(f"/entities/{entity_id}")
         assert response.status_code == 200
-        assert response.json()["is_deleted"] is True
+        get_item = Item.model_validate(response.json())
+        assert get_item.is_deleted is True
 
         # Restore (PATCH is_deleted=False)
         response = client.patch(
@@ -168,14 +195,18 @@ class TestEntityCRUD:
             json={"body": {"is_deleted": False}}
         )
         assert response.status_code == 200
-        assert response.json()["is_deleted"] is False
+        restored_item = Item.model_validate(response.json())
+        assert restored_item.is_deleted is False
 
         # Verify entity is restored
         response = client.get(f"/entities/{entity_id}")
         assert response.status_code == 200
-        assert response.json()["is_deleted"] is False
+        final_item = Item.model_validate(response.json())
+        assert final_item.is_deleted is False
 
-    def test_delete_all_entities(self, client, sample_images, clean_media_dir):
+    def test_delete_all_entities(
+        self, client: TestClient, sample_images: list[Path], clean_media_dir: Path
+    ) -> None:
         """Test deleting all entities."""
         # Create multiple entities
         for image_path in sample_images:
@@ -193,16 +224,18 @@ class TestEntityCRUD:
         # Verify all deleted
         get_response = client.get("/entities/")
         assert get_response.status_code == 200
-        data = get_response.json()
-        assert len(data["items"]) == 0
-        assert data["pagination"]["total_items"] == 0
+        paginated = PaginatedResponse.model_validate(get_response.json())
+        assert len(paginated.items) == 0
+        assert paginated.pagination.total_items == 0
 
-    def test_get_nonexistent_entity(self, client):
+    def test_get_nonexistent_entity(self, client: TestClient) -> None:
         """Test getting an entity that doesn't exist."""
         response = client.get("/entities/99999")
         assert response.status_code == 404
 
-    def test_update_nonexistent_entity(self, client, sample_image):
+    def test_update_nonexistent_entity(
+        self, client: TestClient, sample_image: Path
+    ) -> None:
         """Test updating an entity that doesn't exist."""
         with open(sample_image, "rb") as f:
             response = client.put(

@@ -2,13 +2,19 @@
 Tests for entity versioning functionality using SQLAlchemy-Continuum.
 """
 
+from pathlib import Path
+
 import pytest
+from fastapi.testclient import TestClient
+from store.schemas import Item
 
 
 class TestEntityVersioning:
     """Test entity versioning with SQLAlchemy-Continuum."""
 
-    def test_entity_creation_creates_version_1(self, client, sample_image):
+    def test_entity_creation_creates_version_1(
+        self, client: TestClient, sample_image: Path
+    ) -> None:
         """Test that creating an entity creates version 1."""
         with open(sample_image, "rb") as f:
             response = client.post(
@@ -22,16 +28,20 @@ class TestEntityVersioning:
             )
 
         assert response.status_code == 201
-        entity_id = response.json()["id"]
+        item = Item.model_validate(response.json())
+        assert item.id is not None
+        entity_id = item.id
 
         # Query version 1 explicitly
         version_response = client.get(f"/entities/{entity_id}?version=1")
         assert version_response.status_code == 200
-        data = version_response.json()
-        assert data["label"] == "Original Version"
-        assert data["description"] == "This is version 1"
+        version1 = Item.model_validate(version_response.json())
+        assert version1.label == "Original Version"
+        assert version1.description == "This is version 1"
 
-    def test_entity_update_creates_new_version(self, client, sample_images):
+    def test_entity_update_creates_new_version(
+        self, client: TestClient, sample_images: list[Path]
+    ) -> None:
         """Test that updating an entity creates a new version."""
         if len(sample_images) < 2:
             pytest.skip("Need at least 2 images for this test")
@@ -51,8 +61,11 @@ class TestEntityVersioning:
             )
 
         assert create_response.status_code == 201
-        entity_id = create_response.json()["id"]
-        version1_md5 = create_response.json()["md5"]
+        created_item = Item.model_validate(create_response.json())
+        assert created_item.id is not None
+        assert created_item.md5 is not None
+        entity_id = created_item.id
+        version1_md5 = created_item.md5
 
         # Update entity (creates version 2)
         with open(image2, "rb") as f:
@@ -67,26 +80,30 @@ class TestEntityVersioning:
             )
 
         assert update_response.status_code == 200
-        version2_md5 = update_response.json()["md5"]
+        updated_item = Item.model_validate(update_response.json())
+        assert updated_item.md5 is not None
+        version2_md5 = updated_item.md5
 
         # Verify version 1 still exists with original data
         v1_response = client.get(f"/entities/{entity_id}?version=1")
         assert v1_response.status_code == 200
-        v1_data = v1_response.json()
-        assert v1_data["label"] == "Version 1"
-        assert v1_data["description"] == "First version"
-        assert v1_data["md5"] == version1_md5
+        v1_item = Item.model_validate(v1_response.json())
+        assert v1_item.label == "Version 1"
+        assert v1_item.description == "First version"
+        assert v1_item.md5 == version1_md5
 
         # Verify version 2 has new data
         v2_response = client.get(f"/entities/{entity_id}?version=2")
         assert v2_response.status_code == 200
-        v2_data = v2_response.json()
-        assert v2_data["label"] == "Version 2"
-        assert v2_data["description"] == "Second version"
-        assert v2_data["md5"] == version2_md5
-        assert v2_data["md5"] != version1_md5
+        v2_item = Item.model_validate(v2_response.json())
+        assert v2_item.label == "Version 2"
+        assert v2_item.description == "Second version"
+        assert v2_item.md5 == version2_md5
+        assert v2_item.md5 != version1_md5
 
-    def test_query_without_version_returns_latest(self, client, sample_image):
+    def test_query_without_version_returns_latest(
+        self, client: TestClient, sample_image: Path
+    ) -> None:
         """Test that querying without version parameter returns the latest version."""
         # Create entity
         with open(sample_image, "rb") as f:
@@ -99,7 +116,9 @@ class TestEntityVersioning:
                 }
             )
 
-        entity_id = create_response.json()["id"]
+        created_item = Item.model_validate(create_response.json())
+        assert created_item.id is not None
+        entity_id = created_item.id
 
         # Update entity (metadata only)
         update_response = client.put(
@@ -115,10 +134,12 @@ class TestEntityVersioning:
         # Query without version should return latest
         latest_response = client.get(f"/entities/{entity_id}")
         assert latest_response.status_code == 200
-        latest_data = latest_response.json()
-        assert latest_data["label"] == "Version 2 - Latest"
+        latest_item = Item.model_validate(latest_response.json())
+        assert latest_item.label == "Version 2 - Latest"
 
-    def test_list_all_versions_of_entity(self, client, sample_image):
+    def test_list_all_versions_of_entity(
+        self, client: TestClient, sample_image: Path
+    ) -> None:
         """Test listing all versions of an entity."""
         # Create entity
         with open(sample_image, "rb") as f:
@@ -131,11 +152,13 @@ class TestEntityVersioning:
                 }
             )
 
-        entity_id = create_response.json()["id"]
+        created_item = Item.model_validate(create_response.json())
+        assert created_item.id is not None
+        entity_id = created_item.id
 
         # Update twice to create versions 2 and 3
         for i in range(2, 4):
-            client.put(
+            _ = client.put(
                 f"/entities/{entity_id}",
                 data={
                     "is_collection": "false",
@@ -146,7 +169,7 @@ class TestEntityVersioning:
         # List all versions
         versions_response = client.get(f"/entities/{entity_id}/versions")
         assert versions_response.status_code == 200
-        versions = versions_response.json()
+        versions: list[dict[str, int | None]] = versions_response.json()
 
         # Should have 3 versions
         assert len(versions) >= 3
@@ -156,7 +179,9 @@ class TestEntityVersioning:
             assert "version" in version_info
             assert "transaction_id" in version_info or "updated_date" in version_info
 
-    def test_patch_creates_new_version(self, client, sample_image):
+    def test_patch_creates_new_version(
+        self, client: TestClient, sample_image: Path
+    ) -> None:
         """Test that PATCH operations also create new versions."""
         # Create entity
         with open(sample_image, "rb") as f:
@@ -170,7 +195,9 @@ class TestEntityVersioning:
                 }
             )
 
-        entity_id = create_response.json()["id"]
+        created_item = Item.model_validate(create_response.json())
+        assert created_item.id is not None
+        entity_id = created_item.id
 
         # Patch entity (should create version 2)
         patch_response = client.patch(
@@ -187,16 +214,20 @@ class TestEntityVersioning:
         # Verify version 1 has original label
         v1_response = client.get(f"/entities/{entity_id}?version=1")
         assert v1_response.status_code == 200
-        assert v1_response.json()["label"] == "Original"
+        v1_item = Item.model_validate(v1_response.json())
+        assert v1_item.label == "Original"
 
         # Verify latest version has patched label
         latest_response = client.get(f"/entities/{entity_id}")
         assert latest_response.status_code == 200
-        assert latest_response.json()["label"] == "Patched Label"
+        latest_item = Item.model_validate(latest_response.json())
+        assert latest_item.label == "Patched Label"
         # Description should remain unchanged
-        assert latest_response.json()["description"] == "Original description"
+        assert latest_item.description == "Original description"
 
-    def test_query_nonexistent_version_returns_error(self, client, sample_image):
+    def test_query_nonexistent_version_returns_error(
+        self, client: TestClient, sample_image: Path
+    ) -> None:
         """Test that querying a non-existent version returns appropriate error."""
         # Create entity (only version 1 exists)
         with open(sample_image, "rb") as f:
@@ -209,14 +240,17 @@ class TestEntityVersioning:
                 }
             )
 
-        entity_id = create_response.json()["id"]
+        created_item = Item.model_validate(create_response.json())
+        assert created_item.id is not None
+        entity_id = created_item.id
 
         # Try to query version 99 (doesn't exist)
         response = client.get(f"/entities/{entity_id}?version=99")
         assert response.status_code == 404
-        assert "version" in response.json()["detail"].lower()
+        error_data: dict[str, str] = response.json()
+        assert "version" in error_data["detail"].lower()
 
-    def test_collection_versioning(self, client):
+    def test_collection_versioning(self, client: TestClient) -> None:
         """Test that collections are also versioned."""
         # Create collection
         create_response = client.post(
@@ -229,7 +263,9 @@ class TestEntityVersioning:
         )
 
         assert create_response.status_code == 201
-        entity_id = create_response.json()["id"]
+        created_item = Item.model_validate(create_response.json())
+        assert created_item.id is not None
+        entity_id = created_item.id
 
         # Update collection
         update_response = client.put(
@@ -246,9 +282,11 @@ class TestEntityVersioning:
         # Verify version 1
         v1_response = client.get(f"/entities/{entity_id}?version=1")
         assert v1_response.status_code == 200
-        assert v1_response.json()["label"] == "Collection V1"
+        v1_item = Item.model_validate(v1_response.json())
+        assert v1_item.label == "Collection V1"
 
         # Verify version 2
         v2_response = client.get(f"/entities/{entity_id}?version=2")
         assert v2_response.status_code == 200
-        assert v2_response.json()["label"] == "Collection V2"
+        v2_item = Item.model_validate(v2_response.json())
+        assert v2_item.label == "Collection V2"
