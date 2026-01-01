@@ -37,7 +37,7 @@ store = "store.main:main"
 
 [tool.uv.sources]
 cl-ml-tools = { git = "https://github.com/cloudonlanapps/cl_ml_tools.git" }
-cl-server-shared = { git = "https://github.com/cloudonlanapps/cl_server_shared.git" }
+cl-server-shared = { path = "../shared", editable = true }
 
 [project.optional-dependencies]
 dev = [

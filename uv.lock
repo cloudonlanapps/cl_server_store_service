@@ -165,13 +165,27 @@ dependencies = [
 [[package]]
 name = "cl-server-shared"
 version = "0.1.0"
-source = { git = "https://github.com/cloudonlanapps/cl_server_shared.git#51746ac55d104c2e840147b1634a0bfa6d07df04" }
+source = { editable = "../shared" }
 dependencies = [
     { name = "aiofiles" },
     { name = "cl-ml-tools" },
     { name = "pydantic" },
     { name = "sqlalchemy" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiofiles", specifier = ">=25.0.0" },
+    { name = "basedpyright", marker = "extra == 'dev'", specifier = ">=1.36.0" },
+    { name = "cl-ml-tools", git = "https://github.com/cloudonlanapps/cl_ml_tools.git" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
+]
+provides-extras = ["dev"]
 
 [[package]]
 name = "click"
@@ -1241,7 +1255,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.17.2" },
     { name = "basedpyright", specifier = ">=1.36.1" },
     { name = "cl-ml-tools", git = "https://github.com/cloudonlanapps/cl_ml_tools.git" },
-    { name = "cl-server-shared", git = "https://github.com/cloudonlanapps/cl_server_shared.git" },
+    { name = "cl-server-shared", editable = "../shared" },
     { name = "fastapi", specifier = ">=0.127.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.1" },
     { name = "marshmallow", specifier = ">=4.1.2" },
