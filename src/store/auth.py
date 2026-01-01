@@ -40,7 +40,7 @@ class UserPayload(BaseModel):
         strict=True,
     )
 
-    sub: str
+    id: str
     is_admin: bool = Field(default=False, strict=True)
     permissions: Permissions
 

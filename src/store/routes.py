@@ -97,7 +97,7 @@ async def create_entity(
     service = EntityService(db)
 
     # Extract user_id from JWT payload (None in demo mode)
-    user_id = user.sub if user else None
+    user_id = user.id if user else None
 
     # Create body object from form fields
     body = schemas.BodyCreateEntity(
@@ -196,7 +196,7 @@ async def put_entity(
     service = EntityService(db)
 
     # Extract user_id from JWT payload (None in demo mode)
-    user_id = user.sub if user else None
+    user_id = user.id if user else None
 
     # Create body object from form fields
     body = schemas.BodyUpdateEntity(
@@ -246,14 +246,30 @@ async def put_entity(
 )
 async def patch_entity(
     entity_id: int,
-    body: schemas.BodyPatchEntity = Body(..., embed=True),
+    label: str | None = Form(None, title="Label"),
+    description: str | None = Form(None, title="Description"),
+    parent_id: int | None = Form(None, title="Parent Id"),
+    is_deleted: bool | None = Form(None, title="Is Deleted"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
 ) -> schemas.Item:
     service = EntityService(db)
 
     # Extract user_id from JWT payload (None in demo mode)
-    user_id = user.sub if user else None
+    user_id = user.id if user else None
+
+    # Create body object from form fields (only include non-None values)
+    patch_data = {}
+    if label is not None:
+        patch_data["label"] = label
+    if description is not None:
+        patch_data["description"] = description
+    if parent_id is not None:
+        patch_data["parent_id"] = parent_id
+    if is_deleted is not None:
+        patch_data["is_deleted"] = is_deleted
+
+    body = schemas.BodyPatchEntity(**patch_data)
 
     item = service.patch_entity(entity_id, body, user_id)
     if not item:
@@ -357,7 +373,7 @@ async def get_config(
     responses={200: {"description": "Successful Response"}},
 )
 async def update_read_auth_config(
-    config: schemas.UpdateReadAuthConfig,
+    enabled: bool = Form(..., title="Enabled"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_admin),
 ) -> dict[str, bool | str]:
@@ -371,13 +387,13 @@ async def update_read_auth_config(
     config_service = ConfigService(db)
 
     # Get user ID from JWT
-    user_id = user.sub if user else None
+    user_id = user.id if user else None
 
     # Update configuration
-    config_service.set_read_auth_enabled(config.enabled, user_id)
+    config_service.set_read_auth_enabled(enabled, user_id)
 
     return {
-        "read_auth_enabled": config.enabled,
+        "read_auth_enabled": enabled,
         "message": "Configuration updated successfully",
     }
 
@@ -386,6 +402,7 @@ class RootResponse(BaseModel):
     status: str
     service: str
     version: str
+    guestMode: str
 
 
 @router.get(
@@ -395,5 +412,17 @@ class RootResponse(BaseModel):
     response_model=RootResponse,
     operation_id="root_get",
 )
-async def root():
-    return RootResponse(status="healthy", service="CoLAN Store Server", version="v1")
+async def root(db: Session = Depends(get_db)):
+    from .config_service import ConfigService
+
+    config_service = ConfigService(db)
+    read_auth_enabled = config_service.get_read_auth_enabled()
+    # guestMode is "on" when read_auth is disabled (public read access)
+    guest_mode = "off" if read_auth_enabled else "on"
+
+    return RootResponse(
+        status="healthy",
+        service="CoLAN Store Server",
+        version="v1",
+        guestMode=guest_mode
+    )
