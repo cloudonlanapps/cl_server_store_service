@@ -141,7 +141,7 @@ wheels = [
 [[package]]
 name = "cl-ml-tools"
 version = "0.2.1"
-source = { git = "https://github.com/cloudonlanapps/cl_ml_tools.git#8b65ebb15b86cb92a7c0fc933c154dfb77c2617b" }
+source = { editable = "../packages/cl_ml_tools" }
 dependencies = [
     { name = "aiofiles" },
     { name = "basedpyright" },
@@ -162,6 +162,33 @@ dependencies = [
     { name = "scipy" },
 ]
 
+[package.metadata]
+requires-dist = [
+    { name = "aiofiles", specifier = ">=25.1.0" },
+    { name = "basedpyright", specifier = ">=1.36.1" },
+    { name = "cl-ml-tools", extras = ["dev"], marker = "extra == 'all'" },
+    { name = "fastapi", specifier = ">=0.100" },
+    { name = "httpx", specifier = ">=0.24" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "m3u8", specifier = ">=6.0.0" },
+    { name = "numpy", specifier = ">=1.24.0" },
+    { name = "onnx", specifier = ">=1.15.0" },
+    { name = "onnxruntime", specifier = ">=1.16.0" },
+    { name = "opencv-python-headless", specifier = ">=4.12.0.88" },
+    { name = "paho-mqtt", specifier = ">=1.6.0" },
+    { name = "pillow", specifier = ">=10.0" },
+    { name = "pillow-heif", specifier = ">=1.1.1" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "python-magic", specifier = ">=0.4.27" },
+    { name = "python-multipart", specifier = ">=0.0.6" },
+    { name = "ruff", specifier = ">=0.14.9" },
+    { name = "scipy", specifier = ">=1.10.0" },
+]
+provides-extras = ["dev", "all"]
+
 [[package]]
 name = "cl-server-shared"
 version = "0.1.0"
@@ -177,7 +204,7 @@ dependencies = [
 requires-dist = [
     { name = "aiofiles", specifier = ">=25.0.0" },
     { name = "basedpyright", marker = "extra == 'dev'", specifier = ">=1.36.0" },
-    { name = "cl-ml-tools", git = "https://github.com/cloudonlanapps/cl_ml_tools.git" },
+    { name = "cl-ml-tools", editable = "../packages/cl_ml_tools" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
@@ -1254,7 +1281,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.17.2" },
     { name = "basedpyright", specifier = ">=1.36.1" },
-    { name = "cl-ml-tools", git = "https://github.com/cloudonlanapps/cl_ml_tools.git" },
+    { name = "cl-ml-tools", editable = "../packages/cl_ml_tools" },
     { name = "cl-server-shared", editable = "../shared" },
     { name = "fastapi", specifier = ">=0.127.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.1" },
