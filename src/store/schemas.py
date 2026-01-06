@@ -75,7 +75,7 @@ class PaginatedResponse(BaseModel):
 class ConfigResponse(BaseModel):
     """Response schema for configuration."""
 
-    read_auth_enabled: bool = Field(..., description="Whether read authentication is enabled")
+    guest_mode: bool = Field(..., description="Whether guest mode is enabled (true = no authentication required)")
     updated_at: int | None = Field(None, description="Last update timestamp (milliseconds)")
     updated_by: str | None = Field(None, description="User ID who last updated the config")
 

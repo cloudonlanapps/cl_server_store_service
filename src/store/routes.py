@@ -350,8 +350,10 @@ async def get_config(
         value_str = str(metadata["value"]) if metadata["value"] is not None else "false"
         updated_at = metadata["updated_at"]
         updated_by = metadata["updated_by"]
+        # Invert logic: read_auth_enabled=false means guest_mode=true
+        read_auth_enabled = value_str.lower() == "true"
         return schemas.ConfigResponse(
-            read_auth_enabled=value_str.lower() == "true",
+            guest_mode=not read_auth_enabled,
             updated_at=int(updated_at)
             if updated_at is not None and not isinstance(updated_at, str)
             else None,
@@ -360,26 +362,28 @@ async def get_config(
             else None,
         )
 
-    # Default if not found
-    return schemas.ConfigResponse(read_auth_enabled=False, updated_at=None, updated_by=None)
+    # Default if not found: read_auth_enabled=false means guest_mode=true
+    return schemas.ConfigResponse(guest_mode=True, updated_at=None, updated_by=None)
 
 
 @router.put(
-    "/admin/config/read-auth",
+    "/admin/config/guest-mode",
     tags=["admin"],
-    summary="Update Read Auth Configuration",
-    description="Toggle read authentication requirement. Requires admin access.",
-    operation_id="update_read_auth_config_admin_config_read_auth_put",
+    summary="Update Guest Mode Configuration",
+    description="Toggle guest mode (authentication requirement). Requires admin access.",
+    operation_id="update_guest_mode_admin_config_guest_mode_put",
     responses={200: {"description": "Successful Response"}},
 )
-async def update_read_auth_config(
-    enabled: bool = Form(..., title="Enabled"),
+async def update_guest_mode(
+    guest_mode: bool = Form(..., title="Guest Mode"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_admin),
 ) -> dict[str, bool | str]:
-    """Update read authentication configuration.
+    """Update guest mode configuration.
 
     Requires admin access. Changes are persistent and take effect immediately.
+    guest_mode=true means no authentication required.
+    guest_mode=false means authentication required.
     """
 
     from .config_service import ConfigService
@@ -389,11 +393,11 @@ async def update_read_auth_config(
     # Get user ID from JWT
     user_id = user.id if user else None
 
-    # Update configuration
-    config_service.set_read_auth_enabled(enabled, user_id)
+    # Invert logic: guest_mode=true means read_auth_enabled=false
+    config_service.set_read_auth_enabled(not guest_mode, user_id)
 
     return {
-        "read_auth_enabled": enabled,
+        "guest_mode": guest_mode,
         "message": "Configuration updated successfully",
     }
 
