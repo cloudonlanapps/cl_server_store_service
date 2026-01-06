@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING, override
 
 # Import shared Base
 from cl_server_shared.models import Base
-from sqlalchemy import BigInteger, Boolean, Float, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # CRITICAL: Import versioning BEFORE defining models with __versioned__
 from . import versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -54,6 +54,10 @@ class Entity(Base):
     # Soft delete flag
     is_deleted: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
 
+    # Relationships
+    faces: Mapped[list["Face"]] = relationship("Face", back_populates="entity", cascade="all, delete-orphan")
+    jobs: Mapped[list["EntityJob"]] = relationship("EntityJob", back_populates="entity", cascade="all, delete-orphan")
+
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:
         from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
@@ -83,6 +87,87 @@ class ServiceConfig(Base):
     @override
     def __repr__(self) -> str:
         return f"<ServiceConfig(key={self.key}, value={self.value})>"
+
+
+class Face(Base):
+    """SQLAlchemy model for detected faces."""
+
+    __tablename__ = "faces"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning for audit trail  # pyright: ignore[reportUnannotatedClassAttribute]
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Foreign key to Entity
+    entity_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # Bounding box as JSON list [x1, y1, x2, y2] (normalized [0.0, 1.0])
+    bbox: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Detection confidence score
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+
+    # Landmarks as JSON list [[x1, y1], [x2, y2], ...] (5 keypoints)
+    landmarks: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Path to cropped face image file
+    file_path: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Timestamp in milliseconds
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # Future expansion for person identification
+    person_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+
+    # Relationship to Entity
+    entity: Mapped[Entity] = relationship("Entity", back_populates="faces")
+
+    # SQLAlchemy-Continuum adds this relationship dynamically
+    if TYPE_CHECKING:
+        from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
+
+        versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
+
+    @override
+    def __repr__(self) -> str:
+        return f"<Face(id={self.id}, entity_id={self.entity_id}, confidence={self.confidence})>"
+
+
+class EntityJob(Base):
+    """Relationship table connecting entities to compute jobs."""
+
+    __tablename__ = "entity_jobs"  # pyright: ignore[reportUnannotatedClassAttribute]
+    # Note: NO versioning for this table (it's operational, not domain data)
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Foreign key to Entity
+    entity_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # Job tracking
+    job_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    task_type: Mapped[str] = mapped_column(String, nullable=False)  # "face_detection" or "clip_embedding"
+    status: Mapped[str] = mapped_column(String, nullable=False, index=True)  # "queued", "in_progress", "completed", "failed"
+
+    # Timestamps (in milliseconds)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    completed_at: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    # Error tracking
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Relationship to Entity
+    entity: Mapped[Entity] = relationship("Entity", back_populates="jobs")
+
+    @override
+    def __repr__(self) -> str:
+        return f"<EntityJob(id={self.id}, job_id={self.job_id}, task_type={self.task_type}, status={self.status})>"
 
 
 # Job and QueueEntry are imported from cl_server_shared above
