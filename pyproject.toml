@@ -19,6 +19,7 @@ classifiers = [
 dependencies = [
     "alembic>=1.17.2",
     "basedpyright>=1.36.1",
+    "cl-client",
     "cl-ml-tools @ git+https://github.com/cloudonlanapps/cl_ml_tools.git@main",
     "cl-server-shared @ git+https://github.com/cloudonlanapps/cl_server_shared.git@main",
     "fastapi>=0.127.0",
@@ -30,6 +31,9 @@ dependencies = [
     "uvicorn>=0.40.0",
     "werkzeug>=3.1.4",
 ]
+
+[tool.uv.sources]
+cl-client = { workspace = true }
 
 [project.scripts]
 store = "store.main:main"

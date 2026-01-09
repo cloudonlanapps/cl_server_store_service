@@ -2,33 +2,70 @@
 
 from __future__ import annotations
 
-import os
+from pydantic import BaseModel, Field
 
 
-def _get_value(key: str, default: str) -> str:
-    """Get configuration value from environment with optional default."""
-    return os.getenv(key, default)
+class PySDKRuntimeConfig(BaseModel):
+    """Runtime configuration for PySDK integration (Pydantic model).
 
+    This configuration is initialized from CLI arguments passed to main.py,
+    not from environment variables.
+    """
 
-def _get_int(key: str, default: int) -> int:
-    """Get integer configuration value."""
-    return int(os.getenv(key, str(default)))
+    # ========================================================================
+    # Auth Service Configuration
+    # ========================================================================
 
-
-class PySDKConfig:
-    """Configuration for Compute Service and Qdrant integration."""
+    auth_service_url: str = Field(
+        default="http://localhost:8000",
+        description="Auth service URL"
+    )
 
     # ========================================================================
     # Compute Service Configuration
     # ========================================================================
 
-    COMPUTE_SERVICE_URL: str = _get_value("COMPUTE_SERVICE_URL", "http://localhost:8002")
-    COMPUTE_USERNAME: str = _get_value("COMPUTE_USERNAME", "admin")
-    COMPUTE_PASSWORD: str = _get_value("COMPUTE_PASSWORD", "admin")
+    compute_service_url: str = Field(
+        default="http://localhost:8002",
+        description="Compute service URL"
+    )
+    compute_username: str = Field(
+        default="admin",
+        description="Compute service username"
+    )
+    compute_password: str = Field(
+        default="admin",
+        description="Compute service password"
+    )
 
     # ========================================================================
     # Qdrant Configuration
     # ========================================================================
 
-    QDRANT_URL: str = _get_value("QDRANT_URL", "http://localhost:6333")
-    QDRANT_COLLECTION_NAME: str = _get_value("QDRANT_COLLECTION_NAME", "image_embeddings")
+    qdrant_url: str = Field(
+        default="http://localhost:6333",
+        description="Qdrant vector database URL"
+    )
+    qdrant_collection_name: str = Field(
+        default="image_embeddings",
+        description="Qdrant collection name for CLIP embeddings"
+    )
+
+    # ========================================================================
+    # Face Store Configuration
+    # ========================================================================
+
+    face_store_collection_name: str = Field(
+        default="face_embeddings",
+        description="Qdrant collection name for face embeddings"
+    )
+    face_vector_size: int = Field(
+        default=512,
+        description="Face embedding vector dimension"
+    )
+    face_embedding_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Similarity threshold for face matching (0.0-1.0)"
+    )

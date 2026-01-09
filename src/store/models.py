@@ -118,11 +118,14 @@ class Face(Base):
     # Timestamp in milliseconds
     created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-    # Future expansion for person identification
-    person_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    # Link to known person (identified by face recognition)
+    known_person_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("known_persons.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
-    # Relationship to Entity
+    # Relationships
     entity: Mapped[Entity] = relationship("Entity", back_populates="faces")
+    known_person: Mapped[KnownPerson | None] = relationship("KnownPerson", back_populates="faces")
 
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:
@@ -168,6 +171,64 @@ class EntityJob(Base):
     @override
     def __repr__(self) -> str:
         return f"<EntityJob(id={self.id}, job_id={self.job_id}, task_type={self.task_type}, status={self.status})>"
+
+
+class KnownPerson(Base):
+    """Person identified by face embeddings."""
+
+    __tablename__ = "known_persons"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning  # pyright: ignore[reportUnannotatedClassAttribute]
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # User-provided name (optional, can be set later)
+    name: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+
+    # Timestamps (in milliseconds)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # Relationship to Face
+    faces: Mapped[list[Face]] = relationship("Face", back_populates="known_person")
+
+    # SQLAlchemy-Continuum adds this relationship dynamically
+    if TYPE_CHECKING:
+        from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
+
+        versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
+
+    @override
+    def __repr__(self) -> str:
+        return f"<KnownPerson(id={self.id}, name={self.name})>"
+
+
+class FaceMatch(Base):
+    """Track face similarity matches for audit and debugging."""
+
+    __tablename__ = "face_matches"  # pyright: ignore[reportUnannotatedClassAttribute]
+    # Note: NO versioning for this table (it's operational, not domain data)
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Foreign keys to Face table
+    face_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("faces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    matched_face_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("faces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # Similarity score (0.0-1.0)
+    similarity_score: Mapped[float] = mapped_column(Float, nullable=False)
+
+    # Timestamp (in milliseconds)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    @override
+    def __repr__(self) -> str:
+        return f"<FaceMatch(id={self.id}, face_id={self.face_id}, matched_face_id={self.matched_face_id}, score={self.similarity_score:.3f})>"
 
 
 # Job and QueueEntry are imported from cl_server_shared above

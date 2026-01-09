@@ -494,3 +494,33 @@ def auth_client(
         sys.modules["store.auth"]._public_key_load_attempts = 0
 
     app.dependency_overrides.clear()
+
+
+# Face detection and job fixtures
+@pytest.fixture(scope="function")
+def mock_compute_client(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Mock ComputeClient for testing job submission."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    client = MagicMock()
+    client.face_detection = MagicMock()
+    client.face_detection.detect = AsyncMock()
+    client.clip_embedding = MagicMock()
+    client.clip_embedding.embed_image = AsyncMock()
+    client.download_job_file = AsyncMock()
+    client.close = AsyncMock()
+
+    return client
+
+
+@pytest.fixture(scope="function")
+def mock_qdrant_store(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Mock QdrantImageStore for testing embedding operations."""
+    from unittest.mock import MagicMock
+
+    store = MagicMock()
+    store.add_vector = MagicMock()
+    store.get_vector = MagicMock(return_value=[])
+    store.search = MagicMock(return_value=[])
+
+    return store
