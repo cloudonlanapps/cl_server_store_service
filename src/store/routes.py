@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import (
     APIRouter,
     Body,
@@ -19,10 +21,29 @@ from . import config_service as cfg_service
 from . import models
 from . import schemas
 from .auth import UserPayload, require_admin, require_permission
-from .database import get_db
+from .database import SessionLocal, get_db
 from .service import EntityService
 
 router = APIRouter()
+
+
+async def _trigger_async_jobs_background(entity_id: int) -> None:
+    """Trigger async jobs in background with independent DB session.
+
+    Creates a fresh database session for background processing to avoid
+    holding the request's session while async jobs are submitted.
+
+    Args:
+        entity_id: Entity ID to process
+    """
+    db = SessionLocal()
+    try:
+        service = EntityService(db)
+        entity = db.query(models.Entity).filter(models.Entity.id == entity_id).first()
+        if entity:
+            await service.trigger_async_jobs(entity)
+    finally:
+        db.close()
 
 
 @router.get(
@@ -119,12 +140,9 @@ async def create_entity(
         item = service.create_entity(body, file_bytes, filename, user_id)
 
         # Trigger async jobs for images (NON-BLOCKING)
+        # Uses independent DB session to avoid holding request session
         if not is_collection and file_bytes:
-            entity = db.query(models.Entity).filter(models.Entity.id == item.id).first()
-            if entity:
-                import asyncio
-
-                _ = asyncio.create_task(service.trigger_async_jobs(entity))
+            _ = asyncio.create_task(_trigger_async_jobs_background(item.id))
 
         return item
     except ValueError as e:
@@ -231,12 +249,9 @@ async def put_entity(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
 
         # Trigger async jobs if new file uploaded (NON-BLOCKING)
+        # Uses independent DB session to avoid holding request session
         if file_bytes and not is_collection:
-            entity = db.query(models.Entity).filter(models.Entity.id == entity_id).first()
-            if entity:
-                import asyncio
-
-                _ = asyncio.create_task(service.trigger_async_jobs(entity))
+            _ = asyncio.create_task(_trigger_async_jobs_background(entity_id))
 
         return item
     except ValueError as e:

@@ -4,7 +4,7 @@ from qdrant_client.http.models import PointStruct, HnswConfigDiff
 from qdrant_client.models import VectorParams, Distance
 
 import numpy as np
-from visual_search_engine.store_interface import StoreInterface
+from .store_interface import StoreInterface
 
 
 class QdrantImageStore(StoreInterface):
