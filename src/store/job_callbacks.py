@@ -29,13 +29,11 @@ logger = logging.getLogger(__name__)
 class JobCallbackHandler:
     """Handler for job completion callbacks."""
 
-    db: Session
     compute_client: ComputeClient
     qdrant_store: QdrantImageStore
 
     def __init__(
         self,
-        db: Session,
         compute_client: ComputeClient,
         qdrant_store: QdrantImageStore,
         job_submission_service: JobSubmissionService | None = None,
@@ -44,13 +42,11 @@ class JobCallbackHandler:
         """Initialize callback handler.
 
         Args:
-            db: Database session
             compute_client: ComputeClient for file downloads
             qdrant_store: QdrantImageStore for embedding storage
             job_submission_service: Service for submitting jobs (optional for initialization)
             pysdk_config: PySDK runtime configuration (optional for initialization)
         """
-        self.db = db
         self.compute_client = compute_client
         self.qdrant_store = qdrant_store
         self.job_submission_service = job_submission_service
@@ -148,6 +144,9 @@ class JobCallbackHandler:
             entity_id: Entity ID
             job: Job response from MQTT callback
         """
+        from .database import SessionLocal
+
+        db = SessionLocal()
         try:
             # Check if job failed
             if job.status == "failed":
@@ -159,7 +158,7 @@ class JobCallbackHandler:
 
             # Query Entity to get its create_date for organizing face files
             from .models import Entity
-            entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
+            entity = db.query(Entity).filter(Entity.id == entity_id).first()
             if not entity:
                 logger.error(f"Entity {entity_id} not found for face detection job {job.job_id}")
                 return
@@ -223,8 +222,8 @@ class JobCallbackHandler:
                         created_at=self._now_timestamp(),
                     )
 
-                    self.db.add(face)
-                    self.db.flush()  # Flush to get face.id
+                    db.add(face)
+                    db.flush()  # Flush to get face.id
 
                     logger.debug(
                         f"Saved face {index} for entity {entity_id} " +
@@ -256,7 +255,7 @@ class JobCallbackHandler:
                     # Continue processing other faces
 
             # Commit all Face records
-            self.db.commit()
+            db.commit()
             logger.info(
                 f"Successfully saved {len(faces_data)} faces for entity {entity_id}"
             )
@@ -269,7 +268,9 @@ class JobCallbackHandler:
             logger.error(
                 f"Failed to handle face detection completion for entity {entity_id}: {e}"
             )
-            self.db.rollback()
+            db.rollback()
+        finally:
+            db.close()
 
     def handle_clip_embedding_complete(self, entity_id: int, job: JobResponse) -> None:
         """Handle CLIP embedding job completion.
@@ -352,6 +353,9 @@ class JobCallbackHandler:
             entity_id: Original image Entity ID (for reference/logging)
             job: Job response from MQTT callback
         """
+        from .database import SessionLocal
+
+        db = SessionLocal()
         try:
             # Check if job failed
             if job.status == "failed":
@@ -405,7 +409,7 @@ class JobCallbackHandler:
             # Get Face record
             from .models import FaceMatch, KnownPerson
 
-            face = self.db.query(Face).filter(Face.id == face_id).first()
+            face = db.query(Face).filter(Face.id == face_id).first()
             if not face:
                 logger.error(f"Face {face_id} not found in database")
                 return
@@ -414,7 +418,7 @@ class JobCallbackHandler:
                 # Multiple matches found - link to BEST match, record ALL matches
                 best_match = similar_faces[0]  # Highest similarity score
                 best_face_id = best_match["id"]
-                best_face = self.db.query(Face).filter(Face.id == best_face_id).first()
+                best_face = db.query(Face).filter(Face.id == best_face_id).first()
 
                 if best_face and best_face.known_person_id:
                     # Link to best match's KnownPerson
@@ -432,7 +436,7 @@ class JobCallbackHandler:
                         similarity_score=match["score"],
                         created_at=self._now_timestamp(),
                     )
-                    self.db.add(face_match)
+                    db.add(face_match)
                     logger.debug(
                         f"Recorded match: face {face_id} <-> face {match['id']} (score: {match['score']:.3f})"
                     )
@@ -442,8 +446,8 @@ class JobCallbackHandler:
                     created_at=self._now_timestamp(),
                     updated_at=self._now_timestamp(),
                 )
-                self.db.add(known_person)
-                self.db.flush()  # Get ID
+                db.add(known_person)
+                db.flush()  # Get ID
 
                 face.known_person_id = known_person.id
                 logger.info(f"Created new known person {known_person.id} for face {face_id}")
@@ -461,7 +465,7 @@ class JobCallbackHandler:
                 },
             )
 
-            self.db.commit()
+            db.commit()
             logger.info(f"Successfully processed face embedding for face {face_id}")
 
             # Cleanup: Delete successful job record
@@ -470,4 +474,6 @@ class JobCallbackHandler:
 
         except Exception as e:
             logger.error(f"Failed to handle face embedding completion for face {face_id}: {e}")
-            self.db.rollback()
+            db.rollback()
+        finally:
+            db.close()

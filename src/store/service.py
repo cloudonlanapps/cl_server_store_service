@@ -521,9 +521,8 @@ class EntityService:
         pysdk_config = get_pysdk_config()
 
         # Create handlers with job_service and pysdk_config
-        job_service = JobSubmissionService(self.db, compute_client)
+        job_service = JobSubmissionService(compute_client)
         callback_handler = JobCallbackHandler(
-            self.db,
             compute_client,
             qdrant_store,
             job_submission_service=job_service,

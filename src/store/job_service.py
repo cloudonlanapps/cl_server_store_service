@@ -22,17 +22,14 @@ logger = logging.getLogger(__name__)
 class JobSubmissionService:
     """Service for submitting and tracking async compute jobs."""
 
-    db: Session
     compute_client: ComputeClient
 
-    def __init__(self, db: Session, compute_client: ComputeClient) -> None:
+    def __init__(self, compute_client: ComputeClient) -> None:
         """Initialize job submission service.
 
         Args:
-            db: Database session
             compute_client: ComputeClient instance for job submission
         """
-        self.db = db
         self.compute_client = compute_client
 
     @staticmethod
@@ -60,6 +57,9 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
+        from .database import SessionLocal
+
+        db = SessionLocal()
         try:
             job_response = await self.compute_client.face_detection.detect(
                 image=Path(file_path),
@@ -76,15 +76,17 @@ class JobSubmissionService:
                 created_at=now,
                 updated_at=now,
             )
-            self.db.add(entity_job)
-            self.db.commit()
+            db.add(entity_job)
+            db.commit()
 
             logger.info(f"Submitted face_detection job {job_response.job_id} for entity {entity_id}")
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit face_detection job for entity {entity_id}: {e}")
-            self.db.rollback()
+            db.rollback()
             return None
+        finally:
+            db.close()
 
     async def submit_clip_embedding(
         self,
@@ -102,6 +104,9 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
+        from .database import SessionLocal
+
+        db = SessionLocal()
         try:
             job_response = await self.compute_client.clip_embedding.embed_image(
                 image=Path(file_path),
@@ -118,15 +123,17 @@ class JobSubmissionService:
                 created_at=now,
                 updated_at=now,
             )
-            self.db.add(entity_job)
-            self.db.commit()
+            db.add(entity_job)
+            db.commit()
 
             logger.info(f"Submitted clip_embedding job {job_response.job_id} for entity {entity_id}")
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit clip_embedding job for entity {entity_id}: {e}")
-            self.db.rollback()
+            db.rollback()
             return None
+        finally:
+            db.close()
 
     async def submit_face_embedding(
         self,
@@ -146,6 +153,9 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
+        from .database import SessionLocal
+
+        db = SessionLocal()
         try:
             job_response = await self.compute_client.face_embedding.embed_faces(
                 image=Path(file_path),
@@ -163,8 +173,8 @@ class JobSubmissionService:
                 created_at=now,
                 updated_at=now,
             )
-            self.db.add(entity_job)
-            self.db.commit()
+            db.add(entity_job)
+            db.commit()
 
             logger.info(
                 f"Submitted face_embedding job {job_response.job_id} "
@@ -173,8 +183,10 @@ class JobSubmissionService:
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit face_embedding job for face {face_id}: {e}")
-            self.db.rollback()
+            db.rollback()
             return None
+        finally:
+            db.close()
 
     def delete_job_record(self, job_id: str) -> None:
         """Delete job record after successful completion.
@@ -182,15 +194,20 @@ class JobSubmissionService:
         Args:
             job_id: Job ID to delete
         """
+        from .database import SessionLocal
+
+        db = SessionLocal()
         try:
-            entity_job = self.db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
+            entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
             if entity_job:
-                self.db.delete(entity_job)
-                self.db.commit()
+                db.delete(entity_job)
+                db.commit()
                 logger.debug(f"Deleted successful job record {job_id}")
         except Exception as e:
             logger.error(f"Failed to delete job record {job_id}: {e}")
-            self.db.rollback()
+            db.rollback()
+        finally:
+            db.close()
 
     def update_job_status(
         self, job_id: str, status: str, error_message: str | None = None
@@ -202,8 +219,11 @@ class JobSubmissionService:
             status: New status (queued, in_progress, completed, failed)
             error_message: Optional error message if status is failed
         """
+        from .database import SessionLocal
+
+        db = SessionLocal()
         try:
-            entity_job = self.db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
+            entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
             if not entity_job:
                 logger.warning(f"Job {job_id} not found in database")
                 return
@@ -217,8 +237,10 @@ class JobSubmissionService:
             if error_message:
                 entity_job.error_message = error_message
 
-            self.db.commit()
+            db.commit()
             logger.debug(f"Updated job {job_id} status to {status}")
         except Exception as e:
             logger.error(f"Failed to update job {job_id} status: {e}")
-            self.db.rollback()
+            db.rollback()
+        finally:
+            db.close()
