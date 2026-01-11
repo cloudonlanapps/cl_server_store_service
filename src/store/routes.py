@@ -497,6 +497,116 @@ async def get_entity_faces(
 
 
 @router.get(
+    "/faces/{face_id}/embedding",
+    tags=["face-detection"],
+    summary="Download Face Embedding",
+    description="Downloads the face embedding vector from Qdrant as a .npy file.",
+    operation_id="download_face_embedding",
+    responses={
+        200: {"description": "Face embedding as .npy file"},
+        404: {"description": "Face or embedding not found"},
+    },
+)
+async def download_face_embedding(
+    face_id: int = Path(..., title="Face Id"),
+    db: Session = Depends(get_db),
+    user: UserPayload | None = Depends(require_permission("media_store_read")),
+):
+    """Download face embedding from Qdrant vector store."""
+    _ = user
+    from fastapi.responses import Response
+    from .face_store_singleton import get_face_store
+    from .compute_singleton import get_pysdk_config
+    from .models import Face
+    import numpy as np
+    import io
+
+    # Check if face exists in database
+    face = db.query(Face).filter(Face.id == face_id).first()
+    if not face:
+        raise HTTPException(status_code=404, detail="Face not found")
+
+    # Get face store and retrieve embedding
+    pysdk_config = get_pysdk_config()
+    face_store = get_face_store(pysdk_config)
+
+    # Retrieve from Qdrant using face_id as point_id
+    points = face_store.get_vector(point_id=face_id)
+
+    if not points or len(points) == 0:
+        raise HTTPException(status_code=404, detail="Face embedding not found in vector store")
+
+    # Extract vector from Qdrant point
+    point = points[0]
+    embedding_vector = np.array(point.vector, dtype=np.float32)
+
+    # Serialize to .npy format in memory
+    buffer = io.BytesIO()
+    np.save(buffer, embedding_vector)
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename=face_{face_id}_embedding.npy"}
+    )
+
+
+@router.get(
+    "/entities/{entity_id}/embedding",
+    tags=["entity", "clip-embedding"],
+    summary="Download Entity CLIP Embedding",
+    description="Downloads the CLIP image embedding vector from Qdrant as a .npy file.",
+    operation_id="download_entity_embedding",
+    responses={
+        200: {"description": "CLIP embedding as .npy file"},
+        404: {"description": "Entity or embedding not found"},
+    },
+)
+async def download_entity_embedding(
+    entity_id: int = Path(..., title="Entity Id"),
+    db: Session = Depends(get_db),
+    user: UserPayload | None = Depends(require_permission("media_store_read")),
+):
+    """Download entity CLIP embedding from Qdrant vector store."""
+    _ = user
+    from fastapi.responses import Response
+    from .models import Entity
+    import numpy as np
+    import io
+
+    # Check if entity exists in database
+    entity = db.query(Entity).filter(Entity.id == entity_id).first()
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    # Get Qdrant store and retrieve embedding
+    from .qdrant_singleton import get_qdrant_store
+    qdrant_store = get_qdrant_store()
+
+    # Retrieve from Qdrant using entity_id as point_id
+    points = qdrant_store.get_vector(point_id=entity_id)
+
+    if not points or len(points) == 0:
+        raise HTTPException(status_code=404, detail="Entity embedding not found in vector store")
+
+    # Extract vector from Qdrant point
+    point = points[0]
+    embedding_vector = np.array(point.vector, dtype=np.float32)
+
+    # Serialize to .npy format in memory
+    buffer = io.BytesIO()
+    np.save(buffer, embedding_vector)
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename=entity_{entity_id}_clip_embedding.npy"}
+    )
+
+
+@router.get(
     "/entities/{entity_id}/jobs",
     tags=["entity", "jobs"],
     summary="Get Entity Jobs",

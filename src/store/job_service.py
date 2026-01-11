@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -140,7 +140,7 @@ class JobSubmissionService:
         face_id: int,
         entity_id: int,
         file_path: str,
-        on_complete_callback: Callable[[JobResponse], None],
+        on_complete_callback: Callable[[JobResponse], None] | Callable[[JobResponse], Awaitable[None]],
     ) -> str | None:
         """Submit face embedding job for a detected face.
 
@@ -164,9 +164,9 @@ class JobSubmissionService:
             )
 
             now = self._now_timestamp()
-            # Use face_id as entity_id for tracking individual face jobs
+            # Track face_embedding jobs under the parent entity
             entity_job = EntityJob(
-                entity_id=face_id,  # Track by face_id, not entity_id
+                entity_id=entity_id,  # Use parent entity_id, not face_id
                 job_id=job_response.job_id,
                 task_type="face_embedding",
                 status="queued",

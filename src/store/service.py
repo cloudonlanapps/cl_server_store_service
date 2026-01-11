@@ -532,17 +532,17 @@ class EntityService:
         # Define callbacks with proper typing
         from cl_client.models import JobResponse
 
-        def face_detection_callback(job: JobResponse) -> None:
+        async def face_detection_callback(job: JobResponse) -> None:
             """Handle face detection job completion."""
             job_service.update_job_status(job.job_id, job.status, job.error_message)
             if job.status == "completed":
-                callback_handler.handle_face_detection_complete(entity.id, job)
+                await callback_handler.handle_face_detection_complete(entity.id, job)
 
-        def clip_embedding_callback(job: JobResponse) -> None:
+        async def clip_embedding_callback(job: JobResponse) -> None:
             """Handle CLIP embedding job completion."""
             job_service.update_job_status(job.job_id, job.status, job.error_message)
             if job.status == "completed":
-                callback_handler.handle_clip_embedding_complete(entity.id, job)
+                await callback_handler.handle_clip_embedding_complete(entity.id, job)
 
         # Submit jobs
         face_job_id = await job_service.submit_face_detection(

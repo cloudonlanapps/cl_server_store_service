@@ -1,8 +1,8 @@
-"""initial
+"""initial schema from current models
 
-Revision ID: 29efb0505bd6
+Revision ID: a8181ccb4efa
 Revises: 
-Create Date: 2025-12-12 10:15:37.775236
+Create Date: 2026-01-11 01:49:31.826947
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '29efb0505bd6'
+revision: str = 'a8181ccb4efa'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -80,23 +80,46 @@ def upgrade() -> None:
     sa.Column('job_id', sa.String(), nullable=False),
     sa.Column('task_type', sa.String(), nullable=False),
     sa.Column('priority', sa.Integer(), nullable=False),
-    sa.Column('params', sa.Text(), nullable=False),
+    sa.Column('params', sa.JSON(), nullable=False),
+    sa.Column('output', sa.JSON(), nullable=True),
     sa.Column('status', sa.String(), nullable=False),
     sa.Column('progress', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.BigInteger(), nullable=False),
     sa.Column('started_at', sa.BigInteger(), nullable=True),
     sa.Column('completed_at', sa.BigInteger(), nullable=True),
-    sa.Column('task_output', sa.Text(), nullable=True),
     sa.Column('error_message', sa.Text(), nullable=True),
     sa.Column('retry_count', sa.Integer(), nullable=False),
     sa.Column('max_retries', sa.Integer(), nullable=False),
     sa.Column('created_by', sa.String(), nullable=True),
+    sa.Column('updated_at', sa.BigInteger(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_jobs_created_at'), 'jobs', ['created_at'], unique=False)
     op.create_index(op.f('ix_jobs_created_by'), 'jobs', ['created_by'], unique=False)
     op.create_index(op.f('ix_jobs_job_id'), 'jobs', ['job_id'], unique=True)
     op.create_index(op.f('ix_jobs_status'), 'jobs', ['status'], unique=False)
+    op.create_table('known_persons',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('name', sa.String(), nullable=True),
+    sa.Column('created_at', sa.BigInteger(), nullable=False),
+    sa.Column('updated_at', sa.BigInteger(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_known_persons_name'), 'known_persons', ['name'], unique=False)
+    op.create_table('known_persons_version',
+    sa.Column('id', sa.Integer(), autoincrement=False, nullable=False),
+    sa.Column('name', sa.String(), autoincrement=False, nullable=True),
+    sa.Column('created_at', sa.BigInteger(), autoincrement=False, nullable=True),
+    sa.Column('updated_at', sa.BigInteger(), autoincrement=False, nullable=True),
+    sa.Column('transaction_id', sa.BigInteger(), autoincrement=False, nullable=False),
+    sa.Column('end_transaction_id', sa.BigInteger(), nullable=True),
+    sa.Column('operation_type', sa.SmallInteger(), nullable=False),
+    sa.PrimaryKeyConstraint('id', 'transaction_id')
+    )
+    op.create_index(op.f('ix_known_persons_version_end_transaction_id'), 'known_persons_version', ['end_transaction_id'], unique=False)
+    op.create_index(op.f('ix_known_persons_version_name'), 'known_persons_version', ['name'], unique=False)
+    op.create_index(op.f('ix_known_persons_version_operation_type'), 'known_persons_version', ['operation_type'], unique=False)
+    op.create_index(op.f('ix_known_persons_version_transaction_id'), 'known_persons_version', ['transaction_id'], unique=False)
     op.create_table('queue_entries',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('job_id', sa.String(), nullable=False),
@@ -119,17 +142,83 @@ def upgrade() -> None:
     sa.Column('issued_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('transaction_changes',
+    sa.Column('transaction_id', sa.BigInteger(), nullable=False),
+    sa.Column('entity_name', sa.Unicode(length=255), nullable=False),
+    sa.PrimaryKeyConstraint('transaction_id', 'entity_name')
+    )
+    op.create_table('entity_jobs',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('entity_id', sa.Integer(), nullable=False),
+    sa.Column('job_id', sa.String(), nullable=False),
+    sa.Column('task_type', sa.String(), nullable=False),
+    sa.Column('status', sa.String(), nullable=False),
+    sa.Column('created_at', sa.BigInteger(), nullable=False),
+    sa.Column('updated_at', sa.BigInteger(), nullable=False),
+    sa.Column('completed_at', sa.BigInteger(), nullable=True),
+    sa.Column('error_message', sa.Text(), nullable=True),
+    sa.ForeignKeyConstraint(['entity_id'], ['entities.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_entity_jobs_entity_id'), 'entity_jobs', ['entity_id'], unique=False)
+    op.create_index(op.f('ix_entity_jobs_job_id'), 'entity_jobs', ['job_id'], unique=True)
+    op.create_index(op.f('ix_entity_jobs_status'), 'entity_jobs', ['status'], unique=False)
+    op.create_table('faces',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('entity_id', sa.Integer(), nullable=False),
+    sa.Column('bbox', sa.Text(), nullable=False),
+    sa.Column('confidence', sa.Float(), nullable=False),
+    sa.Column('landmarks', sa.Text(), nullable=False),
+    sa.Column('file_path', sa.String(), nullable=False),
+    sa.Column('created_at', sa.BigInteger(), nullable=False),
+    sa.Column('known_person_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['entity_id'], ['entities.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['known_person_id'], ['known_persons.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_faces_entity_id'), 'faces', ['entity_id'], unique=False)
+    op.create_index(op.f('ix_faces_known_person_id'), 'faces', ['known_person_id'], unique=False)
+    op.create_table('face_matches',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('face_id', sa.Integer(), nullable=False),
+    sa.Column('matched_face_id', sa.Integer(), nullable=False),
+    sa.Column('similarity_score', sa.Float(), nullable=False),
+    sa.Column('created_at', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['face_id'], ['faces.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['matched_face_id'], ['faces.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_face_matches_face_id'), 'face_matches', ['face_id'], unique=False)
+    op.create_index(op.f('ix_face_matches_matched_face_id'), 'face_matches', ['matched_face_id'], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f('ix_face_matches_matched_face_id'), table_name='face_matches')
+    op.drop_index(op.f('ix_face_matches_face_id'), table_name='face_matches')
+    op.drop_table('face_matches')
+    op.drop_index(op.f('ix_faces_known_person_id'), table_name='faces')
+    op.drop_index(op.f('ix_faces_entity_id'), table_name='faces')
+    op.drop_table('faces')
+    op.drop_index(op.f('ix_entity_jobs_status'), table_name='entity_jobs')
+    op.drop_index(op.f('ix_entity_jobs_job_id'), table_name='entity_jobs')
+    op.drop_index(op.f('ix_entity_jobs_entity_id'), table_name='entity_jobs')
+    op.drop_table('entity_jobs')
+    op.drop_table('transaction_changes')
     op.drop_table('transaction')
     op.drop_table('service_config')
     op.drop_index(op.f('ix_queue_entries_job_id'), table_name='queue_entries')
     op.drop_index(op.f('ix_queue_entries_enqueued_at'), table_name='queue_entries')
     op.drop_table('queue_entries')
+    op.drop_index(op.f('ix_known_persons_version_transaction_id'), table_name='known_persons_version')
+    op.drop_index(op.f('ix_known_persons_version_operation_type'), table_name='known_persons_version')
+    op.drop_index(op.f('ix_known_persons_version_name'), table_name='known_persons_version')
+    op.drop_index(op.f('ix_known_persons_version_end_transaction_id'), table_name='known_persons_version')
+    op.drop_table('known_persons_version')
+    op.drop_index(op.f('ix_known_persons_name'), table_name='known_persons')
+    op.drop_table('known_persons')
     op.drop_index(op.f('ix_jobs_status'), table_name='jobs')
     op.drop_index(op.f('ix_jobs_job_id'), table_name='jobs')
     op.drop_index(op.f('ix_jobs_created_by'), table_name='jobs')

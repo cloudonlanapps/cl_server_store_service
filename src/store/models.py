@@ -93,7 +93,7 @@ class Face(Base):
     """SQLAlchemy model for detected faces."""
 
     __tablename__ = "faces"  # pyright: ignore[reportUnannotatedClassAttribute]
-    __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning for audit trail  # pyright: ignore[reportUnannotatedClassAttribute]
+    # __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning for audit trail  # pyright: ignore[reportUnannotatedClassAttribute]  # Temporarily disabled to fix transaction issues
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
