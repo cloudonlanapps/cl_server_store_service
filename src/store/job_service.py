@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -12,7 +11,7 @@ from .models import EntityJob
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient
-    from cl_client.models import JobResponse
+    from cl_client.models import OnJobResponseCallback
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class JobSubmissionService:
         self,
         entity_id: int,
         file_path: str,
-        on_complete_callback: Callable[[JobResponse], Awaitable[None]],
+        on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit face detection job.
 
@@ -92,7 +91,7 @@ class JobSubmissionService:
         self,
         entity_id: int,
         file_path: str,
-        on_complete_callback: Callable[[JobResponse], Awaitable[None]],
+        on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit CLIP embedding job.
 
@@ -142,8 +141,7 @@ class JobSubmissionService:
         face_id: int,
         entity_id: int,
         file_path: str,
-        on_complete_callback: Callable[[JobResponse], None]
-        | Callable[[JobResponse], Awaitable[None]],
+        on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit face embedding job for a detected face.
 

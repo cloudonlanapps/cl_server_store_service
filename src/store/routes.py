@@ -140,7 +140,7 @@ async def create_entity(
 
         # Trigger async jobs for images (NON-BLOCKING)
         # Uses independent DB session to avoid holding request session
-        if not is_collection and file_bytes:
+        if not is_collection and file_bytes and item.id:
             _ = asyncio.create_task(_trigger_async_jobs_background(item.id))
 
         return item
@@ -529,19 +529,15 @@ async def download_face_embedding(
     face_store = get_face_store(pysdk_config)
 
     # Retrieve from Qdrant using face_id as point_id
-    points = face_store.get_vector(point_id=face_id)
+    point = face_store.get_vector(id=face_id)
 
-    if not points or len(points) == 0:
+    if not point:
         raise HTTPException(status_code=404, detail="Face embedding not found in vector store")
-
-    # Extract vector from Qdrant point
-    point = points[0]
-    embedding_vector = np.array(point.vector, dtype=np.float32)
 
     # Serialize to .npy format in memory
     buffer = io.BytesIO()
-    np.save(buffer, embedding_vector)
-    buffer.seek(0)
+    np.save(buffer, point.embedding)
+    _ = buffer.seek(0)
 
     return Response(
         content=buffer.getvalue(),
@@ -586,19 +582,17 @@ async def download_entity_embedding(
     qdrant_store = get_qdrant_store()
 
     # Retrieve from Qdrant using entity_id as point_id
-    points = qdrant_store.get_vector(point_id=entity_id)
+    point = qdrant_store.get_vector(id=entity_id)
 
-    if not points or len(points) == 0:
+    if not point:
         raise HTTPException(status_code=404, detail="Entity embedding not found in vector store")
 
     # Extract vector from Qdrant point
-    point = points[0]
-    embedding_vector = np.array(point.vector, dtype=np.float32)
 
     # Serialize to .npy format in memory
     buffer = io.BytesIO()
-    np.save(buffer, embedding_vector)
-    buffer.seek(0)
+    np.save(buffer, point.embedding)
+    _ = buffer.seek(0)
 
     return Response(
         content=buffer.getvalue(),
