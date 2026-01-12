@@ -1,6 +1,5 @@
 {
   "venvPath": ".",
-  "venv": ".venv",
   "reportMissingTypeStubs": true,
   "ignore": [],
   "include": ["src"],
