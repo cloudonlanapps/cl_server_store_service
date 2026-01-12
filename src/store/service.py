@@ -3,14 +3,28 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
 from cl_server_shared import Config
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from store.qdrant_image_store import SearchPreferences
+
 from .entity_storage import EntityStorageService
 from .media_metadata import MediaMetadataExtractor
 from .models import Entity
-from .schemas import BodyCreateEntity, BodyPatchEntity, BodyUpdateEntity, Item
+from .schemas import (
+    BodyCreateEntity,
+    BodyPatchEntity,
+    BodyUpdateEntity,
+    EntityJobResponse,
+    FaceMatchResult,
+    FaceResponse,
+    Item,
+    KnownPersonResponse,
+    SimilarFacesResult,
+    SimilarImageResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -495,8 +509,8 @@ class EntityService:
         # Only process images
         if entity.is_collection or entity.type != "image":
             logger.debug(
-                f"Skipping job submission for entity {entity.id}: " +
-                f"is_collection={entity.is_collection}, type={entity.type}"
+                f"Skipping job submission for entity {entity.id}: "
+                + f"is_collection={entity.is_collection}, type={entity.type}"
             )
             return {"face_detection_job": None, "clip_embedding_job": None}
 
@@ -558,8 +572,8 @@ class EntityService:
         )
 
         logger.info(
-            f"Submitted jobs for entity {entity.id}: " +
-            f"face_detection={face_job_id}, clip_embedding={clip_job_id}"
+            f"Submitted jobs for entity {entity.id}: "
+            + f"face_detection={face_job_id}, clip_embedding={clip_job_id}"
         )
 
         return {
@@ -572,7 +586,7 @@ class EntityService:
         _ = self.db.query(Entity).delete()
         _ = self.db.commit()
 
-    def get_entity_faces(self, entity_id: int) -> list[schemas.FaceResponse]:
+    def get_entity_faces(self, entity_id: int) -> list[FaceResponse]:
         """Get all faces detected in an entity.
 
         Args:
@@ -581,7 +595,6 @@ class EntityService:
         Returns:
             List of FaceResponse schemas with parsed bbox and landmarks
         """
-        import json
 
         from . import schemas
         from .models import Face
@@ -594,9 +607,9 @@ class EntityService:
                 schemas.FaceResponse(
                     id=face.id,
                     entity_id=face.entity_id,
-                    bbox=json.loads(face.bbox),
+                    bbox=BBox.model_validate_json(face.bbox),
                     confidence=face.confidence,
-                    landmarks=json.loads(face.landmarks),
+                    landmarks=FaceLandmarks.model_validate_json(face.landmarks),
                     file_path=face.file_path,
                     created_at=face.created_at,
                     known_person_id=face.known_person_id,
@@ -605,7 +618,7 @@ class EntityService:
 
         return results
 
-    def get_entity_jobs(self, entity_id: int) -> list[schemas.EntityJobResponse]:
+    def get_entity_jobs(self, entity_id: int) -> list[EntityJobResponse]:
         """Get all jobs for an entity.
 
         Args:
@@ -639,7 +652,7 @@ class EntityService:
 
     def search_similar_images(
         self, entity_id: int, limit: int = 5, score_threshold: float = 0.85
-    ) -> list[schemas.SimilarImageResult]:
+    ) -> list[SimilarImageResult]:
         """Search for similar images using CLIP embeddings.
 
         Args:
@@ -656,37 +669,38 @@ class EntityService:
         qdrant_store = get_qdrant_store()
 
         # Get the query embedding from Qdrant
-        query_points = qdrant_store.get_vector(entity_id)
-        if not query_points or len(query_points) == 0:
+        query_point = qdrant_store.get_vector(entity_id)
+        if not query_point:
             logger.warning(f"No embedding found for entity {entity_id}")
             return []
 
-        query_vector = query_points[0].vector
+        query_vector = query_point.embedding
 
         # Search for similar images
         results = qdrant_store.search(
             query_vector=query_vector,
             limit=limit + 1,  # +1 because query itself will be in results
-            with_payload=True,
-            score_threshold=score_threshold,
+            search_options=SearchPreferences(
+                with_payload=True,
+                score_threshold=score_threshold,
+            ),
         )
 
         # Filter out the query entity itself and convert to Pydantic
-        filtered_results: list[schemas.SimilarImageResult] = []
+        filtered_results: list[SimilarImageResult] = []
         for result in results:
-            result_entity_id = result.get("id")
-            if result_entity_id != entity_id:
+            if result.id != entity_id:
                 filtered_results.append(
                     schemas.SimilarImageResult(
-                        entity_id=int(result_entity_id),  # type: ignore[arg-type]
-                        score=float(result.get("score", 0.0)),
+                        entity_id=int(result.id),  # type: ignore[arg-type]
+                        score=float(result.score),
                         entity=None,  # Will be populated by route handler if requested
                     )
                 )
 
         return filtered_results[:limit]
 
-    def get_known_person(self, person_id: int) -> schemas.KnownPersonResponse | None:
+    def get_known_person(self, person_id: int) -> KnownPersonResponse | None:
         """Get known person details.
 
         Args:
@@ -713,7 +727,7 @@ class EntityService:
             face_count=face_count,
         )
 
-    def get_all_known_persons(self) -> list[schemas.KnownPersonResponse]:
+    def get_all_known_persons(self) -> list[KnownPersonResponse]:
         """Get all known persons.
 
         Returns:
@@ -741,7 +755,7 @@ class EntityService:
 
         return results
 
-    def get_known_person_faces(self, person_id: int) -> list[schemas.FaceResponse]:
+    def get_known_person_faces(self, person_id: int) -> list[FaceResponse]:
         """Get all faces for a known person.
 
         Args:
@@ -750,7 +764,6 @@ class EntityService:
         Returns:
             List of FaceResponse schemas
         """
-        import json
 
         from . import schemas
         from .models import Face
@@ -763,9 +776,9 @@ class EntityService:
                 schemas.FaceResponse(
                     id=face.id,
                     entity_id=face.entity_id,
-                    bbox=json.loads(face.bbox),
+                    bbox=BBox.model_validate_json(face.bbox),
                     confidence=face.confidence,
-                    landmarks=json.loads(face.landmarks),
+                    landmarks=FaceLandmarks.model_validate_json(face.landmarks),
                     file_path=face.file_path,
                     created_at=face.created_at,
                     known_person_id=face.known_person_id,
@@ -774,9 +787,7 @@ class EntityService:
 
         return results
 
-    def update_known_person_name(
-        self, person_id: int, name: str
-    ) -> schemas.KnownPersonResponse | None:
+    def update_known_person_name(self, person_id: int, name: str) -> KnownPersonResponse | None:
         """Update known person name.
 
         Args:
@@ -800,7 +811,7 @@ class EntityService:
 
         return self.get_known_person(person_id)
 
-    def get_face_matches(self, face_id: int) -> list[schemas.FaceMatchResult]:
+    def get_face_matches(self, face_id: int) -> list[FaceMatchResult]:
         """Get all match records for a face.
 
         Args:
@@ -809,7 +820,6 @@ class EntityService:
         Returns:
             List of FaceMatchResult schemas
         """
-        import json
 
         from . import schemas
         from .models import Face, FaceMatch
@@ -825,9 +835,9 @@ class EntityService:
                 matched_face_response = schemas.FaceResponse(
                     id=matched_face.id,
                     entity_id=matched_face.entity_id,
-                    bbox=json.loads(matched_face.bbox),
+                    bbox=BBox.model_validate_json(matched_face.bbox),
                     confidence=matched_face.confidence,
-                    landmarks=json.loads(matched_face.landmarks),
+                    landmarks=FaceLandmarks.model_validate_json(matched_face.landmarks),
                     file_path=matched_face.file_path,
                     created_at=matched_face.created_at,
                     known_person_id=matched_face.known_person_id,
@@ -848,7 +858,7 @@ class EntityService:
 
     def search_similar_faces_by_id(
         self, face_id: int, limit: int = 5, threshold: float = 0.7
-    ) -> list[schemas.SimilarFacesResult]:
+    ) -> list[SimilarFacesResult]:
         """Search for similar faces using face store.
 
         Args:
@@ -859,7 +869,6 @@ class EntityService:
         Returns:
             List of SimilarFacesResult schemas
         """
-        import json
 
         from . import schemas
         from .face_store_singleton import get_face_store
@@ -869,35 +878,34 @@ class EntityService:
 
         # Get the query embedding from face store
         query_points = face_store.get_vector(face_id)
-        if not query_points or len(query_points) == 0:
+        if not query_points:
             logger.warning(f"No embedding found for face {face_id}")
             return []
 
-        query_vector = query_points[0].vector
-
         # Search for similar faces
         results = face_store.search(
-            query_vector=query_vector,
+            query_vector=query_points.embedding,
             limit=limit + 1,  # +1 because query itself will be in results
-            with_payload=True,
-            score_threshold=threshold,
+            search_options=SearchPreferences(
+                with_payload=True,
+                score_threshold=threshold,
+            ),
         )
 
         # Filter out the query face itself and convert to Pydantic
         filtered_results: list[schemas.SimilarFacesResult] = []
         for result in results:
-            result_face_id = result.get("id")
-            if result_face_id != face_id:
+            if result.id != face_id:
                 # Optionally load face details
-                face = self.db.query(Face).filter(Face.id == result_face_id).first()
+                face = self.db.query(Face).filter(Face.id == result.id).first()
                 face_response = None
                 if face:
                     face_response = schemas.FaceResponse(
                         id=face.id,
                         entity_id=face.entity_id,
-                        bbox=json.loads(face.bbox),
+                        bbox=BBox.model_validate_json(face.bbox),
                         confidence=face.confidence,
-                        landmarks=json.loads(face.landmarks),
+                        landmarks=FaceLandmarks.model_validate_json(face.landmarks),
                         file_path=face.file_path,
                         created_at=face.created_at,
                         known_person_id=face.known_person_id,
@@ -905,9 +913,11 @@ class EntityService:
 
                 filtered_results.append(
                     schemas.SimilarFacesResult(
-                        face_id=int(result_face_id),  # type: ignore[arg-type]
-                        score=float(result.get("score", 0.0)),
-                        known_person_id=result.get("payload", {}).get("known_person_id"),
+                        face_id=int(result.id),  # type: ignore[arg-type]
+                        score=float(result.score),
+                        known_person_id=result.payload.get("known_person_id")
+                        if result.payload
+                        else None,
                         face=face_response,
                     )
                 )

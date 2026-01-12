@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
 from pydantic import BaseModel, Field
 
 
@@ -75,7 +76,9 @@ class PaginatedResponse(BaseModel):
 class ConfigResponse(BaseModel):
     """Response schema for configuration."""
 
-    guest_mode: bool = Field(..., description="Whether guest mode is enabled (true = no authentication required)")
+    guest_mode: bool = Field(
+        ..., description="Whether guest mode is enabled (true = no authentication required)"
+    )
     updated_at: int | None = Field(None, description="Last update timestamp (milliseconds)")
     updated_by: str | None = Field(None, description="User ID who last updated the config")
 
@@ -92,9 +95,13 @@ class FaceResponse(BaseModel):
 
     id: int = Field(..., description="Face ID")
     entity_id: int = Field(..., description="Entity ID this face belongs to")
-    bbox: list[float] = Field(..., description="Normalized bounding box [x1, y1, x2, y2] in range [0.0, 1.0]")
+    bbox: BBox = Field(
+        ..., description="Normalized bounding box [x1, y1, x2, y2] in range [0.0, 1.0]"
+    )
     confidence: float = Field(..., description="Detection confidence score [0.0, 1.0]")
-    landmarks: list[list[float]] = Field(..., description="Five facial keypoints [[x1, y1], [x2, y2], ...]")
+    landmarks: FaceLandmarks = Field(
+        ..., description="Five facial keypoints [[x1, y1], [x2, y2], ...]"
+    )
     file_path: str = Field(..., description="Relative path to cropped face image")
     created_at: int = Field(..., description="Creation timestamp (milliseconds)")
     known_person_id: int | None = Field(None, description="Known person ID (face recognition)")

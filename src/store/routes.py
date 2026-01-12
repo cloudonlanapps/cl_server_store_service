@@ -40,7 +40,7 @@ async def _trigger_async_jobs_background(entity_id: int) -> None:
         service = EntityService(db)
         entity = db.query(models.Entity).filter(models.Entity.id == entity_id).first()
         if entity:
-            await service.trigger_async_jobs(entity)
+            _ = await service.trigger_async_jobs(entity)  # TODO: Do we really need to await here?
     finally:
         db.close()
 
@@ -303,7 +303,7 @@ async def patch_entity(
     if is_deleted is not None:
         patch_data["is_deleted"] = is_deleted
 
-    body = schemas.BodyPatchEntity(**patch_data)
+    body = schemas.BodyPatchEntity.model_validate(patch_data)
 
     item = service.patch_entity(entity_id, body, user_id)
     if not item:
@@ -459,10 +459,7 @@ async def root(db: Session = Depends(get_db)):
     guest_mode = "off" if read_auth_enabled else "on"
 
     return RootResponse(
-        status="healthy",
-        service="CoLAN Store Server",
-        version="v1",
-        guestMode=guest_mode
+        status="healthy", service="CoLAN Store Server", version="v1", guestMode=guest_mode
     )
 
 
@@ -549,7 +546,7 @@ async def download_face_embedding(
     return Response(
         content=buffer.getvalue(),
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename=face_{face_id}_embedding.npy"}
+        headers={"Content-Disposition": f"attachment; filename=face_{face_id}_embedding.npy"},
     )
 
 
@@ -585,6 +582,7 @@ async def download_entity_embedding(
 
     # Get Qdrant store and retrieve embedding
     from .qdrant_singleton import get_qdrant_store
+
     qdrant_store = get_qdrant_store()
 
     # Retrieve from Qdrant using entity_id as point_id
@@ -605,7 +603,9 @@ async def download_entity_embedding(
     return Response(
         content=buffer.getvalue(),
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename=entity_{entity_id}_clip_embedding.npy"}
+        headers={
+            "Content-Disposition": f"attachment; filename=entity_{entity_id}_clip_embedding.npy"
+        },
     )
 
 

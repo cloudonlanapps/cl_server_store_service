@@ -43,7 +43,7 @@ class JobSubmissionService:
         self,
         entity_id: int,
         file_path: str,
-        on_complete_callback: Callable[[JobResponse], None],
+        on_complete_callback: Callable[[JobResponse], Awaitable[None]],
     ) -> str | None:
         """Submit face detection job.
 
@@ -77,7 +77,9 @@ class JobSubmissionService:
             db.add(entity_job)
             db.commit()
 
-            logger.info(f"Submitted face_detection job {job_response.job_id} for entity {entity_id}")
+            logger.info(
+                f"Submitted face_detection job {job_response.job_id} for entity {entity_id}"
+            )
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit face_detection job for entity {entity_id}: {e}")
@@ -90,7 +92,7 @@ class JobSubmissionService:
         self,
         entity_id: int,
         file_path: str,
-        on_complete_callback: Callable[[JobResponse], None],
+        on_complete_callback: Callable[[JobResponse], Awaitable[None]],
     ) -> str | None:
         """Submit CLIP embedding job.
 
@@ -124,7 +126,9 @@ class JobSubmissionService:
             db.add(entity_job)
             db.commit()
 
-            logger.info(f"Submitted clip_embedding job {job_response.job_id} for entity {entity_id}")
+            logger.info(
+                f"Submitted clip_embedding job {job_response.job_id} for entity {entity_id}"
+            )
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit clip_embedding job for entity {entity_id}: {e}")
@@ -138,7 +142,8 @@ class JobSubmissionService:
         face_id: int,
         entity_id: int,
         file_path: str,
-        on_complete_callback: Callable[[JobResponse], None] | Callable[[JobResponse], Awaitable[None]],
+        on_complete_callback: Callable[[JobResponse], None]
+        | Callable[[JobResponse], Awaitable[None]],
     ) -> str | None:
         """Submit face embedding job for a detected face.
 
@@ -176,7 +181,7 @@ class JobSubmissionService:
 
             logger.info(
                 f"Submitted face_embedding job {job_response.job_id} "
-                f"for face {face_id} (entity {entity_id})"
+                + f"for face {face_id} (entity {entity_id})"
             )
             return job_response.job_id
         except Exception as e:
@@ -207,9 +212,7 @@ class JobSubmissionService:
         finally:
             db.close()
 
-    def update_job_status(
-        self, job_id: str, status: str, error_message: str | None = None
-    ) -> None:
+    def update_job_status(self, job_id: str, status: str, error_message: str | None = None) -> None:
         """Update job status in database.
 
         Args:

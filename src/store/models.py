@@ -55,8 +55,12 @@ class Entity(Base):
     is_deleted: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
 
     # Relationships
-    faces: Mapped[list[Face]] = relationship("Face", back_populates="entity", cascade="all, delete-orphan")
-    jobs: Mapped[list[EntityJob]] = relationship("EntityJob", back_populates="entity", cascade="all, delete-orphan")
+    faces: Mapped[list[Face]] = relationship(
+        "Face", back_populates="entity", cascade="all, delete-orphan"
+    )
+    jobs: Mapped[list[EntityJob]] = relationship(
+        "EntityJob", back_populates="entity", cascade="all, delete-orphan"
+    )
 
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:
@@ -93,7 +97,6 @@ class Face(Base):
     """SQLAlchemy model for detected faces."""
 
     __tablename__ = "faces"  # pyright: ignore[reportUnannotatedClassAttribute]
-    # __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning for audit trail  # pyright: ignore[reportUnannotatedClassAttribute]  # Temporarily disabled to fix transaction issues
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -154,8 +157,12 @@ class EntityJob(Base):
 
     # Job tracking
     job_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
-    task_type: Mapped[str] = mapped_column(String, nullable=False)  # "face_detection" or "clip_embedding"
-    status: Mapped[str] = mapped_column(String, nullable=False, index=True)  # "queued", "in_progress", "completed", "failed"
+    task_type: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # "face_detection" or "clip_embedding"
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, index=True
+    )  # "queued", "in_progress", "completed", "failed"
 
     # Timestamps (in milliseconds)
     created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
