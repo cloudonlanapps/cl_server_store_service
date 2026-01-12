@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict
+
 import numpy as np
 
 
@@ -13,14 +13,14 @@ class StoreInterface(ABC):
     """
 
     @abstractmethod
-    def add_vector(self, id: int, vector: np.ndarray, payload: Optional[Dict] = None):
+    def add_vector(self, id: int, vector: np.ndarray, payload: dict | None = None):
         """
         Adds a single vector to the store with a given ID and optional payload.
         """
         pass
 
     @abstractmethod
-    def get_vector(self, id: int) -> Optional[List[Dict]]:
+    def get_vector(self, id: int) -> list[dict] | None:
         """
         Retrieves a vector by its ID.
         """
@@ -34,7 +34,7 @@ class StoreInterface(ABC):
         pass
 
     @abstractmethod
-    def search(self, query_vector: np.ndarray, limit: int = 5) -> List[Dict]:
+    def search(self, query_vector: np.ndarray, limit: int = 5) -> list[dict]:
         """
         Searches for similar vectors in the store.
         """

@@ -18,8 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from . import config_service as cfg_service
-from . import models
-from . import schemas
+from . import models, schemas
 from .auth import UserPayload, require_admin, require_permission
 from .database import SessionLocal, get_db
 from .service import EntityService
@@ -514,12 +513,14 @@ async def download_face_embedding(
 ):
     """Download face embedding from Qdrant vector store."""
     _ = user
-    from fastapi.responses import Response
-    from .face_store_singleton import get_face_store
-    from .compute_singleton import get_pysdk_config
-    from .models import Face
-    import numpy as np
     import io
+
+    import numpy as np
+    from fastapi.responses import Response
+
+    from .compute_singleton import get_pysdk_config
+    from .face_store_singleton import get_face_store
+    from .models import Face
 
     # Check if face exists in database
     face = db.query(Face).filter(Face.id == face_id).first()
@@ -570,10 +571,12 @@ async def download_entity_embedding(
 ):
     """Download entity CLIP embedding from Qdrant vector store."""
     _ = user
-    from fastapi.responses import Response
-    from .models import Entity
-    import numpy as np
     import io
+
+    import numpy as np
+    from fastapi.responses import Response
+
+    from .models import Entity
 
     # Check if entity exists in database
     entity = db.query(Entity).filter(Entity.id == entity_id).first()

@@ -1,11 +1,11 @@
 """Unit tests for media_metadata.py covering error handling and edge cases."""
 
 import subprocess
-from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
-from cl_ml_tools.algorithms import MediaType, MetadataExtractor
+from cl_ml_tools.algorithms import MediaType
+
 from store.media_metadata import MediaMetadataExtractor, validate_tools
 
 
@@ -61,7 +61,7 @@ class TestMimeAndExtension:
                 # Mock magic to return empty string
                 with patch("magic.Magic") as MockMagic:
                     MockMagic.return_value.from_buffer.return_value = ""
-                    
+
                     # Mock other steps
                     with patch.object(extractor, "_determine_extension", return_value="bin"):
                         with patch.object(extractor, "_compute_hash", return_value="a" * 32):
@@ -87,13 +87,13 @@ class TestMimeAndExtension:
         """Test extension determination logic."""
         ext = extractor._determine_extension(mime, media_type)
         assert ext == expected
-    
+
     def test_determine_extension_failure(self, extractor):
         """Test error propogation during extraction."""
         with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch("magic.Magic") as MockMagic:
             MockMagic.return_value.from_buffer.return_value = "image/jpeg"
-            
+
             # Mock _determine_extension to raise (simulate internal error if we want, or just rely on inputs)
             # Actually _determine_extension only raises ValueError explicitly? No, it catches nothing.
             # But extract_metadata catches exception from it?
@@ -127,19 +127,19 @@ class TestHashComputation:
         with patch("store.media_metadata.get_md5_hexdigest", side_effect=Exception("Hash fail")):
             with pytest.raises(RuntimeError, match="Hash computation failed"):
                 extractor._compute_hash(b"data", MediaType.FILE)
-    
+
     def test_hash_routing(self, extractor):
         """Verify correct hash function is called based on media type."""
         with patch("store.media_metadata.sha512hash_image", return_value=("imghash", 1)) as mock_img, \
              patch("store.media_metadata.sha512hash_video2", return_value=("vidhash", 1)) as mock_vid, \
              patch("store.media_metadata.get_md5_hexdigest", return_value="md5hash") as mock_md5:
-            
+
             assert extractor._compute_hash(b"img", MediaType.IMAGE) == "imghash"
             mock_img.assert_called_once()
-            
+
             assert extractor._compute_hash(b"vid", MediaType.VIDEO) == "vidhash"
             mock_vid.assert_called_once()
-            
+
             assert extractor._compute_hash(b"other", MediaType.TEXT) == "md5hash"
             mock_md5.assert_called_once()
 
@@ -164,15 +164,15 @@ class TestExifExtraction:
         with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32):
-            
+
             MockMagic.return_value.from_buffer.return_value = "image/jpeg"
-            
+
             # Mock temp file and extraction failure
             with patch("tempfile.NamedTemporaryFile"), \
                  patch.object(extractor.exif_extractor, "extract_metadata_all", side_effect=Exception("Exif fail")):
-                
+
                 result = extractor.extract_metadata(b"data", "test.jpg")
-                
+
                 assert result.width is None
                 assert result.height is None
                 assert result.create_date is None
@@ -180,15 +180,15 @@ class TestExifExtraction:
     def test_invalid_date_format(self, extractor):
         """Test parsing of invalid date format."""
         exif_data = {"EXIF:CreateDate": "Invalid Date String"}
-        
+
         with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
              patch.object(extractor.exif_extractor, "extract_metadata_all", return_value=exif_data):
-            
+
             MockMagic.return_value.from_buffer.return_value = "image/jpeg"
-            
+
             result = extractor.extract_metadata(b"data", "test.jpg")
             assert result.create_date is None
 
@@ -196,18 +196,18 @@ class TestExifExtraction:
         """Test that width/height are safely converted from various types."""
         # Test string inputs
         exif_data = {
-            "File:ImageWidth": "100", 
+            "File:ImageWidth": "100",
             "File:ImageHeight": 200.5 # Should handle float? code uses int()
         }
-        
+
         with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
              patch.object(extractor.exif_extractor, "extract_metadata_all", return_value=exif_data):
-            
+
             MockMagic.return_value.from_buffer.return_value = "image/jpeg"
-            
+
             result = extractor.extract_metadata(b"data", "test.jpg")
             assert result.width == 100
             result = extractor.extract_metadata(b"data", "test.jpg")
@@ -217,30 +217,30 @@ class TestExifExtraction:
     def test_exif_duration_parsing(self, extractor):
         """Test parsing of duration from EXIF."""
         exif_data = {"QuickTime:Duration": "15.5"}
-        
+
         with patch("store.media_metadata.determine_mime", return_value=MediaType.VIDEO), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
              patch.object(extractor.exif_extractor, "extract_metadata_all", return_value=exif_data):
-            
+
             MockMagic.return_value.from_buffer.return_value = "video/mp4"
-            
+
             result = extractor.extract_metadata(b"data", "test.mp4")
             assert result.duration == 15.5
 
     def test_exif_valid_date_parsing(self, extractor):
         """Test parsing of valid CreateDate from EXIF."""
         exif_data = {"EXIF:CreateDate": "2023:01:01 12:00:00"}
-        
+
         with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
              patch.object(extractor.exif_extractor, "extract_metadata_all", return_value=exif_data):
-            
+
             MockMagic.return_value.from_buffer.return_value = "image/jpeg"
-            
+
             result = extractor.extract_metadata(b"data", "test.jpg")
             # 2023-01-01 12:00:00 UTC timestamp * 1000
             # Note: The code uses datetime.strptime which uses local time if no timezone info?
@@ -259,9 +259,9 @@ class TestExifExtraction:
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
              patch.object(extractor.exif_extractor, "extract_metadata_all", return_value={}):
-            
+
             MockMagic.return_value.from_buffer.return_value = "video/mp4"
-            
+
             # Mock fallback
             with patch.object(extractor, "_extract_video_duration", return_value=123.45):
                 result = extractor.extract_metadata(b"data", "test.mp4")
@@ -279,12 +279,12 @@ class TestVideoDuration:
         """Test successful duration extraction."""
         with patch("tempfile.NamedTemporaryFile"), \
              patch("subprocess.run") as mock_run:
-            
+
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout='{"format": {"duration": "10.5"}}'
             )
-            
+
             duration = extractor._extract_video_duration(b"vid", "test.mp4")
             assert duration == 10.5
 
@@ -292,12 +292,12 @@ class TestVideoDuration:
         """Test handling of invalid JSON output."""
         with patch("tempfile.NamedTemporaryFile"), \
              patch("subprocess.run") as mock_run:
-            
+
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout='{invalid json}'
             )
-            
+
             duration = extractor._extract_video_duration(b"vid", "test.mp4")
             assert duration is None
 
@@ -305,7 +305,7 @@ class TestVideoDuration:
         """Test handling of timeout."""
         with patch("tempfile.NamedTemporaryFile"), \
              patch("subprocess.run", side_effect=subprocess.TimeoutExpired(["cmd"], 30)):
-            
+
             duration = extractor._extract_video_duration(b"vid", "test.mp4")
             assert duration is None
 
@@ -313,7 +313,7 @@ class TestVideoDuration:
         """Test handling of execution error."""
         with patch("tempfile.NamedTemporaryFile"), \
              patch("subprocess.run", side_effect=Exception("Failed")):
-            
+
             duration = extractor._extract_video_duration(b"vid", "test.mp4")
             duration = extractor._extract_video_duration(b"vid", "test.mp4")
             assert duration is None
@@ -325,9 +325,9 @@ class TestVideoDuration:
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
              patch.object(extractor.exif_extractor, "extract_metadata_all", return_value={}):
-            
+
             MockMagic.return_value.from_buffer.return_value = "video/mp4"
-            
+
             # Mock _extract_video_duration to raise exception
             with patch.object(extractor, "_extract_video_duration", side_effect=Exception("Probe error")):
                 result = extractor.extract_metadata(b"data", "test.mp4")

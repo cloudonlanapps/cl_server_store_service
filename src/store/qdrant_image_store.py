@@ -1,9 +1,9 @@
-from typing import Optional
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import PointStruct, HnswConfigDiff
-from qdrant_client.models import VectorParams, Distance
 
 import numpy as np
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import HnswConfigDiff, PointStruct
+from qdrant_client.models import Distance, VectorParams
+
 from .store_interface import StoreInterface
 
 
@@ -73,7 +73,7 @@ class QdrantImageStore(StoreInterface):
 
     # ---------------------------------------------------------------------
     def add_vector(
-        self, point_id: int, vec_f32: np.ndarray, payload: Optional[dict] = None
+        self, point_id: int, vec_f32: np.ndarray, payload: dict | None = None
     ):
         """
         Add or update a single image vector to Qdrant.

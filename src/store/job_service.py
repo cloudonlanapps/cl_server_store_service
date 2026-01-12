@@ -8,8 +8,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlalchemy.orm import Session
-
 from .models import EntityJob
 
 if TYPE_CHECKING:

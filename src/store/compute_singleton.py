@@ -92,7 +92,7 @@ async def async_get_compute_client(config: PySDKRuntimeConfig) -> ComputeClient:
         _compute_client = _session_manager.create_compute_client()
 
         logger.info(
-            f"Initialized ComputeClient with auth: " +
+            "Initialized ComputeClient with auth: " +
             f"compute={config.compute_service_url}, " +
             f"user={config.compute_username}, " +
             f"mqtt={Config.MQTT_BROKER}:{Config.MQTT_PORT}"

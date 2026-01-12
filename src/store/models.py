@@ -55,8 +55,8 @@ class Entity(Base):
     is_deleted: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
 
     # Relationships
-    faces: Mapped[list["Face"]] = relationship("Face", back_populates="entity", cascade="all, delete-orphan")
-    jobs: Mapped[list["EntityJob"]] = relationship("EntityJob", back_populates="entity", cascade="all, delete-orphan")
+    faces: Mapped[list[Face]] = relationship("Face", back_populates="entity", cascade="all, delete-orphan")
+    jobs: Mapped[list[EntityJob]] = relationship("EntityJob", back_populates="entity", cascade="all, delete-orphan")
 
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:

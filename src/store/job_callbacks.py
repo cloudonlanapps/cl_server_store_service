@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from datetime import UTC, datetime
-from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from cl_server_shared import Config
-from sqlalchemy.orm import Session
 
 from .models import Face
 
