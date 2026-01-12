@@ -1,9 +1,16 @@
 from abc import ABC, abstractmethod
+from typing import TypeVar
 
 import numpy as np
+from numpy.typing import NDArray
+from pydantic import BaseModel
+
+SearchOptionsT = TypeVar("SearchOptionsT", bound=BaseModel)
+StoreItemT = TypeVar("StoreItemT", bound=BaseModel)
+SearchPreferencesT = TypeVar("SearchPreferencesT", bound=BaseModel)
 
 
-class StoreInterface(ABC):
+class StoreInterface[StoreItemT, SearchOptionsT, SearchResultT](ABC):
     """
     Abstract base class for a generic vector store interface.
 
@@ -13,14 +20,14 @@ class StoreInterface(ABC):
     """
 
     @abstractmethod
-    def add_vector(self, id: int, vector: np.ndarray, payload: dict | None = None):
+    def add_vector(self, item: StoreItemT) -> int:
         """
         Adds a single vector to the store with a given ID and optional payload.
         """
         pass
 
     @abstractmethod
-    def get_vector(self, id: int) -> list[dict] | None:
+    def get_vector(self, id: int) -> StoreItemT | None:
         """
         Retrieves a vector by its ID.
         """
@@ -34,7 +41,12 @@ class StoreInterface(ABC):
         pass
 
     @abstractmethod
-    def search(self, query_vector: np.ndarray, limit: int = 5) -> list[dict]:
+    def search(
+        self,
+        query_vector: NDArray[np.float32],
+        limit: int = 5,
+        search_options: SearchOptionsT | None = None,
+    ) -> list[SearchResultT]:
         """
         Searches for similar vectors in the store.
         """
