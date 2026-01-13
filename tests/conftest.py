@@ -79,9 +79,7 @@ def test_engine() -> Generator[Engine, None, None]:
 @pytest.fixture(scope="function")
 def test_db_session(test_engine: Engine) -> Generator[Session, None, None]:
     """Create a test database session."""
-    TestingSessionLocal = sessionmaker(
-        autocommit=False, autoflush=False, bind=test_engine
-    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     session = TestingSessionLocal()
 
     yield session
@@ -104,9 +102,7 @@ def client(
     print(f"root directory now is {clean_media_dir}")
 
     # Create session maker
-    TestingSessionLocal = sessionmaker(
-        autocommit=False, autoflush=False, bind=test_engine
-    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
     # Override the get_db dependency
     def override_get_db() -> Generator[Session, None, None]:
@@ -447,9 +443,7 @@ def auth_client(
     _ = shutil.copy(public_key_path, expected_key_path)
 
     # Create session maker
-    TestingSessionLocal = sessionmaker(
-        autocommit=False, autoflush=False, bind=test_engine
-    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
     # Override the get_db dependency
     def override_get_db() -> Generator[Session, None, None]:
@@ -479,9 +473,7 @@ def auth_client(
 
     # Patch Config.MEDIA_STORAGE_DIR to use test media directory
     # EntityService reads this config value internally
-    monkeypatch.setattr(
-        "cl_server_shared.config.Config.MEDIA_STORAGE_DIR", str(clean_media_dir)
-    )
+    monkeypatch.setattr("cl_server_shared.config.Config.MEDIA_STORAGE_DIR", str(clean_media_dir))
 
     # Create test client
     with TestClient(app) as test_client:
