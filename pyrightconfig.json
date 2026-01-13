@@ -1,8 +1,8 @@
 {
-  "venvPath": ".",
-  "reportMissingTypeStubs": true,
-  "ignore": [],
   "include": ["src"],
-  "reportCallInDefaultInitializer": "none",
+  "exclude": ["**/__pycache__", "**/node_modules", ".venv"],
   "extraPaths": ["src"],
+
+  // Avoid error with FastAPI's Depends
+  "reportCallInDefaultInitializer": "none",
 }
