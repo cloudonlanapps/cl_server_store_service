@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,7 +12,7 @@ if TYPE_CHECKING:
     from cl_client import ComputeClient
     from cl_client.models import OnJobResponseCallback
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class JobSubmissionService:
@@ -81,7 +80,9 @@ class JobSubmissionService:
             )
             return job_response.job_id
         except Exception as e:
-            logger.error(f"Failed to submit face_detection job for entity {entity_id}: {e}")
+            logger.error(
+                f"Failed to submit face_detection job for entity {entity_id}: {e}"
+            )
             db.rollback()
             return None
         finally:
@@ -130,7 +131,9 @@ class JobSubmissionService:
             )
             return job_response.job_id
         except Exception as e:
-            logger.error(f"Failed to submit clip_embedding job for entity {entity_id}: {e}")
+            logger.error(
+                f"Failed to submit clip_embedding job for entity {entity_id}: {e}"
+            )
             db.rollback()
             return None
         finally:
@@ -210,7 +213,9 @@ class JobSubmissionService:
         finally:
             db.close()
 
-    def update_job_status(self, job_id: str, status: str, error_message: str | None = None) -> None:
+    def update_job_status(
+        self, job_id: str, status: str, error_message: str | None = None
+    ) -> None:
         """Update job status in database.
 
         Args:

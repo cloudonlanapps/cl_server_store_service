@@ -34,7 +34,7 @@ def get_qdrant_store(config: PySDKRuntimeConfig | None = None) -> QdrantImageSto
             collection_name=config.qdrant_collection_name,
             url=config.qdrant_url,
             vector_size=512,  # CLIP embedding dimension
-            logger=logger,
+
         )
         logger.info(f"Initialized QdrantImageStore: url={config.qdrant_url}")
 

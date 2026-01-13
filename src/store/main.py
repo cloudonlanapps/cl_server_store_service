@@ -1,7 +1,6 @@
 # src/store/main.py
 from __future__ import annotations
 
-import logging
 import os
 import sys
 from argparse import ArgumentParser, Namespace
@@ -10,8 +9,7 @@ import uvicorn
 
 from .media_metadata import validate_tools
 
-logger = logging.getLogger("store")
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+from loguru import logger
 
 
 class Args(Namespace):
@@ -70,21 +68,52 @@ class Args(Namespace):
 
 def main() -> int:
     parser = ArgumentParser(prog="store")
-    _ = parser.add_argument("--no-auth", action="store_true", help="Disable authentication")
-    _ = parser.add_argument("--no-migrate", action="store_true", help="Skip running DB migrations")
-    _ = parser.add_argument("--port", "-p", type=int, default=int(os.getenv("PORT", "8001")))
+    _ = parser.add_argument(
+        "--no-auth", action="store_true", help="Disable authentication"
+    )
+    _ = parser.add_argument(
+        "--no-migrate", action="store_true", help="Skip running DB migrations"
+    )
+    _ = parser.add_argument(
+        "--port", "-p", type=int, default=int(os.getenv("PORT", "8001"))
+    )
     _ = parser.add_argument("--host", default=os.getenv("HOST", "0.0.0.0"))
-    _ = parser.add_argument("--reload", action="store_true", help="Enable uvicorn reload (dev)")
+    _ = parser.add_argument(
+        "--reload", action="store_true", help="Enable uvicorn reload (dev)"
+    )
 
     # PySDK Configuration arguments
-    _ = parser.add_argument("--auth-url", default="http://localhost:8000", help="Auth service URL")
-    _ = parser.add_argument("--compute-url", default="http://localhost:8002", help="Compute service URL")
-    _ = parser.add_argument("--compute-username", default="admin", help="Compute service username")
-    _ = parser.add_argument("--compute-password", default="admin", help="Compute service password")
-    _ = parser.add_argument("--qdrant-url", default="http://localhost:6333", help="Qdrant URL")
-    _ = parser.add_argument("--qdrant-collection", default="image_embeddings", help="Qdrant collection for images")
-    _ = parser.add_argument("--face-collection", default="face_embeddings", help="Qdrant collection for faces")
-    _ = parser.add_argument("--face-threshold", type=float, default=0.7, help="Face matching similarity threshold (0.0-1.0)")
+    _ = parser.add_argument(
+        "--auth-url", default="http://localhost:8000", help="Auth service URL"
+    )
+    _ = parser.add_argument(
+        "--compute-url", default="http://localhost:8002", help="Compute service URL"
+    )
+    _ = parser.add_argument(
+        "--compute-username", default="admin", help="Compute service username"
+    )
+    _ = parser.add_argument(
+        "--compute-password", default="admin", help="Compute service password"
+    )
+    _ = parser.add_argument(
+        "--qdrant-url", default="http://localhost:6333", help="Qdrant URL"
+    )
+    _ = parser.add_argument(
+        "--qdrant-collection",
+        default="image_embeddings",
+        help="Qdrant collection for images",
+    )
+    _ = parser.add_argument(
+        "--face-collection",
+        default="face_embeddings",
+        help="Qdrant collection for faces",
+    )
+    _ = parser.add_argument(
+        "--face-threshold",
+        type=float,
+        default=0.7,
+        help="Face matching similarity threshold (0.0-1.0)",
+    )
 
     args = parser.parse_args(namespace=Args())
 
@@ -95,6 +124,7 @@ def main() -> int:
 
     # Create PySDK configuration from CLI arguments
     from .pysdk_config import PySDKRuntimeConfig
+
     pysdk_config = PySDKRuntimeConfig(
         auth_service_url=args.auth_url,
         compute_service_url=args.compute_url,

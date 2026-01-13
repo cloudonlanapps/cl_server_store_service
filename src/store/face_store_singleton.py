@@ -36,7 +36,7 @@ def get_face_store(config: PySDKRuntimeConfig | None = None) -> QdrantImageStore
             url=config.qdrant_url,
             vector_size=config.face_vector_size,
             distance=Distance.COSINE,  # For face similarity
-            logger=logger,
+
         )
         logger.info(
             f"Initialized Face Store: url={config.qdrant_url}, "

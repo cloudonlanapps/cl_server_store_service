@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import logging
-
 from cl_client import ComputeClient, ServerConfig, SessionManager
 from cl_server_shared import Config
+from loguru import logger
 
 from .pysdk_config import PySDKRuntimeConfig
-
-logger = logging.getLogger(__name__)
 
 _compute_client: ComputeClient | None = None
 _session_manager: SessionManager | None = None
@@ -31,8 +28,8 @@ def get_compute_client() -> ComputeClient:
 
     if _compute_client is None:
         raise RuntimeError(
-            "ComputeClient not initialized. Call async_get_compute_client(config) first " +
-            "(typically done in FastAPI startup event)."
+            "ComputeClient not initialized. Call async_get_compute_client(config) first "
+            + "(typically done in FastAPI startup event)."
         )
 
     return _compute_client
@@ -92,10 +89,10 @@ async def async_get_compute_client(config: PySDKRuntimeConfig) -> ComputeClient:
         _compute_client = _session_manager.create_compute_client()
 
         logger.info(
-            "Initialized ComputeClient with auth: " +
-            f"compute={config.compute_service_url}, " +
-            f"user={config.compute_username}, " +
-            f"mqtt={Config.MQTT_BROKER}:{Config.MQTT_PORT}"
+            "Initialized ComputeClient with auth: "
+            + f"compute={config.compute_service_url}, "
+            + f"user={config.compute_username}, "
+            + f"mqtt={Config.MQTT_BROKER}:{Config.MQTT_PORT}"
         )
 
     return _compute_client

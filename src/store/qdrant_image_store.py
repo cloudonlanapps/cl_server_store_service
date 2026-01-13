@@ -1,9 +1,9 @@
 from typing import cast, override
 
 import numpy as np
-from loguru import Logger
+from loguru import logger
 from numpy.typing import NDArray
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import HnswConfigDiff, PointStruct
 from qdrant_client.http.models.models import Payload
@@ -23,6 +23,7 @@ from .store_interface import StoreInterface
 
 
 class StoreItem(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     id: StrictInt
     embedding: NDArray[np.float32]
     payload: Payload | None
@@ -37,6 +38,7 @@ class SearchPreferences(BaseModel):
 
 
 class SearchResult(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     id: int
     embedding: NDArray[np.float32]
     score: float
@@ -63,14 +65,12 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
         hnsw_m: int = 16,
         hnsw_ef_construct: int = 200,
         max_segment_size: int = 100000,
-        logger: Logger | None = None,
     ):
         """
         Initialize the Qdrant image vector store, creating the collection if missing.
         """
         self.collection_name: str = collection_name
         self.client: QdrantClient = QdrantClient(url)
-        self.logger: Logger | None = logger
 
         vector_params = VectorParams(size=vector_size, distance=distance)
         hnsw_params = HnswConfigDiff(m=hnsw_m, ef_construct=hnsw_ef_construct)
@@ -80,8 +80,8 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
         self.vector_params: VectorParams = vector_params
 
         if not self.client.collection_exists(collection_name=collection_name):
-            if self.logger:
-                self.logger.debug(f"Creating collection: {collection_name}")
+
+            logger.debug(f"Creating collection: {collection_name}")
             _ = self.client.create_collection(
                 collection_name=collection_name,
                 vectors_config=vector_params,
@@ -89,8 +89,8 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
                 optimizers_config=optimizer_params,
             )
         else:
-            if self.logger:
-                self.logger.debug(f"Collection '{collection_name}' already exists. Reusing it.")
+
+            logger.debug(f"Collection '{collection_name}' already exists. Reusing it.")
             existing = self.client.get_collection(collection_name=collection_name)
             existing_params = existing.config.params.vectors
             if existing_params and isinstance(existing_params, VectorParams):
@@ -98,14 +98,14 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
                     existing_params.size != vector_params.size
                     or existing_params.distance.value != vector_params.distance.value
                 ):
-                    if self.logger:
-                        self.logger.error("Collection config differs from expected parameters!")
-                        self.logger.error(
-                            f"Existing size: {existing_params.size}, distance: {existing_params.distance}"
-                        )
-                        self.logger.error(
-                            f"Expected size: {vector_params.size}, distance: {vector_params.distance}"
-                        )
+
+                    logger.error("Collection config differs from expected parameters!")
+                    logger.error(
+                        f"Existing size: {existing_params.size}, distance: {existing_params.distance}"
+                    )
+                    logger.error(
+                        f"Expected size: {vector_params.size}, distance: {vector_params.distance}"
+                    )
                     raise ValueError("Collection config mismatch.")
             elif existing_params:
                 raise ValueError("Failed to retrieve collection parameters .")
@@ -147,8 +147,8 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
         )
 
         _ = self.client.upsert(collection_name=self.collection_name, points=[point])
-        if self.logger:
-            self.logger.debug(f"Upserted: {item.id} ")
+
+        logger.debug(f"Upserted: {item.id} ")
         return True
 
     # ---------------------------------------------------------------------
@@ -181,8 +181,8 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
             collection_name=self.collection_name,
             points_selector=PointIdsList.model_validate({"points": [id]}),
         )
-        if self.logger:
-            self.logger.debug(f"Deleted: {id}")
+
+        logger.debug(f"Deleted: {id}")
 
     # ---------------------------------------------------------------------
     @override
@@ -214,12 +214,16 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
 
         search_results: list[SearchResult] = [
             SearchResult.model_validate(
-                {"id": r.id, "score": r.score, "embedding": r.vector, "payload": r.payload}
+                {
+                    "id": r.id,
+                    "score": r.score,
+                    "embedding": r.vector,
+                    "payload": r.payload,
+                }
             )
             for r in results
         ]
 
-        if self.logger:
-            self.logger.debug(f"Search returned {len(search_results)} results.")
+        logger.debug(f"Search returned {len(search_results)} results.")
 
         return search_results

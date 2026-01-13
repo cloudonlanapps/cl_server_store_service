@@ -6,7 +6,6 @@ using ExifTool, ffprobe, and perceptual hashing algorithms.
 
 from __future__ import annotations
 
-import logging
 import subprocess
 import tempfile
 from datetime import datetime
@@ -21,9 +20,8 @@ from cl_ml_tools.algorithms import (
     sha512hash_image,
     sha512hash_video2,
 )
+from loguru import logger
 from pydantic import BaseModel, Field
-
-logger = logging.getLogger(__name__)
 
 
 class FFProbeFormat(BaseModel):
@@ -85,7 +83,9 @@ def validate_tools() -> None:
 
     # Check ffprobe
     try:
-        _ = subprocess.run(["ffprobe", "-version"], capture_output=True, check=True, timeout=5)
+        _ = subprocess.run(
+            ["ffprobe", "-version"], capture_output=True, check=True, timeout=5
+        )
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         raise RuntimeError(
             "ffprobe not installed. "
@@ -148,7 +148,9 @@ class MediaMetadataExtractor:
 
         # Step 5: Extract EXIF metadata using ExifTool
         # Create temporary file for ExifTool processing
-        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp_file:
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=Path(filename).suffix
+        ) as tmp_file:
             _ = tmp_file.write(file_bytes)
             tmp_path = tmp_file.name
 
@@ -221,7 +223,9 @@ class MediaMetadataExtractor:
                 if duration_fallback is not None:
                     duration = duration_fallback
             except Exception as e:
-                logger.warning(f"ffprobe duration extraction failed for {filename}: {e}")
+                logger.warning(
+                    f"ffprobe duration extraction failed for {filename}: {e}"
+                )
 
         # Step 7: Convert CreateDate to milliseconds timestamp
         if create_date_str and isinstance(create_date_str, str):
@@ -359,7 +363,9 @@ class MediaMetadataExtractor:
             Duration in seconds as float, or None if extraction fails
         """
         # Create temporary file for ffprobe
-        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp_file:
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=Path(filename).suffix
+        ) as tmp_file:
             _ = tmp_file.write(file_bytes)
             tmp_path = tmp_file.name
 

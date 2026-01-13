@@ -1,17 +1,15 @@
 """CoLAN Store Server."""
 
-import logging
 import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from loguru import logger
 from sqlalchemy.orm import configure_mappers
 
 from .pysdk_config import PySDKRuntimeConfig
 from .routes import router
-
-logger = logging.getLogger(__name__)
 
 # Configure mappers after all models are imported (required for versioning)
 configure_mappers()
