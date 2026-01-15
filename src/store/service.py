@@ -8,11 +8,10 @@ from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from store.qdrant_image_store import SearchPreferences
-
 from .entity_storage import EntityStorageService
 from .media_metadata import MediaMetadataExtractor
 from .models import Entity
+from .qdrant_image_store import SearchPreferences
 from .schemas import (
     BodyCreateEntity,
     BodyPatchEntity,
@@ -55,9 +54,7 @@ class EntityService:
         """Return current UTC timestamp in milliseconds."""
         return int(datetime.now(UTC).timestamp() * 1000)
 
-    def _check_duplicate_md5(
-        self, md5: str, exclude_entity_id: int | None = None
-    ) -> Entity | None:
+    def _check_duplicate_md5(self, md5: str, exclude_entity_id: int | None = None) -> Entity | None:
         """
         Check if an entity with the given MD5 already exists.
 
@@ -156,9 +153,7 @@ class EntityService:
 
         return items, total_count
 
-    def get_entity_by_id(
-        self, entity_id: int, version: int | None = None
-    ) -> Item | None:
+    def get_entity_by_id(self, entity_id: int, version: int | None = None) -> Item | None:
         """
         Retrieve a single entity by ID, optionally at a specific version.
 
@@ -201,10 +196,10 @@ class EntityService:
             if 1 <= version <= len(versions_list):
                 version_entity = versions_list[  # pyright: ignore[reportAny]
                     version - 1
-                ] 
+                ]
                 return self._entity_to_item(
                     version_entity  # pyright: ignore[reportAny]
-                ) 
+                )
 
         return None
 
@@ -227,20 +222,20 @@ class EntityService:
 
         versions_list = entity.versions.all()
         result: list[dict[str, int | None]] = []
-        for idx, version in enumerate(
+        for idx, version in enumerate(  # pyright: ignore[reportAny]
             versions_list, start=1
-        ):  # pyright: ignore[reportAny]
+        ):
             version_info: dict[str, int | None] = {
                 "version": idx,
                 "transaction_id": (
-                    version.transaction_id
-                    if hasattr(version, "transaction_id")
-                    else None  # pyright: ignore[reportAny]
+                    version.transaction_id  # pyright: ignore[reportAny]
+                    if hasattr(version, "transaction_id")  # pyright: ignore[reportAny]
+                    else None
                 ),
                 "updated_date": (
-                    version.updated_date
-                    if hasattr(version, "updated_date")
-                    else None  # pyright: ignore[reportAny]
+                    version.updated_date  # pyright: ignore[reportAny]
+                    if hasattr(version, "updated_date")  # pyright: ignore[reportAny]
+                    else None
                 ),
             }
             result.append(version_info)
@@ -293,12 +288,8 @@ class EntityService:
                 return self._entity_to_item(duplicate)
 
             # Save file to storage (convert Pydantic model to dict for storage)
-            logger.error(
-                f"{filename} is sent for saving with metadata {file_meta.model_dump()}"
-            )
-            file_path = self.file_storage.save_file(
-                image, file_meta.model_dump(), filename
-            )
+            logger.error(f"{filename} is sent for saving with metadata {file_meta.model_dump()}")
+            file_path = self.file_storage.save_file(image, file_meta.model_dump(), filename)
             logger.error(f"filepath received: {file_path}")
             logger.error(self.file_storage.base_dir)
 
@@ -409,9 +400,7 @@ class EntityService:
             file_meta = self.metadata_extractor.extract_metadata(image, filename)
 
             # Check for duplicate MD5 (excluding current entity)
-            duplicate = self._check_duplicate_md5(
-                file_meta.md5, exclude_entity_id=entity_id
-            )
+            duplicate = self._check_duplicate_md5(file_meta.md5, exclude_entity_id=entity_id)
             if duplicate:
                 # Return the existing item instead of raising an error
                 return self._entity_to_item(duplicate)
@@ -422,9 +411,7 @@ class EntityService:
                 _ = self.file_storage.delete_file(old_file_path)
 
             # Save new file (convert Pydantic model to dict for storage)
-            file_path = self.file_storage.save_file(
-                image, file_meta.model_dump(), filename
-            )
+            file_path = self.file_storage.save_file(image, file_meta.model_dump(), filename)
 
             # Update file metadata from Pydantic model
             entity.file_size = file_meta.file_size
@@ -737,9 +724,7 @@ class EntityService:
             return None
 
         # Count faces for this person
-        face_count = (
-            self.db.query(Face).filter(Face.known_person_id == person_id).count()
-        )
+        face_count = self.db.query(Face).filter(Face.known_person_id == person_id).count()
 
         return schemas.KnownPersonResponse(
             id=person.id,
@@ -763,9 +748,7 @@ class EntityService:
         results: list[schemas.KnownPersonResponse] = []
         for person in persons:
             # Count faces for this person
-            face_count = (
-                self.db.query(Face).filter(Face.known_person_id == person.id).count()
-            )
+            face_count = self.db.query(Face).filter(Face.known_person_id == person.id).count()
 
             results.append(
                 schemas.KnownPersonResponse(
@@ -811,9 +794,7 @@ class EntityService:
 
         return results
 
-    def update_known_person_name(
-        self, person_id: int, name: str
-    ) -> KnownPersonResponse | None:
+    def update_known_person_name(self, person_id: int, name: str) -> KnownPersonResponse | None:
         """Update known person name.
 
         Args:
@@ -855,9 +836,7 @@ class EntityService:
         results: list[schemas.FaceMatchResult] = []
         for match in matches:
             # Optionally load matched face details
-            matched_face = (
-                self.db.query(Face).filter(Face.id == match.matched_face_id).first()
-            )
+            matched_face = self.db.query(Face).filter(Face.id == match.matched_face_id).first()
             matched_face_response = None
             if matched_face:
                 matched_face_response = schemas.FaceResponse(
@@ -944,9 +923,7 @@ class EntityService:
                         face_id=int(result.id),  # type: ignore[arg-type]
                         score=float(result.score),
                         known_person_id=(
-                            result.payload.get("known_person_id")
-                            if result.payload
-                            else None
+                            result.payload.get("known_person_id") if result.payload else None
                         ),
                         face=face_response,
                     )
