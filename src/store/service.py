@@ -199,12 +199,12 @@ class EntityService:
             versions_list = entity.versions.all()
             # Versions are 1-indexed for the API
             if 1 <= version <= len(versions_list):
-                version_entity = versions_list[
+                version_entity = versions_list[  # pyright: ignore[reportAny]
                     version - 1
-                ]  # pyright: ignore[reportAny]
+                ] 
                 return self._entity_to_item(
-                    version_entity
-                )  # pyright: ignore[reportAny]
+                    version_entity  # pyright: ignore[reportAny]
+                ) 
 
         return None
 

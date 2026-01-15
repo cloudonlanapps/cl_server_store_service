@@ -11,9 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 # CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
 # Using absolute import to avoid circular dependency with __init__.py
-from store import (
-    versioning,  # noqa: F401  # pyright: ignore[reportUnusedImport]
-)
+from . import versioning  # pyright: ignore[reportUnusedImport]  # noqa: F401
 
 
 def enable_wal_mode(

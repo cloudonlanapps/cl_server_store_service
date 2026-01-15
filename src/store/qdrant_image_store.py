@@ -23,7 +23,7 @@ from .store_interface import StoreInterface
 
 
 class StoreItem(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)  # pyright: ignore[reportIncompatibleVariableOverride]
     id: StrictInt
     embedding: NDArray[np.float32]
     payload: Payload | None
@@ -38,7 +38,7 @@ class SearchPreferences(BaseModel):
 
 
 class SearchResult(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)  # pyright: ignore[reportIncompatibleVariableOverride]
     id: int
     embedding: NDArray[np.float32]
     score: float
@@ -80,7 +80,6 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
         self.vector_params: VectorParams = vector_params
 
         if not self.client.collection_exists(collection_name=collection_name):
-
             logger.debug(f"Creating collection: {collection_name}")
             _ = self.client.create_collection(
                 collection_name=collection_name,
@@ -89,7 +88,6 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
                 optimizers_config=optimizer_params,
             )
         else:
-
             logger.debug(f"Collection '{collection_name}' already exists. Reusing it.")
             existing = self.client.get_collection(collection_name=collection_name)
             existing_params = existing.config.params.vectors
@@ -98,7 +96,6 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
                     existing_params.size != vector_params.size
                     or existing_params.distance.value != vector_params.distance.value
                 ):
-
                     logger.error("Collection config differs from expected parameters!")
                     logger.error(
                         f"Existing size: {existing_params.size}, distance: {existing_params.distance}"
