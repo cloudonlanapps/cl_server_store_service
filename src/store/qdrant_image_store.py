@@ -212,11 +212,14 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
         search_results: list[SearchResult] = []
         for r in results:
             if r.vector is not None:
+                # Clamp score to [0.0, 1.0] to handle floating-point precision errors
+                # Cosine similarity can sometimes return values slightly > 1.0 (e.g., 1.0000001)
+                clamped_score = max(0.0, min(1.0, r.score))
                 search_results.append(
                     SearchResult.model_validate(
                         {
                             "id": r.id,
-                            "score": r.score,
+                            "score": clamped_score,
                             "embedding": self._to_embedding(r.vector),
                             "payload": r.payload,
                         }
