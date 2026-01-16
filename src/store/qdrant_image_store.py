@@ -32,7 +32,7 @@ class StoreItem(BaseModel):
 
 class SearchPreferences(BaseModel):
     with_payload: bool = True
-    with_vectors: bool = False
+    with_vectors: bool = True
     score_threshold: float = 0.85
     pass
 
@@ -209,17 +209,23 @@ class QdrantImageStore(StoreInterface[StoreItem, SearchPreferences, SearchResult
             with_vectors=search_options.with_vectors if search_options else True,
         ).points
 
-        search_results: list[SearchResult] = [
-            SearchResult.model_validate(
-                {
-                    "id": r.id,
-                    "score": r.score,
-                    "embedding": r.vector,
-                    "payload": r.payload,
-                }
-            )
-            for r in results
-        ]
+        search_results: list[SearchResult] = []
+        for r in results:
+            if r.vector is not None:
+                search_results.append(
+                    SearchResult.model_validate(
+                        {
+                            "id": r.id,
+                            "score": r.score,
+                            "embedding": self._to_embedding(r.vector),
+                            "payload": r.payload,
+                        }
+                    )
+                )
+            else:
+                logger.warning(
+                    f"Point {r.id} has no vector in search results (with_vectors={search_options.with_vectors if search_options else 'None'})"
+                )
 
         logger.debug(f"Search returned {len(search_results)} results.")
 

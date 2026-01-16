@@ -518,22 +518,33 @@ class JobCallbackHandler:
                 logger.error(f"Face {face_id} not found in database")
                 return
 
+            # Find the best valid match from similar faces
+            valid_best_face = None
             if similar_faces:
-                # Multiple matches found - link to BEST match, record ALL matches
-                best_match: SearchResult = similar_faces[0]  # Highest similarity score
-
-                best_face = db.query(Face).filter(Face.id == best_match.id).first()
-
-                if best_face and best_face.known_person_id:
-                    # Link to best match's KnownPerson
-                    face.known_person_id = best_face.known_person_id
-                    logger.info(
-                        f"Linked face {best_face.id} to known person {best_face.known_person_id} "
-                        + f"(score: {best_match.score:.3f})"
-                    )
-
-                # Record ALL matches in FaceMatch table
                 for match in similar_faces:
+                    candidate_face = db.query(Face).filter(Face.id == match.id).first()
+                    if candidate_face:
+                        valid_best_face = candidate_face
+                        # Link to this face's KnownPerson if it has one
+                        if valid_best_face.known_person_id:
+                            face.known_person_id = valid_best_face.known_person_id
+                            logger.info(
+                                f"Linked face {face_id} to known person {valid_best_face.known_person_id} "
+                                + f"(match: {match.id}, score: {match.score:.3f})"
+                            )
+                            break
+            
+            # Record ALL matches in FaceMatch table
+            if similar_faces:
+                for match in similar_faces:
+                    # Verify matched face exists in DB to prevent FK violation (stale vector store data)
+                    matched_face_in_db = db.query(Face).filter(Face.id == match.id).first()
+                    if not matched_face_in_db:
+                        logger.warning(
+                            f"Matched face {match.id} from vector store not found in DB. Skipping match record."
+                        )
+                        continue
+
                     face_match = FaceMatch(
                         face_id=face_id,
                         matched_face_id=match.id,
@@ -544,19 +555,29 @@ class JobCallbackHandler:
                     logger.debug(
                         f"Recorded match: face {face_id} <-> face {match.id} (score: {match.score:.3f})"
                     )
-            else:
-                # No match - create new KnownPerson
-                known_person = KnownPerson(
-                    created_at=self._now_timestamp(),
-                    updated_at=self._now_timestamp(),
-                )
-                db.add(known_person)
-                db.flush()  # Get ID
 
-                face.known_person_id = known_person.id
-                logger.info(
-                    f"Created new known person {known_person.id} for face {face_id}"
-                )
+            # If no valid similar face found (or no similar faces at all), create new KnownPerson
+            if not valid_best_face or not face.known_person_id:
+                # No match - create new KnownPerson
+                # Only create if we haven't assigned one yet (e.g. valid_best_face found but had no known_person_id?)
+                # Actually if valid_best_face found but has no known_person_id, we should probably create one for BOTH?
+                # For now, simplest logic: if current face still has no known_person_id, create new one.
+                
+                if not face.known_person_id:
+                    known_person = KnownPerson(
+                        created_at=self._now_timestamp(),
+                        updated_at=self._now_timestamp(),
+                    )
+                    db.add(known_person)
+                    db.flush()  # Get ID
+
+                    face.known_person_id = known_person.id
+                    logger.info(
+                        f"Created new known person {known_person.id} for face {face_id}"
+                    )
+                    
+                    # If we found a valid best face but it didn't have a known_person_id, maybe we should link it too?
+                    # This gets complex. Sticking to simple "if not assigned, create new" logic for the current face.
 
             # Add face embedding to face store
             import numpy as np
