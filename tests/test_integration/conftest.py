@@ -1,5 +1,6 @@
 """Integration test configuration for store service tests."""
 
+import os
 import shutil
 import sys
 from collections.abc import Generator
@@ -19,7 +20,13 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Import test config and media files from same directory
-from .test_config import IMAGES_DIR, TEST_DB_URL, TEST_MEDIA_DIR, get_all_test_images
+from .test_config import (
+    IMAGES_DIR,
+    TEST_DATA_DIR,
+    TEST_DB_URL,
+    TEST_MEDIA_DIR,
+    get_all_test_images,
+)
 from .test_media_files import get_test_media_files
 
 # ============================================================================
@@ -152,8 +159,21 @@ def test_db_session(test_engine: Engine) -> Generator[Session, None, None]:
 
 
 @pytest.fixture(scope="function")
+def clean_data_dir() -> Generator[Path, None, None]:
+    """Clean up server data directory before and after tests."""
+    if TEST_DATA_DIR.exists():
+        shutil.rmtree(TEST_DATA_DIR)
+    TEST_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    yield TEST_DATA_DIR
+
+    if TEST_DATA_DIR.exists():
+        shutil.rmtree(TEST_DATA_DIR)
+
+
+@pytest.fixture(scope="function")
 def clean_media_dir() -> Generator[Path, None, None]:
-    """Clean up media files directory before and after tests."""
+    """Clean up test media files directory before and after tests."""
     if TEST_MEDIA_DIR.exists():
         shutil.rmtree(TEST_MEDIA_DIR)
     TEST_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
@@ -200,6 +220,7 @@ def sample_images(test_images_dir: Path) -> list[Path]:
 @pytest.fixture(scope="function")
 def client(
     test_engine: Engine,
+    clean_data_dir: Path,
     clean_media_dir: Path,
     integration_config: IntegrationConfig,
     monkeypatch: pytest.MonkeyPatch,
@@ -217,7 +238,7 @@ def client(
     )
 
     monkeypatch.setenv("PYSDK_CONFIG_JSON", pysdk_config.model_dump_json())
-    monkeypatch.setenv("CL_SERVER_DIR", str(clean_media_dir))
+    monkeypatch.setenv("CL_STORE_DIR", str(clean_data_dir))
 
     # Create session maker
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
@@ -245,7 +266,7 @@ def client(
     # Override auth dependency to bypass authentication in tests
     def override_auth():
         return UserPayload(
-            id="testuser",  # NOTE: Changed from 'sub' to 'id'
+            id="testuser",
             permissions=["media_store_write", "ai_inference_support"],
             is_admin=True,
         )
@@ -263,6 +284,7 @@ def client(
 @pytest.fixture(scope="function")
 def auth_client(
     test_engine: Engine,
+    clean_data_dir: Path,
     clean_media_dir: Path,
     integration_config: IntegrationConfig,
     key_pair: tuple[bytes, str],
@@ -281,6 +303,8 @@ def auth_client(
     )
 
     monkeypatch.setenv("PYSDK_CONFIG_JSON", pysdk_config.model_dump_json())
+    monkeypatch.setenv("CL_STORE_DIR", str(clean_data_dir))
+
 
     # Set up JWT key pair
     _, public_key_path = key_pair
@@ -315,7 +339,7 @@ def auth_client(
 
     app.dependency_overrides[get_db] = override_get_db
 
-    monkeypatch.setattr("cl_server_shared.config.Config.MEDIA_STORAGE_DIR", str(clean_media_dir))
+    monkeypatch.setattr("cl_server_shared.config.Config.MEDIA_STORAGE_DIR", str(clean_data_dir / "media"))
 
     # Create test client - connects to REAL services
     with TestClient(app) as test_client:
