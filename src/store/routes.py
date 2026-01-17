@@ -11,6 +11,7 @@ from fastapi import (
     HTTPException,
     Path,
     Query,
+    Request,
     UploadFile,
     status,
 )
@@ -279,11 +280,12 @@ async def put_entity(
     },
 )
 async def patch_entity(
+    request: Request,
     entity_id: int,
     label: str | None = Form(None, title="Label"),
     description: str | None = Form(None, title="Description"),
-    parent_id: int | None = Form(None, title="Parent Id"),
-    is_deleted: bool | None = Form(None, title="Is Deleted"),
+    parent_id: str = Form("__UNSET__", title="Parent Id"),
+    is_deleted: str = Form("__UNSET__", title="Is Deleted"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
 ) -> schemas.Item:
@@ -292,18 +294,30 @@ async def patch_entity(
     # Extract user_id from JWT payload (None in demo mode)
     user_id = user.id if user else None
 
-    # Create body object from form fields (only include non-None values)
+    # Get raw form data to check if fields with empty values were actually sent
+    form_data = await request.form()
+    form_keys = set(form_data.keys())
+
+    # Create body object from form fields
+    # Handle type conversions for form data (strings to proper types)
     patch_data = {}
     if label is not None:
         patch_data["label"] = label
     if description is not None:
         patch_data["description"] = description
-    if parent_id is not None:
-        patch_data["parent_id"] = parent_id
-    if is_deleted is not None:
-        patch_data["is_deleted"] = is_deleted
+    # Check if parent_id was actually sent (even as empty string)
+    if "parent_id" in form_keys:
+        # Empty string means set to None, otherwise parse as int
+        parent_id_value = form_data.get("parent_id", "")
+        patch_data["parent_id"] = None if parent_id_value == "" else int(parent_id_value)
+    # Check if is_deleted was actually sent
+    if "is_deleted" in form_keys:
+        # Convert string boolean to actual boolean
+        is_deleted_value = form_data.get("is_deleted", "false")
+        patch_data["is_deleted"] = is_deleted_value.lower() in ("true", "1", "yes")
 
-    body = schemas.BodyPatchEntity.model_validate(patch_data)
+    # Use model_construct to preserve explicit None values as "set"
+    body = schemas.BodyPatchEntity.model_construct(**patch_data, _fields_set=set(patch_data.keys()))
 
     item = service.patch_entity(entity_id, body, user_id)
     if not item:

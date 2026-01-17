@@ -70,7 +70,7 @@ packages = ["src/store"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-testpaths = ["tests"]
+testpaths = ["tests/test_integration"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
 markers = [

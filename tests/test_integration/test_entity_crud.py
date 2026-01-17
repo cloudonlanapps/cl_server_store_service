@@ -90,7 +90,7 @@ class TestEntityCRUD:
         # Patch entity (update only label)
         patch_response = client.patch(
             f"/entities/{entity_id}",
-            json={"body": {"label": "Updated Label"}}
+            data={"label": "Updated Label"}
         )
 
         assert patch_response.status_code == 200
@@ -122,7 +122,7 @@ class TestEntityCRUD:
         # 1. Move child to parent
         resp = client.patch(
             f"/entities/{child_id}",
-            json={"body": {"parent_id": parent_id}}
+            data={"parent_id": str(parent_id)}
         )
         assert resp.status_code == 200
         updated_child = Item.model_validate(resp.json())
@@ -131,7 +131,7 @@ class TestEntityCRUD:
         # 2. Remove child from parent (nullify parent_id)
         resp = client.patch(
             f"/entities/{child_id}",
-            json={"body": {"parent_id": None}}
+            data={"parent_id": ""}
         )
         assert resp.status_code == 200
         updated_child = Item.model_validate(resp.json())
@@ -178,7 +178,7 @@ class TestEntityCRUD:
         # Soft Delete (PATCH is_deleted=True)
         response = client.patch(
             f"/entities/{entity_id}",
-            json={"body": {"is_deleted": True}}
+            data={"is_deleted": "true"}
         )
         assert response.status_code == 200
         deleted_item = Item.model_validate(response.json())
@@ -193,7 +193,7 @@ class TestEntityCRUD:
         # Restore (PATCH is_deleted=False)
         response = client.patch(
             f"/entities/{entity_id}",
-            json={"body": {"is_deleted": False}}
+            data={"is_deleted": "false"}
         )
         assert response.status_code == 200
         restored_item = Item.model_validate(response.json())

@@ -203,11 +203,7 @@ class TestEntityVersioning:
         # Patch entity (should create version 2)
         patch_response = client.patch(
             f"/entities/{entity_id}",
-            json={
-                "body": {
-                    "label": "Patched Label"
-                }
-            }
+            data={"label": "Patched Label"}
         )
 
         assert patch_response.status_code == 200

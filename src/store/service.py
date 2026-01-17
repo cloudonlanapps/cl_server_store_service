@@ -466,8 +466,10 @@ class EntityService:
             return None
 
         # Update only provided fields (get values from Pydantic model to preserve types)
-        for field_name in body.model_dump(exclude_unset=True):
-            setattr(entity, field_name, getattr(body, field_name))
+        patch_fields = body.model_dump(exclude_unset=True)
+        for field_name in patch_fields:
+            value = getattr(body, field_name)
+            setattr(entity, field_name, value)
 
         entity.updated_date = self._now_timestamp()
         entity.updated_by = user_id

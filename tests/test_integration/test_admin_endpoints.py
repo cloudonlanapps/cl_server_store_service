@@ -43,51 +43,46 @@ class TestAdminConfigGetEndpoint:
 
 
 class TestAdminConfigPutEndpoint:
-    """Test PUT /admin/config/read-auth endpoint."""
+    """Test PUT /admin/config/guest-mode endpoint."""
 
     def test_put_read_auth_with_admin_token_returns_200(self, auth_client, admin_token):
-        """PUT /admin/config/read-auth with admin token should return 200 OK."""
+        """PUT /admin/config/guest-mode with admin token should return 200 OK."""
         headers = {"Authorization": f"Bearer {admin_token}"}
-        payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth", json=payload, headers=headers
+            "/admin/config/guest-mode", data={"guest_mode": "false"}, headers=headers
         )
 
         assert response.status_code == 200
 
     def test_put_read_auth_with_write_token_returns_403(self, auth_client, write_token):
-        """PUT /admin/config/read-auth with write token (not admin) should return 403 Forbidden."""
+        """PUT /admin/config/guest-mode with write token (not admin) should return 403 Forbidden."""
         headers = {"Authorization": f"Bearer {write_token}"}
-        payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth", json=payload, headers=headers
+            "/admin/config/guest-mode", data={"guest_mode": "false"}, headers=headers
         )
 
         assert response.status_code == 403
 
     def test_put_read_auth_with_read_token_returns_403(self, auth_client, read_token):
-        """PUT /admin/config/read-auth with read token should return 403 Forbidden."""
+        """PUT /admin/config/guest-mode with read token should return 403 Forbidden."""
         headers = {"Authorization": f"Bearer {read_token}"}
-        payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth", json=payload, headers=headers
+            "/admin/config/guest-mode", data={"guest_mode": "false"}, headers=headers
         )
 
         assert response.status_code == 403
 
     def test_put_read_auth_without_token_returns_401(self, auth_client):
-        """PUT /admin/config/read-auth without token should return 401 Unauthorized."""
-        payload = {"enabled": True}
-        response = auth_client.put("/admin/config/read-auth", json=payload)
+        """PUT /admin/config/guest-mode without token should return 401 Unauthorized."""
+        response = auth_client.put("/admin/config/guest-mode", data={"guest_mode": "false"})
 
         assert response.status_code == 401
 
     def test_put_read_auth_with_invalid_token_returns_401(self, auth_client):
-        """PUT /admin/config/read-auth with invalid token should return 401 Unauthorized."""
+        """PUT /admin/config/guest-mode with invalid token should return 401 Unauthorized."""
         headers = {"Authorization": "Bearer invalid.token.here"}
-        payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth", json=payload, headers=headers
+            "/admin/config/guest-mode", data={"guest_mode": "false"}, headers=headers
         )
 
         assert response.status_code == 401
@@ -102,11 +97,10 @@ class TestAdminConfigPutEndpoint:
         ConfigService._cache.clear()
         ConfigService._cache_timestamps.clear()
 
-        # Update config via API
+        # Update config via API (guest_mode=false means read_auth_enabled=true)
         headers = {"Authorization": f"Bearer {admin_token}"}
-        payload = {"enabled": True}
         response = auth_client.put(
-            "/admin/config/read-auth", json=payload, headers=headers
+            "/admin/config/guest-mode", data={"guest_mode": "false"}, headers=headers
         )
 
         assert response.status_code == 200
@@ -120,10 +114,9 @@ class TestAdminConfigPutEndpoint:
         """Subsequent GET /admin/config should return updated config after PUT."""
         headers = {"Authorization": f"Bearer {admin_token}"}
 
-        # Update config
-        payload = {"enabled": True}
+        # Update config (guest_mode=false means read_auth_enabled=true)
         response = auth_client.put(
-            "/admin/config/read-auth", json=payload, headers=headers
+            "/admin/config/guest-mode", data={"guest_mode": "false"}, headers=headers
         )
         assert response.status_code == 200
 

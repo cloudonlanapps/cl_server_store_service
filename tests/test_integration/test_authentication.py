@@ -53,7 +53,7 @@ class TestAuthenticationLogic:
 
         # Mock user with write permission
         user = UserPayload(
-            sub="testuser",
+            id="testuser",
             permissions=["media_store_write"],
             is_admin=False,
         )
@@ -71,7 +71,7 @@ class TestAuthenticationLogic:
 
         from store.auth import UserPayload, require_permission
 
-        user = UserPayload(sub="admin", permissions=[], is_admin=True)
+        user = UserPayload(id="admin", permissions=[], is_admin=True)
 
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             permission_checker = require_permission("media_store_write")
@@ -86,7 +86,7 @@ class TestAuthenticationLogic:
         from store.auth import UserPayload, require_permission
 
         user = UserPayload(
-            sub="testuser",
+            id="testuser",
             permissions=["media_store_read"],
             is_admin=False,
         )
@@ -121,7 +121,7 @@ class TestAuthenticationLogic:
         from store.auth import UserPayload, require_permission
 
         user = UserPayload(
-            sub="testuser",
+            id="testuser",
             permissions=["media_store_read"],
             is_admin=False,
         )
@@ -145,7 +145,7 @@ class TestAuthenticationLogic:
 
         from store.auth import UserPayload, require_admin
 
-        user = UserPayload(sub="admin", permissions=[], is_admin=True)
+        user = UserPayload(id="admin", permissions=[], is_admin=True)
 
         with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
             result = asyncio.run(require_admin(user))
@@ -159,7 +159,7 @@ class TestAuthenticationLogic:
         from store.auth import UserPayload, require_admin
 
         user = UserPayload(
-            sub="testuser",
+            id="testuser",
             permissions=["media_store_write"],
             is_admin=False,
         )
@@ -230,7 +230,7 @@ class TestJWTValidation:
 
         private_key_pem, public_key_path = key_pair
         token = jwt_token_generator.generate_token(
-            sub="testuser",
+            sub="testuser",  # Note: jwt_token_generator uses 'sub' for JWT standard field
             permissions=["media_store_read"],
             is_admin=False,
             expired=False,

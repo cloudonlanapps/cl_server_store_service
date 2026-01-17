@@ -8,7 +8,7 @@ from cl_server_shared.config import Config
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import ExpiredSignatureError, JWTError, jwt
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
@@ -123,7 +123,7 @@ async def get_current_user(
             token,
             public_key,
             algorithms=["ES256"],
-            options={"require": ["sub", "exp"]},
+            options={"require": ["id", "exp"]},
         )
         return UserPayload.model_validate(raw)
 

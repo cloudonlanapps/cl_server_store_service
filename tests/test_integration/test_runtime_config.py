@@ -102,9 +102,9 @@ class TestAdminConfigAPI:
         assert response.status_code == 401
 
     def test_update_read_auth_requires_admin(self, auth_client, db_session):
-        """Test that updating read auth requires admin access."""
+        """Test that updating guest mode requires admin access."""
         # No auth headers provided, should fail
-        response = auth_client.put("/admin/config/read-auth", json={"enabled": True})
+        response = auth_client.put("/admin/config/guest-mode", data={"guest_mode": "false"})
         # Should return 401 (no auth)
         assert response.status_code == 401
 
@@ -132,10 +132,10 @@ class TestJWTUserID:
         # the token structure and that our generator puts the ID in the right place.
         # The jwt_token_generator fixture uses a test key pair.
 
-        # Verify the token payload contains the user ID in 'sub'
+        # Verify the token payload contains the user ID in 'id'
         # This confirms our assumption about where the user ID lives
         payload = jwt.get_unverified_claims(token)
-        assert payload["sub"] == user_id
+        assert payload["id"] == user_id
 
         # Also verify that our auth logic would accept this
         # We can't easily call get_current_user directly without mocking Depends,

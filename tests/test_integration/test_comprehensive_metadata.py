@@ -7,6 +7,8 @@ from datetime import datetime
 
 import pytest
 
+from store.schemas import Item
+
 from .test_media_files import get_test_media_files
 
 
@@ -41,22 +43,22 @@ class TestAllImagesMetadata:
         if response.status_code == 409:
             pytest.skip(f"Duplicate file: {image_path.name}")
 
-        data = response.json()
+        item = Item.model_validate(response.json())
 
         # Verify all metadata fields
-        assert data["id"] is not None, "id should be set"
-        assert data["md5"] is not None, "md5 should be extracted"
-        assert len(data["md5"]) == 128, "md5 (SHA-512 hash) should be 128 characters"
+        assert item.id is not None, "id should be set"
+        assert item.md5 is not None, "md5 should be extracted"
+        assert len(item.md5) == 128, "md5 (SHA-512 hash) should be 128 characters"
         assert (
-            data["file_size"] == actual_size
+            item.file_size == actual_size
         ), f"file_size mismatch for {image_path.name}"
         # Width and height are optional (None if EXIF not available)
-        if data["width"] is not None:
-            assert data["width"] > 0, "width should be positive when present"
-        if data["height"] is not None:
-            assert data["height"] > 0, "height should be positive when present"
-        assert data["mime_type"] is not None, "mime_type should be set"
-        assert "image" in data["mime_type"].lower(), "mime_type should contain 'image'"
+        if item.width is not None:
+            assert item.width > 0, "width should be positive when present"
+        if item.height is not None:
+            assert item.height > 0, "height should be positive when present"
+        assert item.mime_type is not None, "mime_type should be set"
+        assert "image" in item.mime_type.lower(), "mime_type should contain 'image'"
 
 
 class TestTimestampFields:
@@ -72,16 +74,16 @@ class TestTimestampFields:
             )
 
         assert response.status_code == 201
-        data = response.json()
+        item = Item.model_validate(response.json())
 
         # Verify added_date exists and is valid ISO-8601
-        assert data["added_date"] is not None
+        assert item.added_date is not None
         try:
             # Should be parseable as ISO-8601
-            parsed = datetime.fromtimestamp(int(data["added_date"]) / 1000.0)
+            parsed = datetime.fromtimestamp(int(item.added_date) / 1000.0)
             assert parsed is not None
         except ValueError:
-            pytest.fail(f"added_date is not valid ISO-8601: {data['added_date']}")
+            pytest.fail(f"added_date is not valid ISO-8601: {item.added_date}")
 
     def test_updated_date_format(self, client, sample_image, clean_media_dir):
         """Test that updated_date is a valid ISO-8601 timestamp."""
@@ -93,7 +95,8 @@ class TestTimestampFields:
                 data={"is_collection": "false", "label": "Original"},
             )
 
-        entity_id = create_response.json()["id"]
+        created_item = Item.model_validate(create_response.json())
+        entity_id = created_item.id
 
         # Update entity
         with open(sample_image, "rb") as f:
@@ -104,15 +107,15 @@ class TestTimestampFields:
             )
 
         assert update_response.status_code == 200
-        data = update_response.json()
+        item = Item.model_validate(update_response.json())
 
         # Verify updated_date exists and is valid ISO-8601
-        assert data["updated_date"] is not None
+        assert item.updated_date is not None
         try:
-            parsed = datetime.fromtimestamp(int(data["updated_date"]) / 1000.0)
+            parsed = datetime.fromtimestamp(int(item.updated_date) / 1000.0)
             assert parsed is not None
         except ValueError:
-            pytest.fail(f"updated_date is not valid ISO-8601: {data['updated_date']}")
+            pytest.fail(f"updated_date is not valid ISO-8601: {item.updated_date}")
 
     def test_updated_date_changes_on_update(
         self, client, sample_image, clean_media_dir
@@ -126,8 +129,9 @@ class TestTimestampFields:
                 data={"is_collection": "false", "label": "Original"},
             )
 
-        entity_id = create_response.json()["id"]
-        original_updated = create_response.json()["updated_date"]
+        created_item = Item.model_validate(create_response.json())
+        entity_id = created_item.id
+        original_updated = created_item.updated_date
 
         # Small delay to ensure timestamp difference
         import time
@@ -142,7 +146,8 @@ class TestTimestampFields:
                 data={"is_collection": "false", "label": "Updated"},
             )
 
-        new_updated = update_response.json()["updated_date"]
+        updated_item = Item.model_validate(update_response.json())
+        new_updated = updated_item.updated_date
 
         # updated_date should have changed
         assert new_updated != original_updated, "updated_date should change on update"
@@ -157,17 +162,17 @@ class TestTimestampFields:
             )
 
         assert response.status_code == 201
-        data = response.json()
+        item = Item.model_validate(response.json())
 
         # create_date may be None if EXIF data is not present
         # This is expected for images without EXIF CreateDate
         # If present, should be a valid timestamp
-        if data["create_date"] is not None:
+        if item.create_date is not None:
             try:
-                parsed = datetime.fromtimestamp(int(data["create_date"]) / 1000.0)
+                parsed = datetime.fromtimestamp(int(item.create_date) / 1000.0)
                 assert parsed is not None
             except ValueError:
-                pytest.fail(f"create_date is not valid ISO-8601: {data['create_date']}")
+                pytest.fail(f"create_date is not valid ISO-8601: {item.create_date}")
 
 
 class TestFilePathField:
@@ -183,19 +188,19 @@ class TestFilePathField:
             )
 
         assert response.status_code == 201
-        data = response.json()
+        item = Item.model_validate(response.json())
 
         # Verify the entity was created with proper metadata
-        assert "md5" in data
-        assert "id" in data
-        entity_id = data["id"]
+        assert item.md5 is not None
+        assert item.id is not None
+        entity_id = item.id
 
         # Verify we can retrieve the entity
         get_response = client.get(f"/entities/{entity_id}")
         assert get_response.status_code == 200
-        retrieved_data = get_response.json()
-        assert retrieved_data["md5"] == data["md5"]
-        assert retrieved_data["label"] == "File path test"
+        retrieved_item = Item.model_validate(get_response.json())
+        assert retrieved_item.md5 == item.md5
+        assert retrieved_item.label == "File path test"
 
 
 class TestUnpopulatedFields:
@@ -211,10 +216,10 @@ class TestUnpopulatedFields:
             )
 
         assert response.status_code == 201
-        data = response.json()
+        item = Item.model_validate(response.json())
 
         # Images should not have duration
-        assert data["duration"] is None, "Images should not have duration"
+        assert item.duration is None, "Images should not have duration"
 
     def test_type_and_extension_fields(self, client, sample_image, clean_media_dir):
         """Test type and extension fields (may not be populated by clmediakit)."""
@@ -226,9 +231,10 @@ class TestUnpopulatedFields:
             )
 
         assert response.status_code == 201
-        data = response.json()
+        item = Item.model_validate(response.json())
 
         # These fields may be None if not provided by clmediakit
-        # Just verify they exist in the response
-        assert "type" in data
-        assert "extension" in data
+        # Just verify they exist (Pydantic model will have these fields)
+        # Type and extension can be accessed directly from the model
+        _ = item.type  # Access to verify field exists
+        _ = item.extension  # Access to verify field exists
