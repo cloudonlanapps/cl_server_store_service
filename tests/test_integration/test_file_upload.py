@@ -97,7 +97,7 @@ class TestFileUpload:
         assert data["md5"] is None
         assert data["file_size"] is None
 
-    def test_metadata_accuracy(self, client, sample_image, clean_media_dir):
+    def test_metadata_accuracy(self, client, sample_image):
         """Test that extracted metadata matches file properties."""
         actual_size = sample_image.stat().st_size
 

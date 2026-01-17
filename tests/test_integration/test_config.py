@@ -24,7 +24,6 @@ TEST_FILES_LIST = TESTS_DIR / "test_files.txt"
 # Test artifacts directory (outside media_store to keep project clean)
 TEST_ARTIFACTS_DIR = MEDIA_STORE_DIR.parent / "test_artifacts" / "media_store"
 TEST_DATA_DIR = TEST_ARTIFACTS_DIR / "data"
-TEST_MEDIA_DIR = TEST_ARTIFACTS_DIR / "media_files"
 
 
 def load_test_files() -> list[Path]:
@@ -86,7 +85,6 @@ __all__ = [
     "TEST_FILES_LIST",
     "TEST_ARTIFACTS_DIR",
     "TEST_DATA_DIR",
-    "TEST_MEDIA_DIR",
     "TEST_IMAGES",
     "PRIMARY_TEST_IMAGE",
     "SECONDARY_TEST_IMAGE",

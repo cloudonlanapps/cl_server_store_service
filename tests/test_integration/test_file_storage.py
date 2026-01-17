@@ -8,7 +8,7 @@ from pathlib import Path
 class TestFileStorage:
     """Test file storage organization."""
 
-    def test_file_storage_structure(self, client, sample_image, clean_media_dir):
+    def test_save_file_organized_directory_structure(self, client, sample_image):
         """Test that files are stored in YYYY/MM/DD structure."""
         with open(sample_image, "rb") as f:
             response = client.post(

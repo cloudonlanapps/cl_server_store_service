@@ -24,7 +24,6 @@ from .test_config import (
     IMAGES_DIR,
     TEST_DATA_DIR,
     TEST_DB_URL,
-    TEST_MEDIA_DIR,
     get_all_test_images,
 )
 from .test_media_files import get_test_media_files
@@ -171,19 +170,6 @@ def clean_data_dir() -> Generator[Path, None, None]:
         shutil.rmtree(TEST_DATA_DIR)
 
 
-@pytest.fixture(scope="function")
-def clean_media_dir() -> Generator[Path, None, None]:
-    """Clean up test media files directory before and after tests."""
-    if TEST_MEDIA_DIR.exists():
-        shutil.rmtree(TEST_MEDIA_DIR)
-    TEST_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-
-    yield TEST_MEDIA_DIR
-
-    if TEST_MEDIA_DIR.exists():
-        shutil.rmtree(TEST_MEDIA_DIR)
-
-
 @pytest.fixture(scope="session")
 def test_images_dir() -> Path:
     """Path to test images directory (absolute path)."""
@@ -221,7 +207,6 @@ def sample_images(test_images_dir: Path) -> list[Path]:
 def client(
     test_engine: Engine,
     clean_data_dir: Path,
-    clean_media_dir: Path,
     integration_config: IntegrationConfig,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[TestClient, None, None]:
@@ -285,7 +270,6 @@ def client(
 def auth_client(
     test_engine: Engine,
     clean_data_dir: Path,
-    clean_media_dir: Path,
     integration_config: IntegrationConfig,
     key_pair: tuple[bytes, str],
     monkeypatch: pytest.MonkeyPatch,
@@ -591,11 +575,11 @@ def sample_job_data_high_priority():
 
 
 @pytest.fixture(scope="function")
-def file_storage_service(clean_media_dir: Path) -> Any:
+def file_storage_service(clean_data_dir: Path) -> Any:
     """Create an EntityStorageService instance using the clean media directory."""
     from store.entity_storage import EntityStorageService
 
-    return EntityStorageService(base_dir=str(clean_media_dir))
+    return EntityStorageService(base_dir=str(clean_data_dir / "media"))
 
 
 @pytest.fixture(scope="function")

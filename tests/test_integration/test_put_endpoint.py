@@ -8,7 +8,7 @@ import pytest
 class TestPutEndpoint:
     """Test PUT endpoint file replacement and metadata extraction."""
 
-    def test_put_with_file_replacement(self, client, sample_images, clean_media_dir):
+    def test_put_with_file_replacement(self, client, sample_images):
         """Test PUT endpoint replaces file and extracts new metadata."""
         if len(sample_images) < 2:
             pytest.skip("Need at least 2 images for this test")
@@ -72,7 +72,7 @@ class TestPutEndpoint:
         if actual_size2 != original_size:
             assert updated_data["file_size"] != original_size
 
-    def test_put_metadata_accuracy(self, client, sample_images, clean_media_dir):
+    def test_put_metadata_accuracy(self, client, sample_images):
         """Test that PUT endpoint extracts accurate metadata."""
         if len(sample_images) < 2:
             pytest.skip("Need at least 2 images for this test")
@@ -111,7 +111,7 @@ class TestPutEndpoint:
         assert "image" in data["mime_type"].lower()
         assert len(data["md5"]) == 128  # SHA-512 hash length
 
-    def test_put_without_file_succeeds_for_non_collection(self, client, sample_image, clean_media_dir):
+    def test_put_without_file_succeeds_for_non_collection(self, client, sample_image):
         """Test that PUT without file succeeds for non-collections (image is optional)."""
         # Create entity with image
         with open(sample_image, "rb") as f:
@@ -139,7 +139,7 @@ class TestPutEndpoint:
         # File metadata should remain from original upload
         assert data["md5"] is not None
 
-    def test_put_updates_all_metadata_fields(self, client, sample_images, clean_media_dir):
+    def test_put_updates_all_metadata_fields(self, client, sample_images):
         """Test that PUT updates all metadata fields correctly."""
         if len(sample_images) < 2:
             pytest.skip("Need at least 2 images for this test")
@@ -186,7 +186,7 @@ class TestPutEndpoint:
         # Verify updated_date changed
         assert data["updated_date"] is not None
 
-    def test_put_same_file_updates_metadata(self, client, sample_image, clean_media_dir):
+    def test_put_same_file_updates_metadata(self, client, sample_image):
         """Test that PUT with same file still updates metadata correctly."""
         # Create entity
         with open(sample_image, "rb") as f:

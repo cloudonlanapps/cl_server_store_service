@@ -16,7 +16,7 @@ class TestAllImagesMetadata:
     """Test metadata extraction for all images in the test media list."""
 
     @pytest.mark.parametrize("image_path", get_test_media_files())
-    def test_image_metadata_extraction(self, client, clean_media_dir, image_path):
+    def test_image_metadata_extraction(self, client, image_path):
         """Test metadata extraction for each image file."""
         if not image_path.exists():
             pytest.skip(f"Image not found: {image_path}")
@@ -64,7 +64,7 @@ class TestAllImagesMetadata:
 class TestTimestampFields:
     """Test timestamp field generation and format."""
 
-    def test_added_date_format(self, client, sample_image, clean_media_dir):
+    def test_added_date_format(self, client, sample_image):
         """Test that added_date is a valid ISO-8601 timestamp."""
         with open(sample_image, "rb") as f:
             response = client.post(
@@ -85,7 +85,7 @@ class TestTimestampFields:
         except ValueError:
             pytest.fail(f"added_date is not valid ISO-8601: {item.added_date}")
 
-    def test_updated_date_format(self, client, sample_image, clean_media_dir):
+    def test_updated_date_format(self, client, sample_image):
         """Test that updated_date is a valid ISO-8601 timestamp."""
         # Create entity
         with open(sample_image, "rb") as f:
@@ -118,7 +118,7 @@ class TestTimestampFields:
             pytest.fail(f"updated_date is not valid ISO-8601: {item.updated_date}")
 
     def test_updated_date_changes_on_update(
-        self, client, sample_image, clean_media_dir
+        self, client, sample_image
     ):
         """Test that updated_date changes when entity is updated."""
         # Create entity
@@ -152,7 +152,7 @@ class TestTimestampFields:
         # updated_date should have changed
         assert new_updated != original_updated, "updated_date should change on update"
 
-    def test_create_date_from_exif(self, client, sample_image, clean_media_dir):
+    def test_create_date_from_exif(self, client, sample_image):
         """Test that create_date is extracted from EXIF data if available."""
         with open(sample_image, "rb") as f:
             response = client.post(
@@ -206,7 +206,7 @@ class TestFilePathField:
 class TestUnpopulatedFields:
     """Test fields that may not be populated for certain file types."""
 
-    def test_duration_null_for_images(self, client, sample_image, clean_media_dir):
+    def test_duration_null_for_images(self, client, sample_image):
         """Test that duration is None for image files."""
         with open(sample_image, "rb") as f:
             response = client.post(
@@ -221,7 +221,7 @@ class TestUnpopulatedFields:
         # Images should not have duration
         assert item.duration is None, "Images should not have duration"
 
-    def test_type_and_extension_fields(self, client, sample_image, clean_media_dir):
+    def test_type_and_extension_fields(self, client, sample_image):
         """Test type and extension fields (may not be populated by clmediakit)."""
         with open(sample_image, "rb") as f:
             response = client.post(

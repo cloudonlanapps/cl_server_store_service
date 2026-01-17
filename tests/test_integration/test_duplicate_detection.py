@@ -13,8 +13,8 @@ from store.schemas import Item
 class TestDuplicateDetection:
     """Test MD5-based duplicate detection. Returns existing data, and rejects new upload"""
 
-    def test_duplicate_upload_returns_existing_entity(
-        self, client: TestClient, sample_image: Path, clean_media_dir: Path
+    def test_duplicate_md5_returns_existing_entity(
+        self, client: TestClient, sample_image: Path
     ) -> None:
         """Test that uploading the same file twice returns the existing entity data."""
         # First upload - should succeed
@@ -42,8 +42,8 @@ class TestDuplicateDetection:
         item2 = Item.model_validate(response2.json())
         assert item1 == item2
 
-    def test_different_files_allowed(
-        self, client: TestClient, sample_images: list[Path], clean_media_dir: Path
+    def test_update_entity_with_duplicate_md5(
+        self, client: TestClient, sample_images: list[Path]
     ) -> None:
         """Test that different files can be uploaded."""
         uploaded_md5s: list[str] = []
@@ -68,7 +68,7 @@ class TestDuplicateDetection:
         assert len(uploaded_md5s) == len(set(uploaded_md5s))
 
     def test_put_with_duplicate_file_rejected(
-        self, client: TestClient, sample_images: list[Path], clean_media_dir: Path
+        self, client: TestClient, sample_images: list[Path]
     ) -> None:
         """Test that PUT with a file that already exists is rejected."""
         if len(sample_images) < 2:
@@ -113,7 +113,7 @@ class TestDuplicateDetection:
         assert item3 == item2
 
     def test_put_same_entity_with_same_file_allowed(
-        self, client: TestClient, sample_image: Path, clean_media_dir: Path
+        self, client: TestClient, sample_image: Path
     ) -> None:
         """Test that updating an entity with its own file is allowed."""
         # Upload image

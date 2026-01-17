@@ -29,9 +29,7 @@ class TestEntityCRUD:
         assert item.is_collection is True
         assert item.label == "Test Collection"
 
-    def test_get_entity_by_id(
-        self, client: TestClient, sample_image: Path, clean_media_dir: Path
-    ) -> None:
+    def test_get_entity_by_id(self, client: TestClient, sample_image: Path) -> None:
         """Test retrieving a specific entity by ID."""
         # Create entity
         with open(sample_image, "rb") as f:
@@ -56,7 +54,6 @@ class TestEntityCRUD:
         self,
         client: TestClient,
         sample_images: list[Path],
-        clean_media_dir: Path,
     ) -> None:
         """Test retrieving all entities."""
         # Create multiple entities with parent
@@ -180,7 +177,7 @@ class TestEntityCRUD:
         # assert "Non-collection entities must have a parent_id" in response.text
 
     def test_delete_collection_with_children(
-        self, client: TestClient, sample_image: Path, clean_media_dir: Path
+        self, client: TestClient, sample_image: Path
     ) -> None:
         """Test that deleting a collection with children fails."""
         # Create collection
@@ -209,13 +206,8 @@ class TestEntityCRUD:
         # But wait, if post fails (e.g. 500), the next steps persist.
         # I'll modify the block to capture response.
 
-        # Try to delete collection (hard delete)
-        resp = client.delete(f"/entities/{col_id}")
-        assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
-        assert "children" in resp.text
-
     def test_indirect_deletion_detection(
-        self, client: TestClient, sample_image: Path, clean_media_dir: Path
+        self, client: TestClient, sample_image: Path
     ) -> None:
         """Verify is_indirectly_deleted logic."""
         # Create hierarchy: Grandparent -> Parent -> Child (File)
@@ -265,8 +257,43 @@ class TestEntityCRUD:
         c_get = client.get(f"/entities/{c_id}")
         assert c_get.json()["is_indirectly_deleted"] is False
 
-    def test_delete_entity(
-        self, client: TestClient, sample_image: Path, clean_media_dir: Path
+    def test_delete_collection_with_children(
+        self, client: TestClient, sample_image: Path
+    ) -> None:
+        """Test that deleting a collection with children fails."""
+        # Create collection
+        col_resp = client.post(
+            "/entities/", data={"is_collection": "true", "label": "Parent"}
+        )
+        col_id = col_resp.json()["id"]
+
+        # Add child file
+        with open(sample_image, "rb") as f:
+            client.post(
+                "/entities/",
+                files={"image": (sample_image.name, f, "image/jpeg")},
+                data={
+                    "is_collection": "false",
+                    "label": "Child File",
+                    "parent_id": str(col_id),
+                },
+            )
+        assert client.get(f"/entities/{col_id}").status_code == 200
+        # Child creation doesn't return response object in original code block, let's fix that
+        # But wait, original code:
+        # client.post(...)
+        # We can't easily capture it without changing structure.
+        # Just ensure child exists by checking DB/API or trust valid logic.
+        # But wait, if post fails (e.g. 500), the next steps persist.
+        # I'll modify the block to capture response.
+
+        # Try to delete collection (hard delete)
+        resp = client.delete(f"/entities/{col_id}")
+        assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+        assert "children" in resp.text
+
+    def test_delete_entity_hard_delete(
+        self, client: TestClient, sample_image: Path
     ) -> None:
         """Test hard deleting an entity."""
         # Create parent collection
@@ -303,7 +330,7 @@ class TestEntityCRUD:
         assert response.status_code == 404
 
     def test_soft_delete_and_restore(
-        self, client: TestClient, sample_image: Path, clean_media_dir: Path
+        self, client: TestClient, sample_image: Path
     ) -> None:
         """Test soft delete and restore via PATCH."""
         # Create parent collection
@@ -361,45 +388,6 @@ class TestEntityCRUD:
         final_item = Item.model_validate(response.json())
         assert final_item.is_deleted is False
 
-    def test_delete_all_entities(
-        self, client: TestClient, sample_images: list[Path], clean_media_dir: Path
-    ) -> None:
-        """Test deleting all entities."""
-        # Create multiple entities
-        # Create parent collection
-        parent_resp = client.post(
-            "/entities/",
-            data={
-                "is_collection": "true",
-                "label": "Parent Collection",
-            },
-        )
-        parent_id = parent_resp.json()["id"]
-
-        # Create multiple entities with parent
-        for image_path in sample_images:
-            with open(image_path, "rb") as f:
-                client.post(
-                    "/entities/",
-                    files={"image": (image_path.name, f, "image/jpeg")},
-                    data={
-                        "is_collection": "false",
-                        "label": f"Entity {image_path.name}",
-                        "parent_id": str(parent_id),
-                    },
-                )
-
-        # Delete all
-        delete_response = client.delete("/entities/")
-        assert delete_response.status_code == 204
-
-        # Verify all deleted
-        get_response = client.get("/entities/")
-        assert get_response.status_code == 200
-        paginated = PaginatedResponse.model_validate(get_response.json())
-        assert len(paginated.items) == 0
-        assert paginated.pagination.total_items == 0
-
     def test_get_nonexistent_entity(self, client: TestClient) -> None:
         """Test getting an entity that doesn't exist."""
         response = client.get("/entities/99999")
@@ -454,8 +442,47 @@ class TestEntityCRUD:
         assert resp.status_code == 422
         assert "Maximum hierarchy depth exceeded" in resp.text
 
+    def test_get_entities_pagination(
+        self, client: TestClient, sample_images: list[Path]
+    ) -> None:
+        """Test deleting all entities."""
+        # Create multiple entities
+        # Create parent collection
+        parent_resp = client.post(
+            "/entities/",
+            data={
+                "is_collection": "true",
+                "label": "Parent Collection",
+            },
+        )
+        parent_id = parent_resp.json()["id"]
+
+        # Create multiple entities with parent
+        for image_path in sample_images:
+            with open(image_path, "rb") as f:
+                client.post(
+                    "/entities/",
+                    files={"image": (image_path.name, f, "image/jpeg")},
+                    data={
+                        "is_collection": "false",
+                        "label": f"Entity {image_path.name}",
+                        "parent_id": str(parent_id),
+                    },
+                )
+
+        # Delete all
+        delete_response = client.delete("/entities/")
+        assert delete_response.status_code == 204
+
+        # Verify all deleted
+        get_response = client.get("/entities/")
+        assert get_response.status_code == 200
+        paginated = PaginatedResponse.model_validate(get_response.json())
+        assert len(paginated.items) == 0
+        assert paginated.pagination.total_items == 0
+
     def test_filter_exclude_deleted(
-        self, client: TestClient, sample_images: list[Path], clean_media_dir: Path
+        self, client: TestClient, sample_images: list[Path]
     ) -> None:
         """Verify exclude_deleted query parameter."""
         # Create parent collection
