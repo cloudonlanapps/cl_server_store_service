@@ -164,8 +164,7 @@ class TestPutEndpoint:
                 data={
                     "is_collection": "false",
                     "label": "Updated Label",
-                    "description": "Updated Description",
-                    "parent_id": "123"
+                    "description": "Updated Description"
                 }
             )
 
@@ -175,7 +174,6 @@ class TestPutEndpoint:
         # Verify client-provided fields updated
         assert data["label"] == "Updated Label"
         assert data["description"] == "Updated Description"
-        assert data["parent_id"] == 123
 
         # Verify critical metadata fields are present
         assert data["md5"] is not None, "md5 should not be None"

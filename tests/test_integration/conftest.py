@@ -223,7 +223,7 @@ def client(
     )
 
     monkeypatch.setenv("PYSDK_CONFIG_JSON", pysdk_config.model_dump_json())
-    monkeypatch.setenv("CL_STORE_DIR", str(clean_data_dir))
+    monkeypatch.setenv("CL_SERVER_DIR", str(clean_data_dir))
 
     # Create session maker
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
@@ -287,7 +287,7 @@ def auth_client(
     )
 
     monkeypatch.setenv("PYSDK_CONFIG_JSON", pysdk_config.model_dump_json())
-    monkeypatch.setenv("CL_STORE_DIR", str(clean_data_dir))
+    monkeypatch.setenv("CL_SERVER_DIR", str(clean_data_dir))
 
 
     # Set up JWT key pair

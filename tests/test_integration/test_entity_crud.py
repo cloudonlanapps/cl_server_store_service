@@ -198,13 +198,11 @@ class TestEntityCRUD:
                 },
             )
         assert client.get(f"/entities/{col_id}").status_code == 200
-        # Child creation doesn't return response object in original code block, let's fix that
-        # But wait, original code:
-        # client.post(...)
-        # We can't easily capture it without changing structure.
-        # Just ensure child exists by checking DB/API or trust valid logic.
-        # But wait, if post fails (e.g. 500), the next steps persist.
-        # I'll modify the block to capture response.
+
+        # Try to delete collection (hard delete)
+        resp = client.delete(f"/entities/{col_id}")
+        assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+        assert "children" in resp.text
 
     def test_indirect_deletion_detection(
         self, client: TestClient, sample_image: Path
@@ -256,41 +254,6 @@ class TestEntityCRUD:
         # Check Child status
         c_get = client.get(f"/entities/{c_id}")
         assert c_get.json()["is_indirectly_deleted"] is False
-
-    def test_delete_collection_with_children(
-        self, client: TestClient, sample_image: Path
-    ) -> None:
-        """Test that deleting a collection with children fails."""
-        # Create collection
-        col_resp = client.post(
-            "/entities/", data={"is_collection": "true", "label": "Parent"}
-        )
-        col_id = col_resp.json()["id"]
-
-        # Add child file
-        with open(sample_image, "rb") as f:
-            client.post(
-                "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
-                data={
-                    "is_collection": "false",
-                    "label": "Child File",
-                    "parent_id": str(col_id),
-                },
-            )
-        assert client.get(f"/entities/{col_id}").status_code == 200
-        # Child creation doesn't return response object in original code block, let's fix that
-        # But wait, original code:
-        # client.post(...)
-        # We can't easily capture it without changing structure.
-        # Just ensure child exists by checking DB/API or trust valid logic.
-        # But wait, if post fails (e.g. 500), the next steps persist.
-        # I'll modify the block to capture response.
-
-        # Try to delete collection (hard delete)
-        resp = client.delete(f"/entities/{col_id}")
-        assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
-        assert "children" in resp.text
 
     def test_delete_entity_hard_delete(
         self, client: TestClient, sample_image: Path
@@ -445,7 +408,7 @@ class TestEntityCRUD:
     def test_get_entities_pagination(
         self, client: TestClient, sample_images: list[Path]
     ) -> None:
-        """Test deleting all entities."""
+        """Test pagination for getting entities."""
         # Create multiple entities
         # Create parent collection
         parent_resp = client.post(
