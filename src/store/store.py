@@ -74,3 +74,15 @@ async def validation_exception_handler(_request: Request, exc: HTTPException):
         status_code=exc.status_code,
         content={"detail": exc.detail},
     )
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(_request: Request, exc: ValueError):
+    """
+    Handle ValueError as 422 Unprocessable Entity.
+    Commonly used for business logic validation errors in service layer.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={"detail": str(exc)},
+    )

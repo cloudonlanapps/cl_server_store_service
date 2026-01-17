@@ -27,7 +27,9 @@ class Entity(Base):
     is_collection: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     label: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
-    parent_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    parent_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("entities.id"), nullable=True, index=True
+    )
 
     # Timestamps
     added_date: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

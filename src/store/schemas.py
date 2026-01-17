@@ -52,6 +52,12 @@ class Item(BaseModel):
     extension: str | None = Field(None, title="Extension", json_schema_extra={"read_only": True})
     md5: str | None = Field(None, title="Md5", json_schema_extra={"read_only": True})
     file_path: str | None = Field(None, title="File Path", json_schema_extra={"read_only": True})
+    is_deleted: bool | None = Field(None, title="Is Deleted")
+    is_indirectly_deleted: bool | None = Field(
+        None,
+        title="Is Indirectly Deleted",
+        description="True if any ancestor in the parent chain is soft-deleted",
+    )
 
 
 class PaginationMetadata(BaseModel):

@@ -66,9 +66,15 @@ async def get_entities(
     search_query: str | None = Query(
         None, title="Search Query", description="Optional search query"
     ),
+    exclude_deleted: bool = Query(
+        False, title="Exclude Deleted", description="Whether to exclude soft-deleted entities"
+    ),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
 ) -> schemas.PaginatedResponse:
+    """
+    Get all entities with pagination.
+    """
     _ = user
     service = EntityService(db)
     items, total_count = service.get_entities(
@@ -77,6 +83,7 @@ async def get_entities(
         version=version,
         filter_param=filter_param,
         search_query=search_query,
+        exclude_deleted=exclude_deleted,
     )
 
     # Calculate pagination metadata

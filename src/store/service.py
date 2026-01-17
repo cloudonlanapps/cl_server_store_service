@@ -72,8 +72,118 @@ class EntityService:
 
         return query.first()
 
-    @staticmethod
-    def _entity_to_item(entity: Entity) -> Item:
+    def _validate_parent_id(
+        self,
+        parent_id: int | None,
+        is_collection: bool,
+        entity_id: int | None = None,
+    ) -> None:
+        """
+        Validate parent_id against business rules.
+
+        Args:
+            parent_id: Parent entity ID to validate
+            is_collection: Whether the entity being validated is a collection
+            entity_id: ID of entity being updated (None for create operations)
+
+        Raises:
+            ValueError: If validation fails with descriptive error message
+        """
+        # Rule: Non-collections must have a parent
+        pass
+
+        # If parent_id is None and allowed (collections), no further validation needed
+        if parent_id is None:
+            return
+
+        # Rule: Parent must exist
+        parent = self.db.query(Entity).filter(Entity.id == parent_id).first()
+        if not parent:
+            raise ValueError(
+                f"Cannot set parent_id to {parent_id}: parent entity does not exist"
+            )
+
+        # Rule: Parent must be a collection
+        if not parent.is_collection:
+            raise ValueError(
+                f"Cannot set parent_id to {parent_id}: parent entity must be a collection. "
+                f"Entity {parent_id} is not a collection."
+            )
+
+        # Rule: Parent must not be soft-deleted
+        if parent.is_deleted:
+            raise ValueError(
+                f"Cannot set parent_id to {parent_id}: parent entity is deleted"
+            )
+
+        # Rule: Prevent circular hierarchies (only for updates)
+        if entity_id is not None:
+            current_parent = parent_id
+            visited = {entity_id}
+            while current_parent is not None:
+                if current_parent in visited:
+                    raise ValueError(
+                        f"Circular hierarchy detected: entity {parent_id} is already "
+                        f"a descendant of {entity_id}"
+                    )
+                visited.add(current_parent)
+                parent_entity = (
+                    self.db.query(Entity).filter(Entity.id == current_parent).first()
+                )
+                current_parent = parent_entity.parent_id if parent_entity else None
+
+        # Rule: Max hierarchy depth check (max 10 levels)
+        if parent_id is not None:
+            depth = 1  # Starting at depth 1 (the parent)
+            current_check = parent_id
+            while current_check is not None:
+                parent_ent = (
+                    self.db.query(Entity).filter(Entity.id == current_check).first()
+                )
+                if not parent_ent:
+                    break
+                current_check = parent_ent.parent_id
+                depth += 1
+                if depth > 10:
+                    raise ValueError(
+                        "Maximum hierarchy depth exceeded. Max allowed depth is 10 levels."
+                    )
+
+    def _check_ancestor_deleted(self, entity: Entity) -> bool:
+        """
+        Check if any ancestor in the parent chain is soft-deleted.
+
+        Args:
+            entity: Entity to check
+
+        Returns:
+            True if any ancestor is deleted, False otherwise
+        """
+        current_parent_id = entity.parent_id
+        visited = {entity.id}  # Prevent infinite loops in corrupted data
+
+        while current_parent_id is not None:
+            # Prevent infinite loops
+            if current_parent_id in visited:
+                break
+            visited.add(current_parent_id)
+
+            # Check parent
+            parent = self.db.query(Entity).filter(Entity.id == current_parent_id).first()
+            if not parent:
+                # Parent doesn't exist (orphaned entity)
+                break
+
+            # Check if parent is deleted
+            if parent.is_deleted:
+                return True
+
+            # Move up the chain
+            current_parent_id = parent.parent_id
+
+        return False
+
+    def _entity_to_item(self, entity: Entity) -> Item:
         """
         Convert SQLAlchemy Entity to Pydantic Item schema.
 
@@ -104,6 +214,7 @@ class EntityService:
             md5=entity.md5,
             file_path=entity.file_path,
             is_deleted=entity.is_deleted,
+            is_indirectly_deleted=self._check_ancestor_deleted(entity),
         )
 
     def get_entities(
@@ -113,6 +224,7 @@ class EntityService:
         version: int | None = None,
         filter_param: str | None = None,  # pyright: ignore[reportUnusedParameter]
         search_query: str | None = None,  # pyright: ignore[reportUnusedParameter]
+        exclude_deleted: bool = False,
     ) -> tuple[list[Item], int]:
         """
         Retrieve all entities with optional pagination and versioning.
@@ -123,11 +235,16 @@ class EntityService:
             version: Optional version number to retrieve for all entities
             filter_param: Optional filter string (not implemented yet)
             search_query: Optional search query (not implemented yet)
+            exclude_deleted: Whether to exclude soft-deleted entities (default: False)
 
         Returns:
             Tuple of (items, total_count)
         """
         query = self.db.query(Entity)
+
+        # Apply deleted filter
+        if exclude_deleted:
+            query = query.filter(Entity.is_deleted == False)  # noqa: E712
 
         # TODO: Implement filtering and search logic
         # For now, return all entities
@@ -276,6 +393,13 @@ class EntityService:
         if body.is_collection and image:
             raise ValueError("Image should not be provided when is_collection is True")
 
+        # Validation: parent_id must follow hierarchy rules
+        self._validate_parent_id(
+            parent_id=body.parent_id,
+            is_collection=body.is_collection,
+            entity_id=None,  # Creating new entity
+        )
+
         # Extract metadata and save file if provided
         if image:
             # Extract metadata using MediaMetadataExtractor
@@ -396,6 +520,13 @@ class EntityService:
         file_path = None
         file_meta = None
         if image:
+            # Validation: parent_id must follow hierarchy rules
+            self._validate_parent_id(
+                parent_id=body.parent_id,
+                is_collection=entity.is_collection,  # Use existing is_collection (immutable)
+                entity_id=entity_id,
+            )
+
             # Extract metadata from new file
             file_meta = self.metadata_extractor.extract_metadata(image, filename)
 
@@ -465,6 +596,18 @@ class EntityService:
         if not entity:
             return None
 
+        # Validation: Check if parent_id is being modified
+        patch_fields = body.model_dump(exclude_unset=True)
+        if "parent_id" in patch_fields:
+            new_parent_id = body.parent_id
+
+            # Validate the new parent_id (includes circular check and all other rules)
+            self._validate_parent_id(
+                parent_id=new_parent_id,
+                is_collection=entity.is_collection,
+                entity_id=entity_id,
+            )
+
         # Update only provided fields (get values from Pydantic model to preserve types)
         patch_fields = body.model_dump(exclude_unset=True)
         for field_name in patch_fields:
@@ -492,6 +635,14 @@ class EntityService:
         entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
         if not entity:
             return None
+
+        # Prevent deletion if entity has children
+        children_count = self.db.query(Entity).filter(Entity.parent_id == entity_id).count()
+        if children_count > 0:
+            raise ValueError(
+                f"Cannot delete entity {entity_id}: it has {children_count} child(ren). "
+                "Delete or move the children first."
+            )
 
         # Hard delete: remove file and database record
         if entity.file_path:
