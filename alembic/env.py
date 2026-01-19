@@ -1,4 +1,3 @@
-# Import the Base and models for autogenerate support
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -9,25 +8,24 @@ from sqlalchemy_continuum import make_versioned
 
 from alembic import context
 
-# Add parent directory to path to import entity module
+# Add parent directory to path to import Base and get_db_url
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Initialize versioning before importing models
 make_versioned(user_cls=None)
 
-from cl_server_shared.config import Config as AppConfig
-
-from store.models import Base
-
 # Configure mappers after models are imported
+from src.store.models import Base
 configure_mappers()
+
+from src.store.utils import get_db_url
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-# Set the database URL from config
-config.set_main_option("sqlalchemy.url", AppConfig.STORE_DATABASE_URL)
+# set sqlalchemy.url in configuration
+config.set_main_option("sqlalchemy.url", get_db_url())
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

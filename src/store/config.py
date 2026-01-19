@@ -1,5 +1,7 @@
+
 from dataclasses import dataclass
 from pathlib import Path
+from .utils import ensure_cl_server_dir, get_db_url
 
 from .pysdk_config import PySDKRuntimeConfig
 
@@ -9,16 +11,16 @@ class StoreConfig:
     """Store service configuration."""
 
     cl_server_dir: Path
-    database_url: str
+    
     pysdk_config: PySDKRuntimeConfig
     media_storage_dir: Path
     public_key_path: Path
     auth_disabled: bool
 
     @classmethod
-    def from_cli_args(cls, args, cl_server_dir: str) -> "StoreConfig":
+    def from_cli_args(cls, args) -> "StoreConfig":
         """Create config from CLI arguments and environment."""
-        cl_dir = Path(cl_server_dir)
+        cl_dir =  ensure_cl_server_dir(create_if_missing=True)
         
         # Create PySDK configuration from CLI arguments
         pysdk_config = PySDKRuntimeConfig(
@@ -34,7 +36,6 @@ class StoreConfig:
 
         return cls(
             cl_server_dir=cl_dir,
-            database_url=str(args.database_url) if args.database_url else f"sqlite:///{cl_dir}/metadata.db",
             pysdk_config=pysdk_config,
             media_storage_dir=cl_dir / "media",
             public_key_path=cl_dir / "keys" / "public_key.pem",

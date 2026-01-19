@@ -244,4 +244,3 @@ class FaceMatch(Base):
         return f"<FaceMatch(id={self.id}, face_id={self.face_id}, matched_face_id={self.matched_face_id}, score={self.similarity_score:.3f})>"
 
 
-# Job and QueueEntry are imported from cl_server_shared above

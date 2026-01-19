@@ -265,7 +265,7 @@ def client(
     
     store_config = StoreConfig(
         cl_server_dir=clean_data_dir,
-        database_url=TEST_DB_URL,
+
         pysdk_config=pysdk_config,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
@@ -355,7 +355,7 @@ def auth_client(
     
     store_config = StoreConfig(
         cl_server_dir=clean_data_dir,
-        database_url=TEST_DB_URL,
+
         pysdk_config=pysdk_config,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",

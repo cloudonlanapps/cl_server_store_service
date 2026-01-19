@@ -30,14 +30,10 @@ async def lifespan(app: FastAPI):
         app.state.pysdk_config = app.state.config.pysdk_config
         logger.info("Loaded configuration from app.state.config")
     else:
-        # Fallback to environment variables (legacy/dev support)
-        # Note: This path should ideally be removed once migration is complete and consistent
-        config_json = os.getenv("PYSDK_CONFIG_JSON")
-        if config_json:
-            app.state.pysdk_config = PySDKRuntimeConfig.model_validate_json(config_json)
-        else:
-            app.state.pysdk_config = PySDKRuntimeConfig()
-            logger.warning("No config found in app.state or environment, using default defaults")
+        # Fallback for dev/test if config not injected, but stricter now:
+        # We rely on app.state.config being set by main or tests.
+        logger.warning("No config found in app.state.config. Using default empty PySDKConfig.")
+        app.state.pysdk_config = PySDKRuntimeConfig()
 
     logger.info(
         "Loaded PySDK config: compute=%s",

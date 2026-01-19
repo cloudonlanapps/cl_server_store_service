@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 from typing import TYPE_CHECKING
 from collections.abc import Callable, Generator
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 # CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
 # Using absolute import to avoid circular dependency with __init__.py
 from . import versioning  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from .utils import get_db_url
 
 if TYPE_CHECKING:
     from .config import StoreConfig
@@ -43,27 +45,27 @@ def enable_wal_mode(
 
 
 def create_db_engine(
-    database_url: str,
+    db_url: str,
     *,
     echo: bool = False,
 ) -> Engine:
     """Create SQLAlchemy engine with WAL mode for SQLite.
 
     Args:
-        database_url: Database URL (SQLite or other)
+        db_url: Database URL (SQLite or other)
         echo: Enable SQL query logging
 
     Returns:
         SQLAlchemy engine instance
     """
     engine = create_engine(
-        database_url,
+        db_url,
         connect_args={"check_same_thread": False},
         echo=echo,
     )
 
     # Register WAL mode listener for SQLite
-    if database_url.lower().startswith("sqlite"):
+    if db_url.lower().startswith("sqlite"):
         event.listen(engine, "connect", enable_wal_mode)
 
     return engine
@@ -89,7 +91,7 @@ def create_session_factory(engine: Engine) -> sessionmaker[Session]:
 def init_db(config: StoreConfig) -> None:
     """Initialize database connection."""
     global SessionLocal, engine
-    engine = create_db_engine(config.database_url, echo=False)
+    engine = create_db_engine(get_db_url(), echo=False)
     SessionLocal = create_session_factory(engine)
 
 

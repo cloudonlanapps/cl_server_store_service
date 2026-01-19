@@ -8,6 +8,8 @@ from argparse import ArgumentParser, Namespace
 import uvicorn
 
 from .media_metadata import validate_tools
+from .config import StoreConfig
+from . import database
 
 from loguru import logger
 
@@ -75,9 +77,9 @@ def main() -> int:
         "--no-migrate", action="store_true", help="Skip running DB migrations"
     )
     _ = parser.add_argument(
-        "--port", "-p", type=int, default=int(os.getenv("PORT", "8001"))
+        "--port", "-p", type=int, default=8001
     )
-    _ = parser.add_argument("--host", default=os.getenv("HOST", "0.0.0.0"))
+    _ = parser.add_argument("--host", default="0.0.0.0")
     _ = parser.add_argument(
         "--reload", action="store_true", help="Enable uvicorn reload (dev)"
     )
@@ -116,85 +118,14 @@ def main() -> int:
     )
 
     # Other args...
-    _ = parser.add_argument(
-        "--database-url", 
-        default=os.getenv("STORE_DATABASE_URL"), 
-        help="Database URL (default: sqlite:///{CL_SERVER_DIR}/metadata.db)"
-    )
-    _ = parser.add_argument(
-        "--cl-server-dir", 
-        default=os.getenv("CL_SERVER_DIR"),
-        help="Root directory for CoLAN Server data"
-    )
 
     args = parser.parse_args(namespace=Args())
-
-    if not args.cl_server_dir:
-        print("ERROR: --cl-server-dir or CL_SERVER_DIR environment variable is required", file=sys.stderr)
-        return 1
-        
-    # Ensure directory exists
-    cl_dir = Path(args.cl_server_dir)
-    cl_dir.mkdir(parents=True, exist_ok=True)
-
-    # Set env vars expected by your app
-    if args.no_auth:
-        os.environ["AUTH_DISABLED"] = "true"
-    # Still need this for some shared utils if any remaining
-    os.environ["CL_SERVER_DIR"] = str(cl_dir)
-
+    
     # Create StoreConfig
-    from .config import StoreConfig
-    config = StoreConfig.from_cli_args(args, cl_server_dir=args.cl_server_dir)
+    config = StoreConfig.from_cli_args(args)
 
     # Initialize Database
-    from . import database
-    database.init_db(config)
-
-    # Store config in app state (will be accessible in lifespan)
-    # But wait, we can't easily pass it to lifespan via global app unless we wrap app creation.
-    # However, lifespan can access app.state.
-    # We can inject it into a global or attach to app if we had access to app instance here?
-    # No, app is imported 'store.store:app'.
-    # We can set it on the module level of store.py if we imported it?
-    # Better: set os.environ["PYSDK_CONFIG_JSON"] is still used by lifespan.
-    # But we want to move away from env vars for internal config?
-    # Ideally main.py should create the app instantiation OR configured app factory.
-    # For now, let's keep the existing structure but injecting config is tricky if using 'store.store:app' string.
     
-    # WORKAROUND: We will import the app object and set state on it, assuming uvicorn runs in same process?
-    # uvicorn.run("store.store:app", ...) runs in same process if reload=False.
-    # But with reload=True, it spawns subprocesses which won't have the state set here.
-    # Use environment variables/CLI args to pass config to subprocesses if reloading?
-    # Or just rely on Args/Config being reconstructed in subprocess?
-    # The 'refactor' goal is to remove env vars.
-    # If we want to support reload, we MUST pass config via env vars or use a factory pattern that uvicorn calls.
-    # 'uvicorn run store.main:create_app --factory' is the robust way.
-    # But user wants 'python -m store' or 'store' command entry point.
-    
-    # For now, to keep it simple and progress:
-    # We will modify 'store.py' to use 'StoreConfig' if available in app.state, 
-    # but 'main.py' uses uvicorn with import string.
-    # To make config available to the app lifespan:
-    # 1. If reload=False, we can import app and set state.
-    # 2. If reload=True, we rely on standard args parsing again inside app? No, app doesn't parse args.
-
-    # User requirement: "Refactor... to eliminate dependency on environment variables... migrate... to command-line arguments"
-    # This implies the app should get config from arguments.
-    # A cleaner approach is to use a factory function in store.py: create_app(config).
-    # And in main.py, we instantiate app = create_app(config) and pass 'app' object to uvicorn.run.
-    # Note: uvicorn.run(app, ...) disables reload if app is an object.
-    # If reload is needed, we must use import string.
-    # If we use import string, how do we pass args?
-    # We can't easily. So for development (reload=True), we might fall back to env vars or defaults, 
-    # but for production (reload=False), we pass the configured app.
-    # Let's support reload=False path fully.
-    
-    from .config import StoreConfig
-    config = StoreConfig.from_cli_args(args, cl_server_dir=args.cl_server_dir)
-    
-    # Initialize Database global session
-    from . import database
     database.init_db(config)
     
     # Import app and set config
