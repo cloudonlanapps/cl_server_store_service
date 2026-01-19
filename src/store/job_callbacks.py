@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -517,18 +518,32 @@ class JobCallbackHandler:
             # Find the best valid match from similar faces
             valid_best_face = None
             if similar_faces:
-                for match in similar_faces:
-                    candidate_face = db.query(Face).filter(Face.id == match.id).first()
-                    if candidate_face:
-                        valid_best_face = candidate_face
-                        # Link to this face's KnownPerson if it has one
-                        if valid_best_face.known_person_id:
-                            face.known_person_id = valid_best_face.known_person_id
-                            logger.info(
-                                f"Linked face {face_id} to known person {valid_best_face.known_person_id} "
-                                + f"(match: {match.id}, score: {match.score:.3f})"
-                            )
-                            break
+                # Retry loop to handle concurrent processing of faces for the same person
+                # If we find matches but none have a known_person_id, wait slightly and re-check
+                max_retries = 3
+                for retry in range(max_retries):
+                    for match in similar_faces:
+                        candidate_face = (
+                            db.query(Face).filter(Face.id == match.id).first()
+                        )
+                        if candidate_face:
+                            valid_best_face = candidate_face
+                            # Link to this face's KnownPerson if it has one
+                            if valid_best_face.known_person_id:
+                                face.known_person_id = valid_best_face.known_person_id
+                                logger.info(
+                                    f"Linked face {face_id} to known person {valid_best_face.known_person_id} "
+                                    + f"(match: {match.id}, score: {match.score:.3f})"
+                                )
+                                break
+                    
+                    if face.known_person_id or not similar_faces:
+                        break
+                    
+                    if retry < max_retries - 1:
+                        logger.debug(f"Matches found for face {face_id} but no known_person_id assigned yet. Retrying {retry+1}/{max_retries}...")
+                        await asyncio.sleep(1.0)
+                        db.refresh(face) # Ensure we have latest data
             
             # Record ALL matches in FaceMatch table
             if similar_faces:
