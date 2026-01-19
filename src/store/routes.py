@@ -841,10 +841,12 @@ async def get_known_person(
     person_id: int = Path(..., title="Person Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.KnownPersonResponse:
     """Get known person details."""
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     person = service.get_known_person(person_id)
     if not person:
@@ -868,10 +870,12 @@ async def get_person_faces(
     person_id: int = Path(..., title="Person Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> list[schemas.FaceResponse]:
     """Get all faces for a known person."""
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     # Check if person exists
     from .models import KnownPerson
@@ -899,10 +903,12 @@ async def update_person_name(
     body: schemas.UpdatePersonNameRequest = Body(...),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.KnownPersonResponse:
     """Update person name."""
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     result = service.update_known_person_name(person_id, body.name)
     if not result:

@@ -1,3 +1,4 @@
+from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -131,15 +132,9 @@ class JobCallbackHandler:
         month = dt.strftime("%m")
         day = dt.strftime("%d")
 
-        # Create directory structure: {MEDIA_STORAGE_DIR}/store/faces/YYYY/MM/DD/
-        # Use configured cl_server_dir to imply media storage, or should we explicitly have media_storage_dir?
-        # Typically media is stored under cl_server_dir/media or similar?
-        # Let's assume cl_server_dir IS the media storage root or contains it.
-        # Original Config had MEDIA_STORAGE_DIR.
-        # Let's assume cl_server_dir matches what MEDIA_STORAGE_DIR was pointing to, or use cl_server_dir/media.
-        # Let's derive it from cl_server_dir for now, assuming MEDIA_STORAGE_DIR = CL_SERVER_DIR.
-        base_dir = self.config.cl_server_dir
-        dir_path = base_dir / "store" / "faces" / year / month / day
+        # Create directory structure: {MEDIA_STORAGE_DIR}/faces/YYYY/MM/DD/
+        base_dir = self.config.media_storage_dir
+        dir_path = base_dir / "faces" / year / month / day
         dir_path.mkdir(parents=True, exist_ok=True)
 
         # Filename: {entity_id}_face_{index}.png
@@ -229,7 +224,7 @@ class JobCallbackHandler:
 
                     # Get relative path from MEDIA_STORAGE_DIR
                     relative_path = face_path.relative_to(
-                        Path(Config.MEDIA_STORAGE_DIR)
+                        self.config.media_storage_dir
                     )
 
                     # Generate deterministic face ID: entity_id * 10000 + face_index
