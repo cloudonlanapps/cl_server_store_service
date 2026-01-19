@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import StoreConfig
+
 from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
-from cl_server_shared import Config
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -35,16 +39,18 @@ class DuplicateFileError(Exception):
 class EntityService:
     """Service layer for entity operations."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, config: StoreConfig):
         """Initialize the entity service.
 
         Args:
             db: SQLAlchemy database session
+            config: Store configuration
         """
         self.db: Session = db
-        # Use MEDIA_STORAGE_DIR for entity files (organized by date)
+        self.config: StoreConfig = config
+        # Use media_storage_dir from config for entity files (organized by date)
         self.file_storage: EntityStorageService = EntityStorageService(
-            base_dir=Config.MEDIA_STORAGE_DIR
+            base_dir=str(config.media_storage_dir)
         )
         # Initialize metadata extractor
         self.metadata_extractor: MediaMetadataExtractor = MediaMetadataExtractor()
@@ -685,22 +691,21 @@ class EntityService:
             return {"face_detection_job": None, "clip_embedding_job": None}
 
         # Get singletons
-        from .compute_singleton import get_compute_client, get_pysdk_config
+        from .compute_singleton import get_compute_client
         from .job_callbacks import JobCallbackHandler
         from .job_service import JobSubmissionService
         from .qdrant_singleton import get_qdrant_store
 
         compute_client = get_compute_client()
         qdrant_store = get_qdrant_store()
-        pysdk_config = get_pysdk_config()
 
-        # Create handlers with job_service and pysdk_config
+        # Create handlers with job_service and config
         job_service = JobSubmissionService(compute_client)
         callback_handler = JobCallbackHandler(
             compute_client,
             qdrant_store,
+            config=self.config,
             job_submission_service=job_service,
-            pysdk_config=pysdk_config,
         )
 
         # Define callbacks with proper typing

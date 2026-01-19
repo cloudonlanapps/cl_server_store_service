@@ -23,11 +23,12 @@ from . import models, schemas
 from .auth import UserPayload, require_admin, require_permission
 from .database import SessionLocal, get_db
 from .service import EntityService
+from .config import StoreConfig
 
 router = APIRouter()
 
 
-async def _trigger_async_jobs_background(entity_id: int) -> None:
+async def _trigger_async_jobs_background(entity_id: int, config: StoreConfig) -> None:
     """Trigger async jobs in background with independent DB session.
 
     Creates a fresh database session for background processing to avoid
@@ -35,13 +36,14 @@ async def _trigger_async_jobs_background(entity_id: int) -> None:
 
     Args:
         entity_id: Entity ID to process
+        config: Store configuration
     """
     db = SessionLocal()
     try:
-        service = EntityService(db)
+        service = EntityService(db, config)
         entity = db.query(models.Entity).filter(models.Entity.id == entity_id).first()
         if entity:
-            _ = await service.trigger_async_jobs(entity)  # TODO: Do we really need to await here?
+            _ = await service.trigger_async_jobs(entity)
     finally:
         db.close()
 
@@ -71,12 +73,14 @@ async def get_entities(
     ),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.PaginatedResponse:
     """
     Get all entities with pagination.
     """
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
     items, total_count = service.get_entities(
         page=page,
         page_size=page_size,
@@ -122,8 +126,10 @@ async def create_entity(
     image: UploadFile | None = File(None, title="Image"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.Item:
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     # Extract user_id from JWT payload (None in demo mode)
     user_id = user.id if user else None
@@ -149,7 +155,7 @@ async def create_entity(
         # Trigger async jobs for images (NON-BLOCKING)
         # Uses independent DB session to avoid holding request session
         if not is_collection and file_bytes and item.id:
-            _ = asyncio.create_task(_trigger_async_jobs_background(item.id))
+            _ = asyncio.create_task(_trigger_async_jobs_background(item.id, config))
 
         return item
     except ValueError as e:
@@ -175,9 +181,11 @@ async def create_entity(
 async def delete_collection(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ):
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
     service.delete_all_entities()
     # No return statement - FastAPI will return 204 automatically
 
@@ -197,9 +205,11 @@ async def get_entity(
     ),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.Item:
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
     item = service.get_entity_by_id(entity_id, version=version)
     if not item:
         if version is not None:
@@ -228,8 +238,10 @@ async def put_entity(
     image: UploadFile | None = File(None, title="Image"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.Item:
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     # Extract user_id from JWT payload (None in demo mode)
     user_id = user.id if user else None
@@ -258,7 +270,7 @@ async def put_entity(
         # Trigger async jobs if new file uploaded (NON-BLOCKING)
         # Uses independent DB session to avoid holding request session
         if file_bytes and not is_collection:
-            _ = asyncio.create_task(_trigger_async_jobs_background(entity_id))
+            _ = asyncio.create_task(_trigger_async_jobs_background(entity_id, config))
 
         return item
     except ValueError as e:
@@ -296,7 +308,8 @@ async def patch_entity(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
 ) -> schemas.Item:
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     # Extract user_id from JWT payload (None in demo mode)
     user_id = user.id if user else None
@@ -348,9 +361,11 @@ async def delete_entity(
     entity_id: int,
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ):
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
     item = service.delete_entity(entity_id)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
@@ -369,9 +384,11 @@ async def get_entity_versions(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> list[dict[str, int | None]]:
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
     versions = service.get_entity_versions(entity_id)
     if not versions:
         raise HTTPException(status_code=404, detail="Entity not found or no versions available")
@@ -500,10 +517,12 @@ async def get_entity_faces(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> list[schemas.FaceResponse]:
     """Get all faces detected in an entity."""
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     # Check if entity exists
     entity = service.get_entity_by_id(entity_id)
@@ -639,10 +658,12 @@ async def get_entity_jobs(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> list[schemas.EntityJobResponse]:
     """Get all jobs for an entity."""
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     # Check if entity exists
     entity = service.get_entity_by_id(entity_id)
@@ -670,10 +691,12 @@ async def find_similar_images(
     include_details: bool = Query(False, description="Include entity details in results"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.SimilarImagesResponse:
     """Find similar images using CLIP embeddings."""
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     # Check if entity exists
     entity = service.get_entity_by_id(entity_id)
@@ -719,10 +742,12 @@ async def find_similar_faces(
     threshold: float = Query(0.7, ge=0.0, le=1.0, description="Minimum similarity score"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.SimilarFacesResponse:
     """Find similar faces using face embeddings."""
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     # Check if face exists
     from .models import Face
@@ -762,10 +787,12 @@ async def get_face_matches(
     face_id: int = Path(..., title="Face Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> list[schemas.FaceMatchResult]:
     """Get all match records for a face."""
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
 
     # Check if face exists
     from .models import Face
@@ -790,10 +817,12 @@ async def get_face_matches(
 async def get_all_known_persons(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> list[schemas.KnownPersonResponse]:
     """Get all known persons."""
     _ = user
-    service = EntityService(db)
+    config: StoreConfig = request.app.state.config
+    service = EntityService(db, config)
     return service.get_all_known_persons()
 
 

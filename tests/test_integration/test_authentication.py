@@ -8,6 +8,9 @@ tests with a running authentication service are recommended.
 
 from __future__ import annotations
 
+import asyncio
+from unittest.mock import MagicMock
+
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -44,11 +47,16 @@ class TestAuthenticationLogic:
 
         return private_pem, str(public_key_path)
 
+    def _create_mock_request(self, auth_disabled=False):
+        """Create a mock request with configured app state."""
+        request = MagicMock()
+        config = MagicMock()
+        config.auth_disabled = auth_disabled
+        request.app.state.config = config
+        return request
+
     def test_require_permission_allows_correct_permission(self):
         """User with the required permission should be allowed."""
-        import asyncio
-        from unittest.mock import patch
-
         from store.auth import UserPayload, require_permission
 
         # Mock user with write permission
@@ -58,31 +66,26 @@ class TestAuthenticationLogic:
             is_admin=False,
         )
 
-        # Should not raise exception
-        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
-            permission_checker = require_permission("media_store_write")
-            result = asyncio.run(permission_checker(user))
-            assert result == user
+        request = self._create_mock_request(auth_disabled=False)
+        permission_checker = require_permission("media_store_write")
+        
+        result = asyncio.run(permission_checker(request, user))
+        assert result == user
 
     def test_require_permission_allows_admin(self):
         """Admin user should be allowed even without specific permission."""
-        import asyncio
-        from unittest.mock import patch
-
         from store.auth import UserPayload, require_permission
 
         user = UserPayload(id="admin", permissions=[], is_admin=True)
 
-        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
-            permission_checker = require_permission("media_store_write")
-            result = asyncio.run(permission_checker(user))
-            assert result == user
+        request = self._create_mock_request(auth_disabled=False)
+        permission_checker = require_permission("media_store_write")
+        
+        result = asyncio.run(permission_checker(request, user))
+        assert result == user
 
     def test_require_permission_rejects_wrong_permission(self):
         """User with only read permission should be rejected when write is required."""
-        import asyncio
-        from unittest.mock import patch
-
         from store.auth import UserPayload, require_permission
 
         user = UserPayload(
@@ -91,31 +94,28 @@ class TestAuthenticationLogic:
             is_admin=False,
         )
 
-        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
-            with pytest.raises(HTTPException) as exc_info:
-                permission_checker = require_permission("media_store_write")
-                asyncio.run(permission_checker(user))
+        request = self._create_mock_request(auth_disabled=False)
+        
+        with pytest.raises(HTTPException) as exc_info:
+            permission_checker = require_permission("media_store_write")
+            asyncio.run(permission_checker(request, user))
 
-            assert exc_info.value.status_code == 403
+        assert exc_info.value.status_code == 403
 
     def test_require_permission_rejects_none_user(self):
         """None user (no auth) should be rejected when auth is not disabled."""
-        import asyncio
-        from unittest.mock import patch
-
         from store.auth import require_permission
 
-        # Only test if auth is enabled
-        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
-            with pytest.raises(HTTPException) as exc_info:
-                permission_checker = require_permission("media_store_write")
-                asyncio.run(permission_checker(None))
+        request = self._create_mock_request(auth_disabled=False)
+        
+        with pytest.raises(HTTPException) as exc_info:
+            permission_checker = require_permission("media_store_write")
+            asyncio.run(permission_checker(request, None))
 
-            assert exc_info.value.status_code == 401
+        assert exc_info.value.status_code == 401
 
     def test_require_permission_allows_read_permission(self):
         """User with media_store_read permission should be allowed."""
-        import asyncio
         from unittest.mock import MagicMock, patch
 
         from store.auth import UserPayload, require_permission
@@ -126,36 +126,31 @@ class TestAuthenticationLogic:
             is_admin=False,
         )
 
-        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
-            # Mock ConfigService to return True for read_auth_enabled
-            # This ensures the permission check proceeds normally
-            with patch("store.config_service.ConfigService") as mock_config_service_class:
-                mock_config_service = MagicMock()
-                mock_config_service.get_read_auth_enabled.return_value = True
-                mock_config_service_class.return_value = mock_config_service
+        request = self._create_mock_request(auth_disabled=False)
 
-                permission_checker = require_permission("media_store_read")
-                result = asyncio.run(permission_checker(user))
-                assert result == user
+        # Mock ConfigService to return True for read_auth_enabled
+        # This ensures the permission check proceeds normally
+        with patch("store.config_service.ConfigService") as mock_config_service_class:
+            mock_config_service = MagicMock()
+            mock_config_service.get_read_auth_enabled.return_value = True
+            mock_config_service_class.return_value = mock_config_service
+
+            permission_checker = require_permission("media_store_read")
+            result = asyncio.run(permission_checker(request, user))
+            assert result == user
 
     def test_require_admin_allows_admin_user(self):
         """Admin user should be allowed by require_admin."""
-        import asyncio
-        from unittest.mock import patch
-
         from store.auth import UserPayload, require_admin
 
         user = UserPayload(id="admin", permissions=[], is_admin=True)
+        request = self._create_mock_request(auth_disabled=False)
 
-        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
-            result = asyncio.run(require_admin(user))
-            assert result == user
+        result = asyncio.run(require_admin(request, user))
+        assert result == user
 
     def test_require_admin_rejects_non_admin(self):
         """Non-admin user should be rejected by require_admin."""
-        import asyncio
-        from unittest.mock import patch
-
         from store.auth import UserPayload, require_admin
 
         user = UserPayload(
@@ -163,56 +158,43 @@ class TestAuthenticationLogic:
             permissions=["media_store_write"],
             is_admin=False,
         )
+        request = self._create_mock_request(auth_disabled=False)
 
-        with patch("cl_server_shared.config.Config.AUTH_DISABLED", False):
-            with pytest.raises(HTTPException) as exc_info:
-                asyncio.run(require_admin(user))
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(require_admin(request, user))
 
-            assert exc_info.value.status_code == 403
+        assert exc_info.value.status_code == 403
 
 
 class TestAuthenticationModes:
     """Test authentication mode configurations."""
 
-    def test_auth_disabled_flag_defaults_to_false(self):
-        """AUTH_DISABLED should default to false."""
-        from cl_server_shared.config import Config
-
-        # In test environment without env var, should be False
-        # (This may vary based on test setup)
-        assert isinstance(Config.AUTH_DISABLED, bool)
-
-    def test_read_auth_enabled_flag_defaults_to_false(self):
-        """READ_AUTH_ENABLED should default to false."""
-        from cl_server_shared.config import Config
-
-        # In test environment without env var, should be False
-        assert isinstance(Config.READ_AUTH_ENABLED, bool)
-
     def test_demo_mode_bypasses_permission_check(self):
-        """When AUTH_DISABLED=true, permission checks should be bypassed."""
-        import asyncio
-        from unittest.mock import patch
-
+        """When auth_disabled=true, permission checks should be bypassed."""
         from store.auth import require_permission
 
-        with patch("cl_server_shared.config.Config.AUTH_DISABLED", True):
-            # In demo mode, None user should be allowed
-            permission_checker = require_permission("media_store_write")
-            result = asyncio.run(permission_checker(None))
-            assert result is None
+        # Mock request with auth_disabled=True
+        request = MagicMock()
+        config = MagicMock()
+        config.auth_disabled = True
+        request.app.state.config = config
+
+        permission_checker = require_permission("media_store_write")
+        result = asyncio.run(permission_checker(request, None))
+        assert result is None
 
     def test_demo_mode_bypasses_admin_check(self):
-        """When AUTH_DISABLED=true, admin checks should be bypassed."""
-        import asyncio
-        from unittest.mock import patch
-
+        """When auth_disabled=true, admin checks should be bypassed."""
         from store.auth import require_admin
 
-        with patch("cl_server_shared.config.Config.AUTH_DISABLED", True):
-            # In demo mode, None user should be allowed
-            result = asyncio.run(require_admin(None))
-            assert result is None
+        # Mock request with auth_disabled=True
+        request = MagicMock()
+        config = MagicMock()
+        config.auth_disabled = True
+        request.app.state.config = config
+
+        result = asyncio.run(require_admin(request, None))
+        assert result is None
 
 
 class TestJWTValidation:
@@ -223,39 +205,34 @@ class TestJWTValidation:
     """
 
     def test_valid_token_is_decoded(
-        self, auth_client, jwt_token_generator, key_pair, monkeypatch
+        self, auth_client, jwt_token_generator, key_pair
     ):
         """Valid JWT token should be decoded successfully."""
-        from unittest.mock import patch
-
-        private_key_pem, public_key_path = key_pair
+        # Note: auth_client fixture already sets up the correct public key path
+        # matching key_pair, and creates StoreConfig accordingly.
+        
         token = jwt_token_generator.generate_token(
-            sub="testuser",  # Note: jwt_token_generator uses 'sub' for JWT standard field
+            sub="testuser",
             permissions=["media_store_read"],
             is_admin=False,
             expired=False,
         )
 
-        # Mock the public key path to use test key
-        with patch("cl_server_shared.config.Config.PUBLIC_KEY_PATH", public_key_path):
-            headers = {"Authorization": f"Bearer {token}"}
-            response = auth_client.get("/entities/", headers=headers)
+        headers = {"Authorization": f"Bearer {token}"}
+        response = auth_client.get("/entities/", headers=headers)
 
-            # Token should be decoded successfully
-            # Response should NOT be 401 (unauthorized)
-            assert (
-                response.status_code != 401
-            ), f"Token validation failed: {response.json()}"
-            # Should be 200 (success) or 400 (validation error), not 401 (auth error)
-            assert response.status_code in [200, 400]
+        # Token should be decoded successfully
+        # Response should NOT be 401 (unauthorized)
+        assert (
+            response.status_code != 401
+        ), f"Token validation failed: {response.json()}"
+        # Should be 200 (success) or 400 (validation error), not 401 (auth error)
+        assert response.status_code in [200, 400]
 
     def test_expired_token_is_rejected(
-        self, auth_client, jwt_token_generator, key_pair
+        self, auth_client, jwt_token_generator
     ):
         """Expired JWT token should be rejected with 401."""
-        from unittest.mock import patch
-
-        private_key_pem, public_key_path = key_pair
         token = jwt_token_generator.generate_token(
             sub="testuser",
             permissions=["media_store_write"],
@@ -263,22 +240,17 @@ class TestJWTValidation:
             expired=True,  # Token is expired
         )
 
-        with patch("cl_server_shared.config.Config.PUBLIC_KEY_PATH", public_key_path):
-            headers = {"Authorization": f"Bearer {token}"}
-            response = auth_client.get("/entities/", headers=headers)
+        headers = {"Authorization": f"Bearer {token}"}
+        response = auth_client.get("/entities/", headers=headers)
 
-            # Expired token should be rejected with 401
-            assert response.status_code == 401
-            assert "expired" in response.json().get("detail", "").lower()
+        # Expired token should be rejected with 401
+        assert response.status_code == 401
+        assert "expired" in response.json().get("detail", "").lower()
 
     def test_invalid_token_format_is_rejected(
-        self, auth_client, jwt_token_generator, key_pair
+        self, auth_client, jwt_token_generator
     ):
         """Malformed tokens and tokens with wrong signatures should be rejected."""
-        from unittest.mock import patch
-
-        private_key_pem, public_key_path = key_pair
-
         # Create multiple invalid tokens to test
         invalid_tokens = [
             "not.a.valid.token",  # Wrong format (too few parts)
@@ -288,12 +260,11 @@ class TestJWTValidation:
             jwt_token_generator.generate_invalid_token_wrong_key(),  # Valid format but wrong signature
         ]
 
-        with patch("cl_server_shared.config.Config.PUBLIC_KEY_PATH", public_key_path):
-            for invalid_token in invalid_tokens:
-                headers = {"Authorization": f"Bearer {invalid_token}"}
-                response = auth_client.get("/entities/", headers=headers)
+        for invalid_token in invalid_tokens:
+            headers = {"Authorization": f"Bearer {invalid_token}"}
+            response = auth_client.get("/entities/", headers=headers)
 
-                # All invalid tokens should return 401
-                assert (
-                    response.status_code == 401
-                ), f"Token '{invalid_token[:20]}...' should be rejected but got {response.status_code}"
+            # All invalid tokens should return 401
+            assert (
+                response.status_code == 401
+            ), f"Token '{invalid_token[:20]}...' should be rejected but got {response.status_code}"

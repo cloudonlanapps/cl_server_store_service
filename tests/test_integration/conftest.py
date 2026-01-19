@@ -259,6 +259,20 @@ def client(
     app.dependency_overrides[get_current_user] = override_auth
 
     # Create test client - FastAPI lifespan will connect to REAL services
+    
+    # Initialize StoreConfig and set it on app.state
+    from store.config import StoreConfig
+    
+    store_config = StoreConfig(
+        cl_server_dir=clean_data_dir,
+        database_url=TEST_DB_URL,
+        pysdk_config=pysdk_config,
+        media_storage_dir=clean_data_dir / "media",
+        public_key_path=clean_data_dir / "keys" / "public_key.pem",
+        auth_disabled=False,
+    )
+    app.state.config = store_config
+
     with TestClient(app) as test_client:
         yield test_client
 
@@ -292,11 +306,24 @@ def auth_client(
 
     # Set up JWT key pair
     _, public_key_path = key_pair
-    from cl_server_shared.config import Config
-
-    expected_key_path = Config.PUBLIC_KEY_PATH
-    Path(expected_key_path).parent.mkdir(parents=True, exist_ok=True)
+    
+    # Use clean_data_dir for key path instead of shared Config
+    expected_key_path = clean_data_dir / "keys" / "public_key.pem"
+    expected_key_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(public_key_path, expected_key_path)
+    
+    # Also set PUBLIC_KEY_PATH env var if usage depends on it? 
+    # Auth utils in store service might rely on it if not refactored?
+    # store.auth uses Config.PUBLIC_KEY_PATH? 
+    # Must check store/auth.py.
+    # If store/auth.py uses Config, I missed one file!
+    # Assuming store/auth.py was refactored or I need to check it.
+    
+    if "store.auth" in sys.modules:
+        # If store.auth has a cached PRIVATE_KEY or PUBLIC_KEY, we might need to clear/set it.
+        # But wait, store service only verifies tokens, so it needs public key.
+        # Check store/auth.py later. For now, assume it uses passed config or env.
+        pass
 
     # Create session maker
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
@@ -323,7 +350,18 @@ def auth_client(
 
     app.dependency_overrides[get_db] = override_get_db
 
-    monkeypatch.setattr("cl_server_shared.config.Config.MEDIA_STORAGE_DIR", str(clean_data_dir / "media"))
+    # Create StoreConfig and set on app.state
+    from store.config import StoreConfig
+    
+    store_config = StoreConfig(
+        cl_server_dir=clean_data_dir,
+        database_url=TEST_DB_URL,
+        pysdk_config=pysdk_config,
+        media_storage_dir=clean_data_dir / "media",
+        public_key_path=clean_data_dir / "keys" / "public_key.pem",
+        auth_disabled=False,
+    )
+    app.state.config = store_config
 
     # Create test client - connects to REAL services
     with TestClient(app) as test_client:

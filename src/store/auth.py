@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
-from cl_server_shared.config import Config
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import ExpiredSignatureError, JWTError, jwt
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
+
+if TYPE_CHECKING:
+    from .config import StoreConfig
 
 # ─────────────────────────────────────
 # Permissions
@@ -68,7 +70,7 @@ _public_key_cache: str | None = None
 _max_load_attempts: int = 30  # ~30 seconds
 
 
-async def get_public_key() -> str:
+async def get_public_key(config: StoreConfig) -> str:
     """Load and cache the public key with retry during startup."""
 
     global _public_key_cache
@@ -77,9 +79,11 @@ async def get_public_key() -> str:
         return _public_key_cache
 
     for attempt in range(_max_load_attempts):
-        if os.path.exists(Config.PUBLIC_KEY_PATH):
+        # Use configured path
+        path = config.public_key_path
+        if path.exists():
             try:
-                with open(Config.PUBLIC_KEY_PATH) as f:
+                with open(path) as f:
                     key = f.read().strip()
                     if key:
                         _public_key_cache = key
@@ -95,7 +99,7 @@ async def get_public_key() -> str:
 
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail=f"Public key not found at {Config.PUBLIC_KEY_PATH}. "
+        detail=f"Public key not found at {config.public_key_path}. "
         + "Is the authentication service running?",
     )
 
@@ -106,17 +110,21 @@ async def get_public_key() -> str:
 
 
 async def get_current_user(
+    request: Request,
     token: str | None = Depends(oauth2_scheme),
 ) -> UserPayload | None:
     """Validate the JWT and return the user payload."""
 
-    if Config.AUTH_DISABLED:
+    # Get config from app state
+    config: StoreConfig = request.app.state.config
+
+    if config.auth_disabled:
         return None
 
     if token is None:
         return None
 
-    public_key = await get_public_key()
+    public_key = await get_public_key(config)
 
     try:
         raw = jwt.decode(
@@ -158,10 +166,13 @@ def require_permission(permission: Permission):
     """Require a specific permission."""
 
     async def permission_checker(
+        request: Request,
         current_user: UserPayload | None = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> UserPayload | None:
-        if Config.AUTH_DISABLED:
+        config: StoreConfig = request.app.state.config
+
+        if config.auth_disabled:
             return current_user
 
         if permission == "media_store_read":
@@ -192,9 +203,12 @@ def require_permission(permission: Permission):
 
 
 async def require_admin(
+    request: Request,
     current_user: UserPayload | None = Depends(get_current_user),
 ) -> UserPayload | None:
-    if Config.AUTH_DISABLED:
+    config: StoreConfig = request.app.state.config
+
+    if config.auth_disabled:
         return current_user
 
     if current_user is None:

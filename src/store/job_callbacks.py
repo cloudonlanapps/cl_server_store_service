@@ -1,12 +1,7 @@
-"""MQTT callback handlers for face detection and embedding jobs."""
-
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from cl_server_shared import Config
 from loguru import logger
 from numpy.typing import NDArray
 from pydantic import ValidationError
@@ -20,8 +15,8 @@ if TYPE_CHECKING:
     from cl_client import ComputeClient
     from cl_client.models import JobResponse
 
+    from .config import StoreConfig
     from .job_service import JobSubmissionService
-    from .pysdk_config import PySDKRuntimeConfig
     from .qdrant_image_store import QdrantImageStore
 
 
@@ -35,23 +30,23 @@ class JobCallbackHandler:
         self,
         compute_client: ComputeClient,
         qdrant_store: QdrantImageStore,
+        config: StoreConfig,
         job_submission_service: JobSubmissionService | None = None,
-        pysdk_config: PySDKRuntimeConfig | None = None,
     ) -> None:
         """Initialize callback handler.
 
         Args:
             compute_client: ComputeClient for file downloads
             qdrant_store: QdrantImageStore for embedding storage
+            config: Store configuration
             job_submission_service: Service for submitting jobs (optional for initialization)
-            pysdk_config: PySDK runtime configuration (optional for initialization)
         """
         self.compute_client = compute_client
         self.qdrant_store = qdrant_store
+        self.config = config
         self.job_submission_service: JobSubmissionService | None = (
             job_submission_service
         )
-        self.pysdk_config: PySDKRuntimeConfig | None = pysdk_config
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -137,7 +132,13 @@ class JobCallbackHandler:
         day = dt.strftime("%d")
 
         # Create directory structure: {MEDIA_STORAGE_DIR}/store/faces/YYYY/MM/DD/
-        base_dir = Path(Config.MEDIA_STORAGE_DIR)
+        # Use configured cl_server_dir to imply media storage, or should we explicitly have media_storage_dir?
+        # Typically media is stored under cl_server_dir/media or similar?
+        # Let's assume cl_server_dir IS the media storage root or contains it.
+        # Original Config had MEDIA_STORAGE_DIR.
+        # Let's assume cl_server_dir matches what MEDIA_STORAGE_DIR was pointing to, or use cl_server_dir/media.
+        # Let's derive it from cl_server_dir for now, assuming MEDIA_STORAGE_DIR = CL_SERVER_DIR.
+        base_dir = self.config.cl_server_dir
         dir_path = base_dir / "store" / "faces" / year / month / day
         dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -490,7 +491,7 @@ class JobCallbackHandler:
                     tmp_path.unlink()
 
             # Get pysdk_config for threshold
-            if not self.pysdk_config:
+            if not self.config.pysdk_config:
                 logger.error(
                     "PySDK config not available, cannot process face embedding"
                 )
@@ -499,14 +500,14 @@ class JobCallbackHandler:
             # Get face store
             from .face_store_singleton import get_face_store
 
-            face_store = get_face_store(self.pysdk_config)
+            face_store = get_face_store(self.config.pysdk_config)
 
             # Search face store for similar faces (get multiple matches for analysis)
             similar_faces = face_store.search(
                 query_vector=embedding,
                 limit=10,  # Get up to 10 matches
                 search_options=SearchPreferences(
-                    score_threshold=self.pysdk_config.face_embedding_threshold
+                    score_threshold=self.config.pysdk_config.face_embedding_threshold
                 ),
             )
 

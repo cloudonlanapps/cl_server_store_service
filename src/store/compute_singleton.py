@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from cl_client import ComputeClient, ServerConfig, SessionManager
-from cl_server_shared import Config
 from loguru import logger
 
 from .pysdk_config import PySDKRuntimeConfig
@@ -74,8 +73,8 @@ async def async_get_compute_client(config: PySDKRuntimeConfig) -> ComputeClient:
         server_config = ServerConfig(
             auth_url=config.auth_service_url,
             compute_url=config.compute_service_url,
-            mqtt_broker=Config.MQTT_BROKER,
-            mqtt_port=Config.MQTT_PORT,
+            mqtt_broker=config.mqtt_broker,
+            mqtt_port=config.mqtt_port,
         )
 
         # Create SessionManager and login
@@ -92,7 +91,7 @@ async def async_get_compute_client(config: PySDKRuntimeConfig) -> ComputeClient:
             "Initialized ComputeClient with auth: "
             + f"compute={config.compute_service_url}, "
             + f"user={config.compute_username}, "
-            + f"mqtt={Config.MQTT_BROKER}:{Config.MQTT_PORT}"
+            + f"mqtt={config.mqtt_broker}:{config.mqtt_port}"
         )
 
     return _compute_client

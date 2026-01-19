@@ -69,3 +69,16 @@ class PySDKRuntimeConfig(BaseModel):
         le=1.0,
         description="Similarity threshold for face matching (0.0-1.0)"
     )
+
+    # ========================================================================
+    # MQTT Configuration
+    # ========================================================================
+    
+    mqtt_broker: str = Field(
+        default="localhost",
+        description="MQTT Broker host"
+    )
+    mqtt_port: int = Field(
+        default=1883,
+        description="MQTT Broker port"
+    )

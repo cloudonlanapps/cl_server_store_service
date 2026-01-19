@@ -23,12 +23,21 @@ async def lifespan(app: FastAPI):
     - Shutdown: cleanup resources
     """
     # -------- Startup --------
-    config_json = os.getenv("PYSDK_CONFIG_JSON")
-    if config_json:
-        app.state.pysdk_config = PySDKRuntimeConfig.model_validate_json(config_json)
+    # -------- Startup --------
+    
+    # Try to get config from app state (injected by main.py or tests)
+    if hasattr(app.state, "config") and app.state.config:
+        app.state.pysdk_config = app.state.config.pysdk_config
+        logger.info("Loaded configuration from app.state.config")
     else:
-        app.state.pysdk_config = PySDKRuntimeConfig()
-        logger.warning("No PYSDK_CONFIG_JSON found, using default configuration")
+        # Fallback to environment variables (legacy/dev support)
+        # Note: This path should ideally be removed once migration is complete and consistent
+        config_json = os.getenv("PYSDK_CONFIG_JSON")
+        if config_json:
+            app.state.pysdk_config = PySDKRuntimeConfig.model_validate_json(config_json)
+        else:
+            app.state.pysdk_config = PySDKRuntimeConfig()
+            logger.warning("No config found in app.state or environment, using default defaults")
 
     logger.info(
         "Loaded PySDK config: compute=%s",

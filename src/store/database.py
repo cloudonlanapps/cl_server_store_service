@@ -1,10 +1,7 @@
-"""Database configuration with WAL mode support for multi-process access."""
-
 from __future__ import annotations
-
+from typing import TYPE_CHECKING
 from collections.abc import Callable, Generator
 
-from cl_server_shared.config import Config
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.orm import Session, sessionmaker
@@ -12,6 +9,13 @@ from sqlalchemy.orm import Session, sessionmaker
 # CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
 # Using absolute import to avoid circular dependency with __init__.py
 from . import versioning  # pyright: ignore[reportUnusedImport]  # noqa: F401
+
+if TYPE_CHECKING:
+    from .config import StoreConfig
+
+# Global session factory
+SessionLocal: sessionmaker[Session] | None = None
+engine: Engine | None = None
 
 
 def enable_wal_mode(
@@ -82,6 +86,13 @@ def create_session_factory(engine: Engine) -> sessionmaker[Session]:
     )
 
 
+def init_db(config: StoreConfig) -> None:
+    """Initialize database connection."""
+    global SessionLocal, engine
+    engine = create_db_engine(config.database_url, echo=False)
+    SessionLocal = create_session_factory(engine)
+
+
 def get_db_session(
     session_factory: Callable[[], Session],
 ) -> Generator[Session, None, None]:
@@ -100,12 +111,8 @@ def get_db_session(
         db.close()
 
 
-# Create engine with WAL mode
-engine = create_db_engine(Config.STORE_DATABASE_URL, echo=False)
-
-SessionLocal: sessionmaker[Session] = create_session_factory(engine)
-
-
 def get_db() -> Generator[Session, None, None]:
     """Get database session for FastAPI dependency injection."""
+    if SessionLocal is None:
+        raise RuntimeError("Database not initialized")
     yield from get_db_session(SessionLocal)

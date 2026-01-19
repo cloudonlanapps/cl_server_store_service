@@ -3,7 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, override
 
 # Import shared Base
-from cl_server_shared.models import Base
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    """Base class for Store service models."""
+    pass
 from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
