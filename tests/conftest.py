@@ -137,6 +137,7 @@ def test_engine() -> Generator[Engine, None, None]:
     from sqlalchemy.orm import configure_mappers
 
     from store.common.models import Base
+    from store.m_insight.models import EntitySyncState, ImageIntelligence  # Import m_insight models
 
     configure_mappers()
     Base.metadata.create_all(bind=engine)

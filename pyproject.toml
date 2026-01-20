@@ -33,6 +33,7 @@ dependencies = [
 
 [project.scripts]
 store = "store.main:main"
+m-insight-worker = "store.m_insight_worker:main"
 
 
 [project.optional-dependencies]
@@ -41,6 +42,7 @@ dev = [
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "pytest-asyncio>=1.3.0",
+    "pysdk @ file:///Users/anandasarangaram/Work/cl_server/sdks/pysdk",
 ]
 all = [
     "store[dev]",
@@ -80,7 +82,8 @@ omit = [
     "*/venv/*",
     "*/.venv/*",
     "*/typings/*",
-    "*/main.py"  # CLI entry point, not tested
+    "*/main.py",  # CLI entry point, not tested
+    "*/m_insight_worker.py",  # CLI entry point, not tested
 ]
 
 [tool.coverage.report]
