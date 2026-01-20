@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .models import EntityJob
+from ...common.models import EntityJob
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient
@@ -53,7 +53,7 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from .database import SessionLocal
+        from ...common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -104,7 +104,7 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from .database import SessionLocal
+        from ...common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -157,7 +157,7 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from .database import SessionLocal
+        from ...common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -198,7 +198,7 @@ class JobSubmissionService:
         Args:
             job_id: Job ID to delete
         """
-        from .database import SessionLocal
+        from ...common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -223,7 +223,7 @@ class JobSubmissionService:
             status: New status (queued, in_progress, completed, failed)
             error_message: Optional error message if status is failed
         """
-        from .database import SessionLocal
+        from ...common.database import SessionLocal
 
         db = SessionLocal()
         try:

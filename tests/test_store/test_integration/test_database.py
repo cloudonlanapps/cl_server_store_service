@@ -12,7 +12,7 @@ class TestWALMode:
         # Create a mock connection and cursor
         from unittest.mock import MagicMock
 
-        from store.database import enable_wal_mode
+        from store.common.database import enable_wal_mode
 
         mock_cursor = MagicMock()
         mock_conn = MagicMock()
@@ -43,7 +43,7 @@ class TestWALMode:
 
     def test_wal_mode_applied_to_real_sqlite_connection(self, tmp_path):
         """Test that WAL mode is actually applied to a real SQLite database."""
-        from store.database import create_db_engine
+        from store.common.database import create_db_engine
 
         # Create a temporary database file
         db_path = tmp_path / "test_wal.db"
@@ -68,7 +68,7 @@ class TestWALMode:
 
     def test_wal_mode_listener_registered_for_sqlite(self):
         """Test that WAL mode listener is registered for SQLite databases."""
-        from store.database import create_db_engine, enable_wal_mode
+        from store.common.database import create_db_engine, enable_wal_mode
 
         # Create a SQLite engine
         database_url = "sqlite:///:memory:"
@@ -83,7 +83,7 @@ class TestWALMode:
 
     def test_create_session_factory(self):
         """Test that create_session_factory creates a valid session factory."""
-        from store.database import create_session_factory
+        from store.common.database import create_session_factory
 
         # Create a test engine
         engine = create_engine(
@@ -104,7 +104,7 @@ class TestWALMode:
 
     def test_get_db_session_yields_and_closes(self):
         """Test that get_db_session properly yields and closes sessions."""
-        from store.database import create_db_engine, create_session_factory, get_db_session
+        from store.common.database import create_db_engine, create_session_factory, get_db_session
 
         # Create engine and session factory
         engine = create_db_engine("sqlite:///:memory:")
@@ -129,8 +129,8 @@ class TestWALMode:
 
     def test_wal_mode_concurrent_reads(self, tmp_path):
         """Test that WAL mode allows concurrent reads."""
-        from store.database import create_db_engine, create_session_factory
-        from store.models import Base
+        from store.common.database import create_db_engine, create_session_factory
+        from store.common.models import Base
 
         # Create a temporary database
         db_path = tmp_path / "test_concurrent.db"

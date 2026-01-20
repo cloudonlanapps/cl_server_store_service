@@ -15,10 +15,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 make_versioned(user_cls=None)
 
 # Configure mappers after models are imported
-from src.store.models import Base
+from src.store.common.models import Base
 configure_mappers()
 
-from src.store.utils import get_db_url
+from src.store.common.utils import get_db_url
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

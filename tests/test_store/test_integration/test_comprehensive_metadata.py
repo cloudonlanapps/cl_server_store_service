@@ -7,9 +7,9 @@ from datetime import datetime
 
 import pytest
 
-from store.schemas import Item
+from store.common.schemas import Item
 
-from .test_media_files import get_test_media_files
+from tests.test_media_files import get_test_media_files
 
 
 class TestAllImagesMetadata:

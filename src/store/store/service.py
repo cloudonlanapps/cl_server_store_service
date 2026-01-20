@@ -14,9 +14,8 @@ from sqlalchemy.orm import Session
 
 from .entity_storage import EntityStorageService
 from .media_metadata import MediaMetadataExtractor
-from .models import Entity
-from .qdrant_image_store import SearchPreferences
-from .schemas import (
+from ..common.models import Entity
+from ..common.schemas import (
     BodyCreateEntity,
     BodyPatchEntity,
     BodyUpdateEntity,
@@ -651,10 +650,10 @@ class EntityService:
             )
 
         # 1. Clean up vector stores BEFORE deleting database records
-        from .face_store_singleton import get_face_store
-        from .models import Face
-        from .compute_singleton import get_pysdk_config
-        from .qdrant_singleton import get_qdrant_store
+        from ..intelligence.logic.face_store_singleton import get_face_store
+        from ..common.models import Face
+        from ..intelligence.logic.compute_singleton import get_pysdk_config
+        from ..intelligence.logic.qdrant_singleton import get_qdrant_store
 
         # Remove CLIP embedding
         qdrant_store = get_qdrant_store()
@@ -677,445 +676,35 @@ class EntityService:
 
         return self._entity_to_item(entity)
 
-    async def trigger_async_jobs(self, entity: Entity) -> dict[str, str | None]:
-        """Trigger async face detection and embedding jobs for an image entity.
-
-        Only processes images (not collections). Submits jobs to compute service
-        and returns immediately without blocking.
-
-        Args:
-            entity: Entity instance to process
-
-        Returns:
-            Dict with job IDs: {"face_detection_job": job_id, "clip_embedding_job": job_id}
-            Returns None for job_id if job submission fails or entity is not an image.
-        """
-        # Only process images
-        if entity.is_collection or entity.type != "image":
-            logger.debug(
-                f"Skipping job submission for entity {entity.id}: "
-                + f"is_collection={entity.is_collection}, type={entity.type}"
-            )
-            return {"face_detection_job": None, "clip_embedding_job": None}
-
-        # Get absolute file path
-        if not entity.file_path:
-            logger.warning(f"Entity {entity.id} has no file_path")
-            return {"face_detection_job": None, "clip_embedding_job": None}
-
-        absolute_path = self.file_storage.get_absolute_path(entity.file_path)
-        if not absolute_path.exists():
-            logger.warning(f"File not found for entity {entity.id}: {absolute_path}")
-            return {"face_detection_job": None, "clip_embedding_job": None}
-
-        # Get singletons
-        from .compute_singleton import get_compute_client
-        from .job_callbacks import JobCallbackHandler
-        from .job_service import JobSubmissionService
-        from .qdrant_singleton import get_qdrant_store
-
-        compute_client = get_compute_client()
-        qdrant_store = get_qdrant_store()
-
-        # Create handlers with job_service and config
-        job_service = JobSubmissionService(compute_client)
-        callback_handler = JobCallbackHandler(
-            compute_client,
-            qdrant_store,
-            config=self.config,
-            job_submission_service=job_service,
-        )
-
-        # Define callbacks with proper typing
-        from cl_client.models import JobResponse
-
-        async def face_detection_callback(job: JobResponse) -> None:
-            """Handle face detection job completion."""
-            job_service.update_job_status(job.job_id, job.status, job.error_message)
-            if job.status == "completed":
-                await callback_handler.handle_face_detection_complete(entity.id, job)
-
-        async def clip_embedding_callback(job: JobResponse) -> None:
-            """Handle CLIP embedding job completion."""
-            job_service.update_job_status(job.job_id, job.status, job.error_message)
-            if job.status == "completed":
-                await callback_handler.handle_clip_embedding_complete(entity.id, job)
-
-        # Submit jobs
-        face_job_id = await job_service.submit_face_detection(
-            entity_id=entity.id,
-            file_path=str(absolute_path),
-            on_complete_callback=face_detection_callback,
-        )
-
-        clip_job_id = await job_service.submit_clip_embedding(
-            entity_id=entity.id,
-            file_path=str(absolute_path),
-            on_complete_callback=clip_embedding_callback,
-        )
-
-        logger.info(
-            f"Submitted jobs for entity {entity.id}: "
-            + f"face_detection={face_job_id}, clip_embedding={clip_job_id}"
-        )
-
-        return {
-            "face_detection_job": face_job_id,
-            "clip_embedding_job": clip_job_id,
-        }
 
     def delete_all_entities(self) -> None:
         """Delete all entities from the database and clear vector stores."""
         # This is a dangerous operation, mostly for tests/demo
-        from .face_store_singleton import get_face_store
-        from .compute_singleton import get_pysdk_config
-        from .qdrant_singleton import get_qdrant_store
-
-        # We can't easily iterate all vectors in Qdrant to find relevant ones without a filter
-        # but since we're deleting ALL entities, we should ideally clear the collections.
-        # However, for now, let's at least clear the entities we know about.
-        # Actually, let's just delete the records and let stale vectors be handled by upserts
-        # or future collection-wipe features.
-        # WAIT: If we want a clean state for tests, we really should clear the collections.
+        from ..intelligence.logic.face_store_singleton import get_face_store
+        from ..intelligence.logic.compute_singleton import get_pysdk_config
+        from ..intelligence.logic.qdrant_singleton import get_qdrant_store
+        from ..common.models import Entity, KnownPerson
         
-        # For now, just delete DB records to maintain existing behavior but add a note
+        # 1. Clear Qdrant collections
+        try:
+            qdrant_store = get_qdrant_store()
+            qdrant_store.delete_all_vectors()
+        except Exception as e:
+            logger.error(f"Failed to clear Qdrant image store: {e}")
+
+        try:
+            pysdk_config = get_pysdk_config()
+            face_store = get_face_store(pysdk_config)
+            face_store.delete_all_vectors()
+        except Exception as e:
+            logger.error(f"Failed to clear Qdrant face store: {e}")
+
+        # 2. Delete all records from database
+        # Note: Face and EntityJob are handled by CASCADE from Entity
+        _ = self.db.query(KnownPerson).delete()
         _ = self.db.query(Entity).delete()
         _ = self.db.commit()
 
-    def get_entity_faces(self, entity_id: int) -> list[FaceResponse]:
-        """Get all faces detected in an entity.
 
-        Args:
-            entity_id: Entity ID
 
-        Returns:
-            List of FaceResponse schemas with parsed bbox and landmarks
-        """
 
-        from . import schemas
-        from .models import Face
-
-        faces = self.db.query(Face).filter(Face.entity_id == entity_id).all()
-
-        results: list[schemas.FaceResponse] = []
-        for face in faces:
-            results.append(
-                schemas.FaceResponse(
-                    id=face.id,
-                    entity_id=face.entity_id,
-                    bbox=BBox.model_validate_json(face.bbox),
-                    confidence=face.confidence,
-                    landmarks=FaceLandmarks.model_validate_json(face.landmarks),
-                    file_path=face.file_path,
-                    created_at=face.created_at,
-                    known_person_id=face.known_person_id,
-                )
-            )
-
-        return results
-
-    def get_entity_jobs(self, entity_id: int) -> list[EntityJobResponse]:
-        """Get all jobs for an entity.
-
-        Args:
-            entity_id: Entity ID
-
-        Returns:
-            List of EntityJobResponse schemas
-        """
-        from . import schemas
-        from .models import EntityJob
-
-        jobs = self.db.query(EntityJob).filter(EntityJob.entity_id == entity_id).all()
-
-        results: list[schemas.EntityJobResponse] = []
-        for job in jobs:
-            results.append(
-                schemas.EntityJobResponse(
-                    id=job.id,
-                    entity_id=job.entity_id,
-                    job_id=job.job_id,
-                    task_type=job.task_type,
-                    status=job.status,
-                    created_at=job.created_at,
-                    updated_at=job.updated_at,
-                    completed_at=job.completed_at,
-                    error_message=job.error_message,
-                )
-            )
-
-        return results
-
-    def search_similar_images(
-        self, entity_id: int, limit: int = 5, score_threshold: float = 0.85
-    ) -> list[SimilarImageResult]:
-        """Search for similar images using CLIP embeddings.
-
-        Args:
-            entity_id: Query entity ID (must have embedding in Qdrant)
-            limit: Maximum number of results to return
-            score_threshold: Minimum similarity score [0.0, 1.0]
-
-        Returns:
-            List of SimilarImageResult schemas
-        """
-        from . import schemas
-        from .qdrant_singleton import get_qdrant_store
-
-        qdrant_store = get_qdrant_store()
-
-        # Get the query embedding from Qdrant
-        query_point = qdrant_store.get_vector(entity_id)
-        if not query_point:
-            logger.warning(f"No embedding found for entity {entity_id}")
-            return []
-
-        query_vector = query_point.embedding
-
-        # Search for similar images
-        results = qdrant_store.search(
-            query_vector=query_vector,
-            limit=limit + 1,  # +1 because query itself will be in results
-            search_options=SearchPreferences(
-                with_payload=True,
-                score_threshold=score_threshold,
-            ),
-        )
-
-        # Filter out the query entity itself and convert to Pydantic
-        filtered_results: list[SimilarImageResult] = []
-        for result in results:
-            if result.id != entity_id:
-                filtered_results.append(
-                    schemas.SimilarImageResult(
-                        entity_id=int(result.id),  # type: ignore[arg-type]
-                        score=float(result.score),
-                        entity=None,  # Will be populated by route handler if requested
-                    )
-                )
-
-        return filtered_results[:limit]
-
-    def get_known_person(self, person_id: int) -> KnownPersonResponse | None:
-        """Get known person details.
-
-        Args:
-            person_id: Known person ID
-
-        Returns:
-            KnownPersonResponse schema or None if not found
-        """
-        from . import schemas
-        from .models import Face, KnownPerson
-
-        person = self.db.query(KnownPerson).filter(KnownPerson.id == person_id).first()
-        if not person:
-            return None
-
-        # Count faces for this person
-        face_count = self.db.query(Face).filter(Face.known_person_id == person_id).count()
-
-        return schemas.KnownPersonResponse(
-            id=person.id,
-            name=person.name,
-            created_at=person.created_at,
-            updated_at=person.updated_at,
-            face_count=face_count,
-        )
-
-    def get_all_known_persons(self) -> list[KnownPersonResponse]:
-        """Get all known persons.
-
-        Returns:
-            List of KnownPersonResponse schemas
-        """
-        from . import schemas
-        from .models import Face, KnownPerson
-
-        persons = self.db.query(KnownPerson).all()
-
-        results: list[schemas.KnownPersonResponse] = []
-        for person in persons:
-            # Count faces for this person
-            face_count = self.db.query(Face).filter(Face.known_person_id == person.id).count()
-
-            results.append(
-                schemas.KnownPersonResponse(
-                    id=person.id,
-                    name=person.name,
-                    created_at=person.created_at,
-                    updated_at=person.updated_at,
-                    face_count=face_count,
-                )
-            )
-
-        return results
-
-    def get_known_person_faces(self, person_id: int) -> list[FaceResponse]:
-        """Get all faces for a known person.
-
-        Args:
-            person_id: Known person ID
-
-        Returns:
-            List of FaceResponse schemas
-        """
-
-        from . import schemas
-        from .models import Face
-
-        faces = self.db.query(Face).filter(Face.known_person_id == person_id).all()
-
-        results: list[schemas.FaceResponse] = []
-        for face in faces:
-            results.append(
-                schemas.FaceResponse(
-                    id=face.id,
-                    entity_id=face.entity_id,
-                    bbox=BBox.model_validate_json(face.bbox),
-                    confidence=face.confidence,
-                    landmarks=FaceLandmarks.model_validate_json(face.landmarks),
-                    file_path=face.file_path,
-                    created_at=face.created_at,
-                    known_person_id=face.known_person_id,
-                )
-            )
-
-        return results
-
-    def update_known_person_name(self, person_id: int, name: str) -> KnownPersonResponse | None:
-        """Update known person name.
-
-        Args:
-            person_id: Known person ID
-            name: New name for the person
-
-        Returns:
-            Updated KnownPersonResponse schema or None if not found
-        """
-        from .models import KnownPerson
-
-        person = self.db.query(KnownPerson).filter(KnownPerson.id == person_id).first()
-        if not person:
-            return None
-
-        person.name = name
-        person.updated_at = self._now_timestamp()
-
-        self.db.commit()
-        self.db.refresh(person)
-
-        return self.get_known_person(person_id)
-
-    def get_face_matches(self, face_id: int) -> list[FaceMatchResult]:
-        """Get all match records for a face.
-
-        Args:
-            face_id: Face ID
-
-        Returns:
-            List of FaceMatchResult schemas
-        """
-
-        from . import schemas
-        from .models import Face, FaceMatch
-
-        matches = self.db.query(FaceMatch).filter(FaceMatch.face_id == face_id).all()
-
-        results: list[schemas.FaceMatchResult] = []
-        for match in matches:
-            # Optionally load matched face details
-            matched_face = self.db.query(Face).filter(Face.id == match.matched_face_id).first()
-            matched_face_response = None
-            if matched_face:
-                matched_face_response = schemas.FaceResponse(
-                    id=matched_face.id,
-                    entity_id=matched_face.entity_id,
-                    bbox=BBox.model_validate_json(matched_face.bbox),
-                    confidence=matched_face.confidence,
-                    landmarks=FaceLandmarks.model_validate_json(matched_face.landmarks),
-                    file_path=matched_face.file_path,
-                    created_at=matched_face.created_at,
-                    known_person_id=matched_face.known_person_id,
-                )
-
-            results.append(
-                schemas.FaceMatchResult(
-                    id=match.id,
-                    face_id=match.face_id,
-                    matched_face_id=match.matched_face_id,
-                    similarity_score=match.similarity_score,
-                    created_at=match.created_at,
-                    matched_face=matched_face_response,
-                )
-            )
-
-        return results
-
-    def search_similar_faces_by_id(
-        self, face_id: int, limit: int = 5, threshold: float = 0.7
-    ) -> list[SimilarFacesResult]:
-        """Search for similar faces using face store.
-
-        Args:
-            face_id: Query face ID (must have embedding in face store)
-            limit: Maximum number of results to return
-            threshold: Minimum similarity score [0.0, 1.0]
-
-        Returns:
-            List of SimilarFacesResult schemas
-        """
-
-        from . import schemas
-        from .face_store_singleton import get_face_store
-        from .models import Face
-
-        face_store = get_face_store()
-
-        # Get the query embedding from face store
-        query_points = face_store.get_vector(face_id)
-        if not query_points:
-            logger.warning(f"No embedding found for face {face_id}")
-            return []
-
-        # Search for similar faces
-        results = face_store.search(
-            query_vector=query_points.embedding,
-            limit=limit + 1,  # +1 because query itself will be in results
-            search_options=SearchPreferences(
-                with_payload=True,
-                score_threshold=threshold,
-            ),
-        )
-
-        # Filter out the query face itself and convert to Pydantic
-        filtered_results: list[schemas.SimilarFacesResult] = []
-        for result in results:
-            if result.id != face_id:
-                # Optionally load face details
-                face = self.db.query(Face).filter(Face.id == result.id).first()
-                face_response = None
-                if face:
-                    face_response = schemas.FaceResponse(
-                        id=face.id,
-                        entity_id=face.entity_id,
-                        bbox=BBox.model_validate_json(face.bbox),
-                        confidence=face.confidence,
-                        landmarks=FaceLandmarks.model_validate_json(face.landmarks),
-                        file_path=face.file_path,
-                        created_at=face.created_at,
-                        known_person_id=face.known_person_id,
-                    )
-
-                filtered_results.append(
-                    schemas.SimilarFacesResult(
-                        face_id=int(result.id),  # type: ignore[arg-type]
-                        score=float(result.score),
-                        known_person_id=(
-                            result.payload.get("known_person_id") if result.payload else None
-                        ),
-                        face=face_response,
-                    )
-                )
-
-        return filtered_results[:limit]

@@ -13,7 +13,7 @@ from . import versioning  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from .utils import get_db_url
 
 if TYPE_CHECKING:
-    from .config import StoreConfig
+    from ..store.config import StoreConfig
 
 # Global session factory
 SessionLocal: sessionmaker[Session] | None = None

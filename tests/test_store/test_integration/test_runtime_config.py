@@ -4,8 +4,8 @@ Tests for runtime configuration API and JWT user ID.
 
 import pytest
 
-from store.config_service import ConfigService
-from store.models import ServiceConfig
+from store.store.config_service import ConfigService
+from store.common.models import ServiceConfig
 
 
 @pytest.fixture(scope="function")
@@ -172,7 +172,7 @@ class TestJWTUserID:
         entity_id = response.json()["id"]
 
         # Verify directly in database that added_by was set correctly
-        from store.models import Entity
+        from store.common.models import Entity
 
         entity = db_session.query(Entity).filter(Entity.id == entity_id).first()
 

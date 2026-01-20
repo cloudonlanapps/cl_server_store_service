@@ -8,8 +8,9 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from sqlalchemy.orm import configure_mappers
 
-from .pysdk_config import PySDKRuntimeConfig
+from ..intelligence.logic.pysdk_config import PySDKRuntimeConfig
 from .routes import router
+from ..intelligence.routes import router as intelligence_router
 
 # Configure mappers after all models are imported (required for versioning)
 configure_mappers()
@@ -27,8 +28,7 @@ async def lifespan(app: FastAPI):
     
     # Try to get config from app state (injected by main.py or tests)
     if hasattr(app.state, "config") and app.state.config:
-        app.state.pysdk_config = app.state.config.pysdk_config
-        logger.info("Loaded configuration from app.state.config")
+        logger.info("Loaded core configuration from app.state.config")
     else:
         # Fallback for dev/test if config not injected, but stricter now:
         # We rely on app.state.config being set by main or tests.
@@ -40,9 +40,9 @@ async def lifespan(app: FastAPI):
         app.state.pysdk_config.compute_service_url,
     )
 
-    from .compute_singleton import async_get_compute_client
-    from .face_store_singleton import get_face_store
-    from .qdrant_singleton import get_qdrant_store
+    from ..intelligence.logic.compute_singleton import async_get_compute_client
+    from ..intelligence.logic.face_store_singleton import get_face_store
+    from ..intelligence.logic.qdrant_singleton import get_qdrant_store
 
     _ = await async_get_compute_client(app.state.pysdk_config)
     _ = get_qdrant_store(app.state.pysdk_config)
@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
         yield  # ---- application runs here ----
     finally:
         # -------- Shutdown --------
-        from .compute_singleton import shutdown_compute_client
+        from ..intelligence.logic.compute_singleton import shutdown_compute_client
 
         await shutdown_compute_client()
         logger.info("Store service shutdown complete")
@@ -67,6 +67,7 @@ app = FastAPI(
 )
 
 app.include_router(router)
+app.include_router(intelligence_router)
 
 
 @app.exception_handler(HTTPException)

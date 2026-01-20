@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from store.schemas import Item, PaginatedResponse
+from store.common.schemas import Item, PaginatedResponse
 
 
 class TestEntityCRUD:

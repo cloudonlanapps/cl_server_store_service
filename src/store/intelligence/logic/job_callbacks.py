@@ -10,14 +10,14 @@ from pydantic import ValidationError
 
 from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput
 
-from .models import Face
+from ...common.models import Face
 from .qdrant_image_store import SearchPreferences, SearchResult, StoreItem
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient
     from cl_client.models import JobResponse
 
-    from .config import StoreConfig
+    from ...store.config import StoreConfig
     from .job_service import JobSubmissionService
     from .qdrant_image_store import QdrantImageStore
 
@@ -154,7 +154,7 @@ class JobCallbackHandler:
             entity_id: Entity ID
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
-        from .database import SessionLocal
+        from ...common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -175,7 +175,7 @@ class JobCallbackHandler:
                 return
 
             # Query Entity to get its create_date for organizing face files
-            from .models import Entity
+            from ...common.models import Entity
 
             entity = db.query(Entity).filter(Entity.id == entity_id).first()
             if not entity:
@@ -427,7 +427,7 @@ class JobCallbackHandler:
             entity_id: Original image Entity ID (for reference/logging)
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
-        from .database import SessionLocal
+        from ...common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -508,7 +508,7 @@ class JobCallbackHandler:
             )
 
             # Get Face record
-            from .models import FaceMatch, KnownPerson
+            from ...common.models import FaceMatch, KnownPerson
 
             face = db.query(Face).filter(Face.id == face_id).first()
             if not face:

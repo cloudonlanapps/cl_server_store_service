@@ -91,7 +91,7 @@ class TestAdminConfigPutEndpoint:
         self, auth_client, admin_token, test_db_session
     ):
         """Config changes via PUT should be persisted in database."""
-        from store.config_service import ConfigService
+        from store.store.config_service import ConfigService
 
         # Clear cache before test
         ConfigService._cache.clear()

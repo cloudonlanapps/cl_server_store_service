@@ -7,9 +7,11 @@ from argparse import ArgumentParser, Namespace
 
 import uvicorn
 
-from .media_metadata import validate_tools
-from .config import StoreConfig
-from . import database
+from .common import versioning  # CRITICAL: Import versioning before database or models
+from .common import database
+from .store.media_metadata import validate_tools
+from .store.config import StoreConfig
+from .intelligence.logic.pysdk_config import PySDKRuntimeConfig
 
 from loguru import logger
 
@@ -121,16 +123,26 @@ def main() -> int:
 
     args = parser.parse_args(namespace=Args())
     
-    # Create StoreConfig
+    # Create Configurations
     config = StoreConfig.from_cli_args(args)
+    pysdk_config = PySDKRuntimeConfig(
+        auth_service_url=args.auth_url,
+        compute_service_url=args.compute_url,
+        compute_username=args.compute_username,
+        compute_password=args.compute_password,
+        qdrant_url=args.qdrant_url,
+        qdrant_collection_name=args.qdrant_collection,
+        face_store_collection_name=args.face_collection,
+        face_embedding_threshold=args.face_threshold,
+    )
 
     # Initialize Database
-    
     database.init_db(config)
     
-    # Import app and set config
-    from .store import app
+    # Import app and set configs
+    from .store.store import app
     app.state.config = config
+    app.state.pysdk_config = pysdk_config
     
     # Validate required tools before starting server
     try:

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from .database import get_db
 
 if TYPE_CHECKING:
-    from .config import StoreConfig
+    from ..store.config import StoreConfig
 
 # ─────────────────────────────────────
 # Permissions
@@ -176,7 +176,7 @@ def require_permission(permission: Permission):
             return current_user
 
         if permission == "media_store_read":
-            from .config_service import ConfigService
+            from ..store.config_service import ConfigService
 
             if not ConfigService(db).get_read_auth_enabled():
                 return current_user

@@ -6,7 +6,7 @@ They verify that the dependency injection works correctly with real services.
 
 import pytest
 
-from store.schemas import Item
+from store.common.schemas import Item
 
 # Use the standard client fixture from conftest.py which already tests real dependency injection
 
@@ -26,7 +26,7 @@ class TestDependencyInjection:
         If get_db() is broken, this will return 500 with:
         AttributeError: 'generator' object has no attribute 'query'
         """
-        from store.schemas import Item
+        from store.common.schemas import Item
 
         # Create a collection entity (doesn't require file upload)
         response = client.post(
@@ -51,7 +51,7 @@ class TestDependencyInjection:
 
     def test_entity_retrieval_works(self, client):
         """Test entity retrieval with real dependency injection."""
-        from store.schemas import Item
+        from store.common.schemas import Item
 
         # Create entity first
         create_response = client.post(

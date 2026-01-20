@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from cl_ml_tools.algorithms import MediaType
 
-from store.media_metadata import MediaMetadataExtractor, validate_tools
+from store.store.media_metadata import MediaMetadataExtractor, validate_tools
 
 
 class TestToolValidation:
@@ -14,14 +14,14 @@ class TestToolValidation:
 
     def test_exiftool_missing(self):
         """Test validation fails when ExifTool is missing."""
-        with patch("store.media_metadata.MetadataExtractor") as MockExtractor:
+        with patch("store.store.media_metadata.MetadataExtractor") as MockExtractor:
             MockExtractor.return_value.is_exiftool_available.return_value = False
             with pytest.raises(RuntimeError, match="ExifTool not installed"):
                 validate_tools()
 
     def test_ffprobe_missing(self):
         """Test validation fails when ffprobe is missing."""
-        with patch("store.media_metadata.MetadataExtractor") as MockExtractor:
+        with patch("store.store.media_metadata.MetadataExtractor") as MockExtractor:
             MockExtractor.return_value.is_exiftool_available.return_value = True
             with patch("subprocess.run") as mock_run:
                 mock_run.side_effect = FileNotFoundError
@@ -30,7 +30,7 @@ class TestToolValidation:
 
     def test_ffprobe_error(self):
         """Test validation fails when ffprobe checks fails."""
-        with patch("store.media_metadata.MetadataExtractor") as MockExtractor:
+        with patch("store.store.media_metadata.MetadataExtractor") as MockExtractor:
             MockExtractor.return_value.is_exiftool_available.return_value = True
             with patch("subprocess.run") as mock_run:
                 mock_run.side_effect = subprocess.CalledProcessError(1, ["ffprobe"])
@@ -47,16 +47,16 @@ class TestMimeAndExtension:
 
     def test_mime_determination_failure(self, extractor):
         """Test failure when MIME type cannot be determined."""
-        with patch("store.media_metadata.determine_mime") as mock_determine:
+        with patch("store.store.media_metadata.determine_mime") as mock_determine:
             mock_determine.side_effect = Exception("Unknown format")
             with pytest.raises(ValueError, match="Failed to determine MIME type"):
                 extractor.extract_metadata(b"invalid data", "test.files")
 
     def test_magic_mime_fallback(self, extractor):
         """Test fallback when python-magic returns None."""
-        with patch("store.media_metadata.determine_mime") as mock_determine:
+        with patch("store.store.media_metadata.determine_mime") as mock_determine:
             mock_determine.return_value = MediaType.IMAGE
-            with patch("store.media_metadata.get_md5_hexdigest") as mock_md5:
+            with patch("store.store.media_metadata.get_md5_hexdigest") as mock_md5:
                 mock_md5.return_value = "a" * 32
                 # Mock magic to return empty string
                 with patch("magic.Magic") as MockMagic:
@@ -90,7 +90,7 @@ class TestMimeAndExtension:
 
     def test_determine_extension_failure(self, extractor):
         """Test error propogation during extraction."""
-        with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
+        with patch("store.store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch("magic.Magic") as MockMagic:
             MockMagic.return_value.from_buffer.return_value = "image/jpeg"
 
@@ -112,27 +112,27 @@ class TestHashComputation:
 
     def test_image_hash_failure(self, extractor):
         """Test failure during image hashing."""
-        with patch("store.media_metadata.sha512hash_image", side_effect=Exception("Hash fail")):
+        with patch("store.store.media_metadata.sha512hash_image", side_effect=Exception("Hash fail")):
             with pytest.raises(RuntimeError, match="Hash computation failed"):
                 extractor._compute_hash(b"data", MediaType.IMAGE)
 
     def test_video_hash_failure(self, extractor):
         """Test failure during video hashing."""
-        with patch("store.media_metadata.sha512hash_video2", side_effect=Exception("Hash fail")):
+        with patch("store.store.media_metadata.sha512hash_video2", side_effect=Exception("Hash fail")):
             with pytest.raises(RuntimeError, match="Hash computation failed"):
                 extractor._compute_hash(b"data", MediaType.VIDEO)
 
     def test_generic_hash_failure(self, extractor):
         """Test failure during generic hashing."""
-        with patch("store.media_metadata.get_md5_hexdigest", side_effect=Exception("Hash fail")):
+        with patch("store.store.media_metadata.get_md5_hexdigest", side_effect=Exception("Hash fail")):
             with pytest.raises(RuntimeError, match="Hash computation failed"):
                 extractor._compute_hash(b"data", MediaType.FILE)
 
     def test_hash_routing(self, extractor):
         """Verify correct hash function is called based on media type."""
-        with patch("store.media_metadata.sha512hash_image", return_value=("imghash", 1)) as mock_img, \
-             patch("store.media_metadata.sha512hash_video2", return_value=("vidhash", 1)) as mock_vid, \
-             patch("store.media_metadata.get_md5_hexdigest", return_value="md5hash") as mock_md5:
+        with patch("store.store.media_metadata.sha512hash_image", return_value=("imghash", 1)) as mock_img, \
+             patch("store.store.media_metadata.sha512hash_video2", return_value=("vidhash", 1)) as mock_vid, \
+             patch("store.store.media_metadata.get_md5_hexdigest", return_value="md5hash") as mock_md5:
 
             assert extractor._compute_hash(b"img", MediaType.IMAGE) == "imghash"
             mock_img.assert_called_once()
@@ -145,7 +145,7 @@ class TestHashComputation:
 
     def test_extract_metadata_hash_failure(self, extractor):
         """Test extract_metadata fails when hash computation fails."""
-        with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
+        with patch("store.store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch.object(extractor, "_compute_hash", side_effect=RuntimeError("Hash fail")):
              with pytest.raises(RuntimeError, match="Hash computation failed"):
                  extractor.extract_metadata(b"data", "test.jpg")
@@ -161,7 +161,7 @@ class TestExifExtraction:
     def test_exif_failure_handled_gracefully(self, extractor):
         """Test that EXIF failure results in None for fields but success overall."""
         # Setup basic strict mocks for previous steps
-        with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
+        with patch("store.store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32):
 
@@ -181,7 +181,7 @@ class TestExifExtraction:
         """Test parsing of invalid date format."""
         exif_data = {"EXIF:CreateDate": "Invalid Date String"}
 
-        with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
+        with patch("store.store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
@@ -200,7 +200,7 @@ class TestExifExtraction:
             "File:ImageHeight": 200.5 # Should handle float? code uses int()
         }
 
-        with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
+        with patch("store.store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
@@ -218,7 +218,7 @@ class TestExifExtraction:
         """Test parsing of duration from EXIF."""
         exif_data = {"QuickTime:Duration": "15.5"}
 
-        with patch("store.media_metadata.determine_mime", return_value=MediaType.VIDEO), \
+        with patch("store.store.media_metadata.determine_mime", return_value=MediaType.VIDEO), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
@@ -233,7 +233,7 @@ class TestExifExtraction:
         """Test parsing of valid CreateDate from EXIF."""
         exif_data = {"EXIF:CreateDate": "2023:01:01 12:00:00"}
 
-        with patch("store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
+        with patch("store.store.media_metadata.determine_mime", return_value=MediaType.IMAGE), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
@@ -254,7 +254,7 @@ class TestExifExtraction:
 
     def test_video_duration_fallback(self, extractor):
         """Test video duration fallback when EXIF missing."""
-        with patch("store.media_metadata.determine_mime", return_value=MediaType.VIDEO), \
+        with patch("store.store.media_metadata.determine_mime", return_value=MediaType.VIDEO), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \
@@ -320,7 +320,7 @@ class TestVideoDuration:
 
     def test_extract_metadata_duration_exception(self, extractor):
         """Test extract_metadata handles exception from _extract_video_duration."""
-        with patch("store.media_metadata.determine_mime", return_value=MediaType.VIDEO), \
+        with patch("store.store.media_metadata.determine_mime", return_value=MediaType.VIDEO), \
              patch("magic.Magic") as MockMagic, \
              patch.object(extractor, "_compute_hash", return_value="a" * 32), \
              patch("tempfile.NamedTemporaryFile"), \

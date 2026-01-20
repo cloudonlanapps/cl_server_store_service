@@ -57,7 +57,7 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_correct_permission(self):
         """User with the required permission should be allowed."""
-        from store.auth import UserPayload, require_permission
+        from store.common.auth import UserPayload, require_permission
 
         # Mock user with write permission
         user = UserPayload(
@@ -74,7 +74,7 @@ class TestAuthenticationLogic:
 
     def test_require_permission_allows_admin(self):
         """Admin user should be allowed even without specific permission."""
-        from store.auth import UserPayload, require_permission
+        from store.common.auth import UserPayload, require_permission
 
         user = UserPayload(id="admin", permissions=[], is_admin=True)
 
@@ -86,7 +86,7 @@ class TestAuthenticationLogic:
 
     def test_require_permission_rejects_wrong_permission(self):
         """User with only read permission should be rejected when write is required."""
-        from store.auth import UserPayload, require_permission
+        from store.common.auth import UserPayload, require_permission
 
         user = UserPayload(
             id="testuser",
@@ -104,7 +104,7 @@ class TestAuthenticationLogic:
 
     def test_require_permission_rejects_none_user(self):
         """None user (no auth) should be rejected when auth is not disabled."""
-        from store.auth import require_permission
+        from store.common.auth import require_permission
 
         request = self._create_mock_request(auth_disabled=False)
         
@@ -118,7 +118,7 @@ class TestAuthenticationLogic:
         """User with media_store_read permission should be allowed."""
         from unittest.mock import MagicMock, patch
 
-        from store.auth import UserPayload, require_permission
+        from store.common.auth import UserPayload, require_permission
 
         user = UserPayload(
             id="testuser",
@@ -130,7 +130,7 @@ class TestAuthenticationLogic:
 
         # Mock ConfigService to return True for read_auth_enabled
         # This ensures the permission check proceeds normally
-        with patch("store.config_service.ConfigService") as mock_config_service_class:
+        with patch("store.store.config_service.ConfigService") as mock_config_service_class:
             mock_config_service = MagicMock()
             mock_config_service.get_read_auth_enabled.return_value = True
             mock_config_service_class.return_value = mock_config_service
@@ -141,7 +141,7 @@ class TestAuthenticationLogic:
 
     def test_require_admin_allows_admin_user(self):
         """Admin user should be allowed by require_admin."""
-        from store.auth import UserPayload, require_admin
+        from store.common.auth import UserPayload, require_admin
 
         user = UserPayload(id="admin", permissions=[], is_admin=True)
         request = self._create_mock_request(auth_disabled=False)
@@ -151,7 +151,7 @@ class TestAuthenticationLogic:
 
     def test_require_admin_rejects_non_admin(self):
         """Non-admin user should be rejected by require_admin."""
-        from store.auth import UserPayload, require_admin
+        from store.common.auth import UserPayload, require_admin
 
         user = UserPayload(
             id="testuser",
@@ -171,7 +171,7 @@ class TestAuthenticationModes:
 
     def test_demo_mode_bypasses_permission_check(self):
         """When auth_disabled=true, permission checks should be bypassed."""
-        from store.auth import require_permission
+        from store.common.auth import require_permission
 
         # Mock request with auth_disabled=True
         request = MagicMock()
@@ -185,7 +185,7 @@ class TestAuthenticationModes:
 
     def test_demo_mode_bypasses_admin_check(self):
         """When auth_disabled=true, admin checks should be bypassed."""
-        from store.auth import require_admin
+        from store.common.auth import require_admin
 
         # Mock request with auth_disabled=True
         request = MagicMock()
