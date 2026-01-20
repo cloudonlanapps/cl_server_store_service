@@ -61,6 +61,26 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+@pytest.fixture(autouse=True, scope="function")
+def cleanup_auth_cache():
+    """Clean auth module cache before and after each test."""
+    import sys
+    if "store.common.auth" in sys.modules:
+        auth_module = sys.modules["store.common.auth"]
+        if hasattr(auth_module, '_public_key_cache'):
+            auth_module._public_key_cache = None
+        if hasattr(auth_module, '_public_key_load_attempts'):
+            auth_module._public_key_load_attempts = 0
+    yield
+    # Cleanup after test
+    if "store.common.auth" in sys.modules:
+        auth_module = sys.modules["store.common.auth"]
+        if hasattr(auth_module, '_public_key_cache'):
+            auth_module._public_key_cache = None
+        if hasattr(auth_module, '_public_key_load_attempts'):
+            auth_module._public_key_load_attempts = 0
+
+
 # ============================================================================
 # SESSION FIXTURES
 # ============================================================================
@@ -224,11 +244,6 @@ def client(
     from store.common.database import get_db
     from store.store.store import app
 
-    # Clear any cached auth keys
-    if "store.common.auth" in sys.modules:
-        sys.modules["store.common.auth"]._public_key_cache = None
-        sys.modules["store.common.auth"]._public_key_load_attempts = 0
-
     app.dependency_overrides[get_db] = override_get_db
 
     # Override auth dependency to bypass authentication in tests
@@ -257,8 +272,10 @@ def client(
     with TestClient(app) as test_client:
         yield test_client
 
-    # Cleanup
+    # Enhanced cleanup
     app.dependency_overrides.clear()
+    if hasattr(app, 'state') and hasattr(app.state, 'config'):
+        delattr(app.state, 'config')
 
 
 @pytest.fixture(scope="function")
@@ -296,11 +313,6 @@ def auth_client(
     from store.common.database import get_db
     from store.store.store import app
 
-    # Clear cached auth keys
-    if "store.common.auth" in sys.modules:
-        sys.modules["store.common.auth"]._public_key_cache = None
-        sys.modules["store.common.auth"]._public_key_load_attempts = 0
-
     # Clear any existing auth override
     if get_current_user in app.dependency_overrides:
         del app.dependency_overrides[get_current_user]
@@ -323,12 +335,10 @@ def auth_client(
     with TestClient(app) as test_client:
         yield test_client
 
-    # Cleanup
-    if "store.common.auth" in sys.modules:
-        sys.modules["store.common.auth"]._public_key_cache = None
-        sys.modules["store.common.auth"]._public_key_load_attempts = 0
-
+    # Enhanced cleanup
     app.dependency_overrides.clear()
+    if hasattr(app, 'state') and hasattr(app.state, 'config'):
+        delattr(app.state, 'config')
 
 
 # ============================================================================

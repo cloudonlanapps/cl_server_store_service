@@ -7,6 +7,7 @@ This module provides centralized configuration for all tests, including:
 - Configuration constants
 """
 
+import os
 from pathlib import Path
 
 # Get the absolute path to the tests directory
@@ -23,7 +24,7 @@ TEST_FILES_LIST = TESTS_DIR / "test_files.txt"
 
 # Test artifacts directory (outside media_store to keep project clean)
 TEST_ARTIFACTS_DIR = MEDIA_STORE_DIR.parent / "test_artifacts" / "media_store"
-TEST_DATA_DIR = TEST_ARTIFACTS_DIR / "data"
+TEST_DATA_DIR = Path(os.getenv("TEST_ARTIFACT_DIR", "/tmp/cl_server_test_artifacts")) / "store" / "data"
 
 
 def load_test_files() -> list[Path]:
