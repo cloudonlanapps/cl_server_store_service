@@ -410,10 +410,10 @@ class EntityService:
                 return self._entity_to_item(duplicate)
 
             # Save file to storage (convert Pydantic model to dict for storage)
-            logger.error(f"{filename} is sent for saving with metadata {file_meta.model_dump()}")
+            logger.debug(f"{filename} is sent for saving with metadata {file_meta.model_dump()}")
             file_path = self.file_storage.save_file(image, file_meta.model_dump(), filename)
-            logger.error(f"filepath received: {file_path}")
-            logger.error(self.file_storage.base_dir)
+            logger.debug(f"filepath received: {file_path}")
+            logger.debug(self.file_storage.base_dir)
 
         # Extract metadata values from Pydantic model (or None for collections)
         if file_meta:

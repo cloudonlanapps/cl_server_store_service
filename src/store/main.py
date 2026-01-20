@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sys
 from argparse import ArgumentParser, Namespace
+from typing import Optional
 
 import uvicorn
 
@@ -22,7 +23,8 @@ class Args(Namespace):
     log_level: str
     no_auth: bool
     no_migrate: bool
-    # PySDK configuration (REMOVED)
+    mqtt_server: str
+    mqtt_port: Optional[int]
 
     def __init__(
         self,
@@ -33,6 +35,8 @@ class Args(Namespace):
         log_level: str = "info",
         no_auth: bool = False,
         no_migrate: bool = False,
+        mqtt_server: str = "localhost",
+        mqtt_port: Optional[int] = None,
     ) -> None:
         super().__init__()
         self.host = host
@@ -42,6 +46,8 @@ class Args(Namespace):
         self.log_level = log_level
         self.no_auth = no_auth
         self.no_migrate = no_migrate
+        self.mqtt_server = mqtt_server
+        self.mqtt_port = mqtt_port
 
 
 def main() -> int:
@@ -56,6 +62,12 @@ def main() -> int:
         "--port", "-p", type=int, default=8001
     )
     _ = parser.add_argument("--host", default="0.0.0.0")
+    _ = parser.add_argument(
+        "--mqtt-server", default="localhost", help="MQTT broker host"
+    )
+    _ = parser.add_argument(
+        "--mqtt-port", type=int, default=None, help="MQTT broker port. Enabling this will enable MQTT broadcasting."
+    )
     _ = parser.add_argument(
         "--reload", action="store_true", help="Enable uvicorn reload (dev)"
     )

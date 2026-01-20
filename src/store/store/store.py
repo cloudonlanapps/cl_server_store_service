@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from sqlalchemy.orm import configure_mappers
 
+from cl_ml_tools import get_broadcaster
 from .routes import router
 
 # Configure mappers after all models are imported (required for versioning)
@@ -29,6 +30,22 @@ async def lifespan(app: FastAPI):
     else:
         # Fallback for dev/test if config not injected
         logger.warning("No config found in app.state.config. Using default.")
+
+    # Initialize MQTT Broadcaster
+    config = getattr(app.state, "config", None)
+    if config:
+        # If mqtt_port is None, get_broadcaster returns NoOpBroadcaster by default if we don't pass broker
+        # But we want to be explicit.
+        broadcast_type = "mqtt" if config.mqtt_port else "none"
+        app.state.broadcaster = get_broadcaster(
+            broadcast_type=broadcast_type,
+            broker=config.mqtt_broker,
+            port=config.mqtt_port,
+        )
+        logger.info(f"MQTT Broadcaster initialized (type={broadcast_type})")
+    else:
+        app.state.broadcaster = get_broadcaster(broadcast_type="none")
+        logger.warning("MQTT Broadcaster initialized as No-Op due to missing config")
 
     logger.info("Store service initialized")
 

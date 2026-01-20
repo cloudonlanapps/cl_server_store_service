@@ -15,7 +15,10 @@ from fastapi import (
     UploadFile,
     status,
 )
+import json
+import time
 from pydantic import BaseModel
+from loguru import logger
 from sqlalchemy.orm import Session
 
 from . import config_service as cfg_service
@@ -134,6 +137,18 @@ async def create_entity(
     try:
         item = service.create_entity(body, file_bytes, filename, user_id)
 
+        # Broadcast MQTT event after successful creation and file save
+        broadcaster = getattr(request.app.state, "broadcaster", None)
+        if broadcaster and item.md5:
+            topic = f"store/{config.server_port}/items"
+            payload = {
+                "id": item.id,
+                "md5": item.md5,
+                "timestamp": int(time.time() * 1000)
+            }
+            broadcaster.publish_event(topic=topic, payload=json.dumps(payload))
+            logger.info(f"Broadcasted creation event for item {item.id} on {topic}")
+
         # Trigger async jobs for images (NON-BLOCKING)
     
         return item
@@ -246,7 +261,18 @@ async def put_entity(
         if not item:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
 
-
+        # Broadcast MQTT event after successful update and file save
+        # Note: Broadcaster only emits if a file was actually updated (item.md5 is not None for media)
+        broadcaster = getattr(request.app.state, "broadcaster", None)
+        if broadcaster and item.md5 and image:
+            topic = f"store/{config.server_port}/items"
+            payload = {
+                "id": item.id,
+                "md5": item.md5,
+                "timestamp": int(time.time() * 1000)
+            }
+            broadcaster.publish_event(topic=topic, payload=json.dumps(payload))
+            logger.info(f"Broadcasted update event for item {item.id} on {topic}")
 
         return item
     except ValueError as e:

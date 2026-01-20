@@ -1,6 +1,8 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
+
 from ..common.utils import ensure_cl_server_dir
 
 
@@ -13,6 +15,10 @@ class StoreConfig:
     media_storage_dir: Path
     public_key_path: Path
     auth_disabled: bool
+    
+    server_port: int
+    mqtt_broker: str = "localhost"
+    mqtt_port: Optional[int] = None
 
     @classmethod
     def from_cli_args(cls, args) -> "StoreConfig":
@@ -24,4 +30,7 @@ class StoreConfig:
             media_storage_dir=cl_dir / "media",
             public_key_path=cl_dir / "keys" / "public_key.pem",
             auth_disabled=args.no_auth,
+            server_port=args.port,
+            mqtt_broker=getattr(args, "mqtt_server", "localhost"),
+            mqtt_port=getattr(args, "mqtt_port", None),
         )

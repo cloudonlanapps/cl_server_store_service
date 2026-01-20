@@ -38,6 +38,8 @@ class IntegrationConfig(BaseModel):
     # Kept for backward compat in test calls, but values might be empty strings
     username: str
     password: str
+    mqtt_server: str = "localhost"
+    mqtt_port: int | None = None
 
 
 # ============================================================================
@@ -58,6 +60,19 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store",
         default=None,
         help="Password for integration tests"
+    )
+    parser.addoption(
+        "--mqtt-server",
+        action="store",
+        default="localhost",
+        help="MQTT server for integration tests"
+    )
+    parser.addoption(
+        "--mqtt-port",
+        action="store",
+        type=int,
+        default=None,
+        help="MQTT port for integration tests"
     )
 
 
@@ -92,39 +107,16 @@ def integration_config(request: pytest.FixtureRequest) -> IntegrationConfig:
 
     Fails if required options not provided.
     """
-    auth_url = request.config.getoption("--auth-url")
-    compute_url = request.config.getoption("--compute-url")
-    qdrant_url = request.config.getoption("--qdrant-url")
     username = request.config.getoption("--username")
     password = request.config.getoption("--password")
-
-@pytest.fixture(scope="session")
-def integration_config(request: pytest.FixtureRequest) -> IntegrationConfig:
-    """Parse CLI arguments into integration config.
-
-    Fails if required options not provided.
-    """
-    username = request.config.getoption("--username")
-    password = request.config.getoption("--password")
-
-    # Only username/password are strictly required if auth is enabled
-    # But for tests we might want to enforce them? 
-    # Let's keep existing logic but removed URLs logic
-    
-    if not all([username, password]):
-         # If auth is disabled, maybe we don't need them? 
-         # But let's assume tests run against default auth enabled setup or we mock it.
-         pass
-         # Actually, looking at original code, it enforced all.
-         # We'll just enforce these two if we want to valid config.
+    mqtt_server = request.config.getoption("--mqtt-server")
+    mqtt_port = request.config.getoption("--mqtt-port")
 
     return IntegrationConfig(
-        auth_url="", # Placeholder if needed, or remove field from IntegrationConfig model too?
-                     # Ideally remove from model. Let me check IntegrationConfig definition above.
-        compute_url="",
-        qdrant_url="",
         username=str(username) if username else "admin",
         password=str(password) if password else "admin",
+        mqtt_server=str(mqtt_server),
+        mqtt_port=mqtt_port,
     )
 
 
@@ -262,10 +254,12 @@ def client(
     
     store_config = StoreConfig(
         cl_server_dir=clean_data_dir,
-
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         auth_disabled=False,
+        server_port=8001,
+        mqtt_broker=integration_config.mqtt_server,
+        mqtt_port=integration_config.mqtt_port,
     )
     app.state.config = store_config
 
@@ -324,10 +318,12 @@ def auth_client(
     
     store_config = StoreConfig(
         cl_server_dir=clean_data_dir,
-
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         auth_disabled=False,
+        server_port=8001,
+        mqtt_broker=integration_config.mqtt_server,
+        mqtt_port=integration_config.mqtt_port,
     )
     app.state.config = store_config
 
