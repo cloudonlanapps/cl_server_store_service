@@ -20,13 +20,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add image_path and version columns to image_intelligence table."""
-    # Add new columns
+    # SQLite doesn't support ALTER COLUMN, so we just add columns with defaults
+    # The defaults will be used for any existing rows
     op.add_column('image_intelligence', sa.Column('image_path', sa.Text(), nullable=False, server_default=''))
     op.add_column('image_intelligence', sa.Column('version', sa.Integer(), nullable=False, server_default='0'))
-    
-    # Remove server defaults after adding columns
-    op.alter_column('image_intelligence', 'image_path', server_default=None)
-    op.alter_column('image_intelligence', 'version', server_default=None)
 
 
 def downgrade() -> None:
