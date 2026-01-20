@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .config import StoreConfig
 
-from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -19,13 +18,7 @@ from ..common.schemas import (
     BodyCreateEntity,
     BodyPatchEntity,
     BodyUpdateEntity,
-    EntityJobResponse,
-    FaceMatchResult,
-    FaceResponse,
     Item,
-    KnownPersonResponse,
-    SimilarFacesResult,
-    SimilarImageResult,
 )
 
 
@@ -649,25 +642,7 @@ class EntityService:
                 "Delete or move the children first."
             )
 
-        # 1. Clean up vector stores BEFORE deleting database records
-        from ..intelligence.logic.face_store_singleton import get_face_store
-        from ..common.models import Face
-        from ..intelligence.logic.compute_singleton import get_pysdk_config
-        from ..intelligence.logic.qdrant_singleton import get_qdrant_store
-
-        # Remove CLIP embedding
-        qdrant_store = get_qdrant_store()
-        qdrant_store.delete_vector(entity_id)
-
-        # Remove all face embeddings
-        faces = self.db.query(Face).filter(Face.entity_id == entity_id).all()
-        if faces:
-            pysdk_config = get_pysdk_config()
-            face_store = get_face_store(pysdk_config)
-            for face in faces:
-                face_store.delete_vector(face.id)
-
-        # 2. Hard delete: remove file and database record
+        # 1. Hard delete: remove file and database record
         if entity.file_path:
             _ = self.file_storage.delete_file(entity.file_path)
 
@@ -678,30 +653,11 @@ class EntityService:
 
 
     def delete_all_entities(self) -> None:
-        """Delete all entities from the database and clear vector stores."""
+        """Delete all entities from the database."""
         # This is a dangerous operation, mostly for tests/demo
-        from ..intelligence.logic.face_store_singleton import get_face_store
-        from ..intelligence.logic.compute_singleton import get_pysdk_config
-        from ..intelligence.logic.qdrant_singleton import get_qdrant_store
-        from ..common.models import Entity, KnownPerson
+        from ..common.models import Entity
         
-        # 1. Clear Qdrant collections
-        try:
-            qdrant_store = get_qdrant_store()
-            qdrant_store.delete_all_vectors()
-        except Exception as e:
-            logger.error(f"Failed to clear Qdrant image store: {e}")
-
-        try:
-            pysdk_config = get_pysdk_config()
-            face_store = get_face_store(pysdk_config)
-            face_store.delete_all_vectors()
-        except Exception as e:
-            logger.error(f"Failed to clear Qdrant face store: {e}")
-
-        # 2. Delete all records from database
-        # Note: Face and EntityJob are handled by CASCADE from Entity
-        _ = self.db.query(KnownPerson).delete()
+        # 1. Delete all records from database
         _ = self.db.query(Entity).delete()
         _ = self.db.commit()
 
