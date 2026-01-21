@@ -77,6 +77,8 @@ def create_db_engine(
         db_url,
         connect_args={"check_same_thread": False},
         echo=echo,
+        pool_size=20,
+        max_overflow=40,
     )
 
     # Register WAL mode listener for SQLite
