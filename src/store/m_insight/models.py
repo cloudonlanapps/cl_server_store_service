@@ -101,4 +101,34 @@ class ImageIntelligence(Base):
         return f"<ImageIntelligence(image_id={self.image_id}, md5={self.md5}, status={self.status}, version={self.version})>"
 
 
-__all__ = ["EntitySyncState", "ImageIntelligence", "EntityVersionData"]
+
+class MInsightStartPayload(BaseModel):
+    """Payload for mInsight/start topic."""
+    
+    version_start: int
+    version_end: int
+    timestamp: int
+
+
+class MInsightStopPayload(BaseModel):
+    """Payload for mInsight/stop topic."""
+    
+    processed_count: int
+    timestamp: int
+
+
+class MInsightStatusPayload(BaseModel):
+    """Payload for mInsight status heartbeat."""
+    
+    status: str
+    timestamp: int
+
+
+__all__ = [
+    "EntitySyncState", 
+    "ImageIntelligence", 
+    "EntityVersionData",
+    "MInsightStartPayload",
+    "MInsightStopPayload",
+    "MInsightStatusPayload",
+]

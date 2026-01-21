@@ -18,8 +18,10 @@ from ..common.schemas import (
     BodyCreateEntity,
     BodyPatchEntity,
     BodyUpdateEntity,
+    BodyUpdateEntity,
     Item,
 )
+from ..m_insight.models import ImageIntelligence
 
 
 class DuplicateFileError(Exception):
@@ -181,7 +183,9 @@ class EntityService:
 
         return False
 
-    def _entity_to_item(self, entity: Entity) -> Item:
+    def _entity_to_item(
+        self, entity: Entity, intelligence_status: str | None = None
+    ) -> Item:
         """
         Convert SQLAlchemy Entity to Pydantic Item schema.
 
@@ -213,6 +217,7 @@ class EntityService:
             file_path=entity.file_path,
             is_deleted=entity.is_deleted,
             is_indirectly_deleted=self._check_ancestor_deleted(entity),
+            intelligence_status=intelligence_status,
         )
 
     def get_entities(
@@ -238,14 +243,16 @@ class EntityService:
         Returns:
             Tuple of (items, total_count)
         """
-        query = self.db.query(Entity)
+        # Join with ImageIntelligence to get status
+        query = self.db.query(Entity, ImageIntelligence.status).outerjoin(
+            ImageIntelligence, Entity.id == ImageIntelligence.image_id
+        )
 
         # Apply deleted filter
         if exclude_deleted:
             query = query.filter(Entity.is_deleted == False)  # noqa: E712
 
         # TODO: Implement filtering and search logic
-        # For now, return all entities
 
         # Get total count before pagination
         total_count = query.count()
@@ -254,17 +261,19 @@ class EntityService:
         offset = (page - 1) * page_size
         query = query.order_by(Entity.id.asc()).offset(offset).limit(page_size)
 
-        entities = query.all()
+        results = query.all()
 
         # If version is specified, get that version of each entity
         if version is not None:
             items: list[Item] = []
-            for entity in entities:
+            for entity, _ in results:
                 versioned_item = self.get_entity_version(entity.id, version)
                 if versioned_item:  # Only include if version exists
                     items.append(versioned_item)
         else:
-            items = [self._entity_to_item(entity) for entity in entities]
+            items: list[Item] = []
+            for entity, status in results:
+                items.append(self._entity_to_item(entity, intelligence_status=status))
 
         return items, total_count
 
@@ -282,9 +291,16 @@ class EntityService:
         if version is not None:
             return self.get_entity_version(entity_id, version)
 
-        entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
-        if entity:
-            return self._entity_to_item(entity)
+        result = (
+            self.db.query(Entity, ImageIntelligence.status)
+            .outerjoin(ImageIntelligence, Entity.id == ImageIntelligence.image_id)
+            .filter(Entity.id == entity_id)
+            .first()
+        )
+        
+        if result:
+            entity, status = result
+            return self._entity_to_item(entity, intelligence_status=status)
         return None
 
     def get_entity_version(self, entity_id: int, version: int) -> Item | None:

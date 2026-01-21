@@ -57,6 +57,11 @@ class Item(BaseModel):
         title="Is Indirectly Deleted",
         description="True if any ancestor in the parent chain is soft-deleted",
     )
+    intelligence_status: str | None = Field(
+        None,
+        title="Intelligence Status",
+        description="Status of image intelligence processing (queued, processing, completed, failed)",
+    )
 
 
 class PaginationMetadata(BaseModel):

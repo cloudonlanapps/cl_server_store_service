@@ -508,3 +508,21 @@ async def root(db: Session = Depends(get_db)):
     )
 
 
+@router.get(
+    "/m_insight/status",
+    tags=["admin"],
+    summary="Get MInsight Status",
+    description="Get current status of MInsight processes.",
+    operation_id="get_m_insight_status",
+)
+async def get_m_insight_status(request: Request) -> dict:
+    """Get MInsight process status."""
+    if hasattr(request.app.state, "monitor"):
+        return request.app.state.monitor.get_status()
+    # Logic to return default/offline status if monitor is not present (e.g. during tests)
+    # The monitor is initialized in lifespan, but if mqtt_port is None, it might be running but disconnected?
+    # Actually monitor.start() checks mqtt_port. 
+    # If monitor is present but empty, it returns {}.
+    return {}
+
+

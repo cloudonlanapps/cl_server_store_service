@@ -31,13 +31,15 @@ class mInsight:
     """ Processor that handles image intelligence.
     """
 
-    def __init__(self, config: MInsightConfig):
+    def __init__(self, config: MInsightConfig, broadcaster=None):
         """Initialize m_insight processor.
         
         Args:
             config: Processor configuration
+            broadcaster: Optional MInsightBroadcaster for event publishing
         """
         self.config: MInsightConfig = config
+        self.broadcaster = broadcaster
         
         # Verify database is initialized
         if not database.SessionLocal:
@@ -291,6 +293,9 @@ class mInsight:
             default=last_version
         )
         
+        if self.broadcaster:
+             self.broadcaster.publish_start(version_start=last_version, version_end=max_transaction_id)
+        
         # Atomic write: Update last version BEFORE processing (restart safety)
         self._update_last_version(max_transaction_id)
         logger.debug(f"Advanced version to {max_transaction_id}")
@@ -301,6 +306,9 @@ class mInsight:
             if self.process(entity_version):
                 processed_count += 1
         
+        if self.broadcaster:
+            self.broadcaster.publish_end(processed_count=processed_count)
+
         logger.info(f"Reconciliation complete: processed {processed_count} images")
         return processed_count
 

@@ -25,6 +25,74 @@ shutdown_event = asyncio.Event()
 shutdown_signal_count = 0
 
 
+class MInsightBroadcaster:
+    """Manages MQTT broadcasting for mInsight process."""
+
+    def __init__(self, config):
+        self.config = config
+        self.broadcaster = None
+        self.port = config.server_port  # Assuming server_port is relevant for ID
+        # User requested: mInsight/<port>/started etc.
+        # But wait, config.server_port is 8001 by default.
+        self.topic_base = f"mInsight/{self.port}"
+    
+    def init(self):
+        """Initialize broadcaster."""
+        if not self.config.mqtt_port:
+            return
+
+        from cl_ml_tools import get_broadcaster
+        self.broadcaster = get_broadcaster(
+            broadcast_type="mqtt",
+            broker=self.config.mqtt_broker,
+            port=self.config.mqtt_port,
+        )
+        
+        # Set LWT
+        if self.broadcaster:
+             # Heartbeat/Status topic
+             status_topic = f"{self.topic_base}/status"
+             # LWT payload
+             lwt_payload = self._create_status_payload("offline").model_dump_json()
+             _ = self.broadcaster.set_will(topic=status_topic, payload=lwt_payload, qos=1, retain=True)
+
+    def _create_status_payload(self, status: str):
+        from .m_insight.models import MInsightStatusPayload
+        import time
+        return MInsightStatusPayload(status=status, timestamp=int(time.time() * 1000))
+
+    def publish_start(self, version_start: int, version_end: int):
+        if not self.broadcaster: return
+        from .m_insight.models import MInsightStartPayload
+        import time
+        
+        topic = f"{self.topic_base}/started"
+        payload = MInsightStartPayload(
+            version_start=version_start,
+            version_end=version_end,
+            timestamp=int(time.time() * 1000)
+        )
+        self.broadcaster.publish_event(topic=topic, payload=payload.model_dump_json())
+
+    def publish_end(self, processed_count: int):
+        if not self.broadcaster: return
+        from .m_insight.models import MInsightStopPayload
+        import time
+        
+        topic = f"{self.topic_base}/ended"
+        payload = MInsightStopPayload(
+            processed_count=processed_count,
+            timestamp=int(time.time() * 1000)
+        )
+        self.broadcaster.publish_event(topic=topic, payload=payload.model_dump_json())
+
+    def publish_status(self, status: str):
+        if not self.broadcaster: return
+        topic = f"{self.topic_base}/status"
+        payload = self._create_status_payload(status)
+        self.broadcaster.publish_retained(topic=topic, payload=payload.model_dump_json(), qos=1)
+
+
 def signal_handler(signum: int, _frame: FrameType | None) -> None:
     """Handle shutdown signals (SIGINT, SIGTERM).
     
@@ -73,6 +141,17 @@ class Args(Namespace):
         self.mqtt_topic = mqtt_topic
 
 
+
+async def heartbeat_task(broadcaster: MInsightBroadcaster):
+    """Periodic heartbeat task."""
+    try:
+        while not shutdown_event.is_set():
+            broadcaster.publish_status("running")
+            await asyncio.sleep(5) # 5 second heartbeat
+    except asyncio.CancelledError:
+        pass
+
+
 async def mqtt_listener_task(config, processor) -> None:
     """Background task to listen for MQTT wake-up signals.
     
@@ -86,6 +165,13 @@ async def mqtt_listener_task(config, processor) -> None:
     
     try:
         from cl_ml_tools import get_broadcaster
+        
+        # Note: We are creating a separate broadcaster/client for listening here 
+        # or we could reuse the one from MInsightBroadcaster if we exposed the client.
+        # cl_ml_tools.get_broadcaster returns a singleton-ish if params match? 
+        # Actually get_broadcaster returns a new instance usually.
+        # For simplicity, let's keep this listener separate or we can refactor.
+        # Given the existing code uses get_broadcaster, let's stick to it.
         
         broadcaster = get_broadcaster(
             broadcast_type="mqtt",
@@ -122,8 +208,12 @@ async def run_loop(config) -> None:
     """
     from .m_insight.worker import mInsight
     
-    # Create processor
-    processor = mInsight(config=config)
+    # Initialize Broadcaster
+    broadcaster = MInsightBroadcaster(config)
+    broadcaster.init()
+    
+    # Create processor with broadcaster
+    processor = mInsight(config=config, broadcaster=broadcaster)
     
     logger.info(f"mInsight process {config.id} starting...")
     
@@ -132,8 +222,10 @@ async def run_loop(config) -> None:
     
     # Start MQTT listener if enabled
     mqtt_task = None
+    hb_task = None
     if config.mqtt_port:
         mqtt_task = asyncio.create_task(mqtt_listener_task(config, processor))
+        hb_task = asyncio.create_task(heartbeat_task(broadcaster))
     
     try:
         # Wait for shutdown signal
@@ -148,6 +240,16 @@ async def run_loop(config) -> None:
                 await mqtt_task
             except asyncio.CancelledError:
                 pass
+                
+        if hb_task:
+            hb_task.cancel()
+            try:
+                await hb_task
+            except asyncio.CancelledError:
+                pass
+            
+            # Final status
+            broadcaster.publish_status("offline")
 
 
 def main() -> int:

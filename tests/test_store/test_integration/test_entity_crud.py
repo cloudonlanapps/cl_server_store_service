@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from store.common.models import Entity
 from store.common.schemas import Item, PaginatedResponse
+from store.m_insight.models import ImageIntelligence
 
 
 class TestEntityCRUD:
@@ -51,6 +52,40 @@ class TestEntityCRUD:
         item = Item.model_validate(get_response.json())
         assert item.id == entity_id
         assert item.label == "Test Entity"
+        assert item.intelligence_status is None  # Default is None
+
+    def test_get_entity_with_intelligence_status(
+        self, client: TestClient, sample_image: Path, test_db_session: Session
+    ) -> None:
+        """Test retrieving entity with populated intelligence status."""
+        # Create entity
+        with open(sample_image, "rb") as f:
+            resp = client.post(
+                "/entities/",
+                files={"image": (sample_image.name, f, "image/jpeg")},
+                data={"is_collection": "false", "label": "Intel Test"}
+            )
+        item = Item.model_validate(resp.json())
+        entity_id = item.id
+        
+        # Manually create intelligence record
+        intel = ImageIntelligence(
+            image_id=entity_id,
+            md5=item.md5,
+            status="completed",
+            image_path="/tmp/fake.jpg",
+            version=1,
+        )
+        test_db_session.add(intel)
+        test_db_session.commit()
+        
+        # Get entity
+        get_response = client.get(f"/entities/{entity_id}")
+        assert get_response.status_code == 200
+        fetched_item = Item.model_validate(get_response.json())
+        
+        # Verify status
+        assert fetched_item.intelligence_status == "completed"
 
     def test_get_all_entities(
         self,

@@ -10,6 +10,7 @@ from sqlalchemy.orm import configure_mappers
 
 from cl_ml_tools import get_broadcaster
 from .routes import router
+from .monitor import MInsightMonitor
 
 # Configure mappers after all models are imported (required for versioning)
 configure_mappers()
@@ -47,12 +48,19 @@ async def lifespan(app: FastAPI):
         app.state.broadcaster = get_broadcaster(broadcast_type="none")
         logger.warning("MQTT Broadcaster initialized as No-Op due to missing config")
 
+    # Initialize MInsight Monitor
+    monitor = MInsightMonitor(config)
+    monitor.start()
+    app.state.monitor = monitor
+
     logger.info("Store service initialized")
 
     try:
         yield  # ---- application runs here ----
     finally:
         # -------- Shutdown --------
+        if hasattr(app.state, "monitor"):
+             app.state.monitor.stop()
         logger.info("Store service shutdown complete")
 
 
