@@ -43,16 +43,29 @@ class EntityJobResponse(BaseModel):
 class SimilarImageResult(BaseModel):
     """Response schema for similar image search result."""
 
-    image_id: int = Field(..., description="Image (Entity) ID of similar image")
-    score: float = Field(..., description="Similarity score [0.0, 1.0]")
-    entity: Item | None = Field(None, description="Entity details (optional)")
+    image_id: int = Field(..., description="Image Entity ID")
+    score: float = Field(..., description="Similarity score (0-1)")
 
 
 class SimilarImagesResponse(BaseModel):
-    """Response schema for similar image search."""
+    """Response schema for similar images search."""
 
+    query_image_id: int = Field(..., description="Query Image Entity ID")
     results: list[SimilarImageResult] = Field(..., description="List of similar images")
-    query_image_id: int = Field(..., description="Query image (entity) ID")
+
+
+class SimilarImageDinoResult(BaseModel):
+    """Response schema for similar image search result using DINO."""
+
+    image_id: int = Field(..., description="Image Entity ID")
+    score: float = Field(..., description="Similarity score (0-1)")
+
+
+class SimilarImagesDinoResponse(BaseModel):
+    """Response schema for similar images search using DINO."""
+
+    query_image_id: int = Field(..., description="Query Image Entity ID")
+    results: list[SimilarImageDinoResult] = Field(..., description="List of similar images")
 
 
 # KnownPerson (face recognition) schemas

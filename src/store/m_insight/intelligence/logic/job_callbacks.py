@@ -29,11 +29,13 @@ class JobCallbackHandler:
 
     compute_client: ComputeClient
     qdrant_store: QdrantImageStore
+    dino_store: QdrantImageStore
 
     def __init__(
         self,
         compute_client: ComputeClient,
         qdrant_store: QdrantImageStore,
+        dino_store: QdrantImageStore,
         config: StoreConfig,
         job_submission_service: JobSubmissionService | None = None,
     ) -> None:
@@ -41,12 +43,14 @@ class JobCallbackHandler:
 
         Args:
             compute_client: ComputeClient for file downloads
-            qdrant_store: QdrantImageStore for embedding storage
+            qdrant_store: QdrantImageStore for CLIP embedding storage
+            dino_store: QdrantImageStore for DINOv2 embedding storage
             config: Store configuration
             job_submission_service: Service for submitting jobs (optional for initialization)
         """
         self.compute_client = compute_client
         self.qdrant_store = qdrant_store
+        self.dino_store = dino_store
         self.config = config
         self.job_submission_service: JobSubmissionService | None = (
             job_submission_service
@@ -408,6 +412,95 @@ class JobCallbackHandler:
         except Exception as e:
             logger.error(
                 f"Failed to handle CLIP embedding completion for image {image_id}: {e}"
+            )
+
+    async def handle_dino_embedding_complete(
+        self, image_id: int, job: JobResponse
+    ) -> None:
+        """Handle DINOv2 embedding job completion.
+
+        Extracts embedding and stores in Qdrant (DINO collection) with image_id as point_id.
+
+        Args:
+            image_id: Image (Entity) ID (used as Qdrant point_id)
+            job: Job response from MQTT callback (minimal data, needs full fetch)
+        """
+        try:
+            # Check if job failed
+            if job.status == "failed":
+                logger.error(
+                    f"DINO embedding job {job.job_id} failed for image {image_id}: "
+                    + f"{job.error_message}"
+                )
+                return
+
+            # MQTT callbacks don't include task_output - fetch full job via HTTP
+            full_job = await self.compute_client.get_job(job.job_id)
+            if not full_job or full_job.status != "completed":
+                logger.warning(
+                    f"Job {job.job_id} not completed when fetching full details (status: {full_job.status if full_job else 'None'})"
+                )
+                return
+
+            # Download embedding file from job output
+            if not full_job.params or "output_path" not in full_job.params:
+                logger.error(f"No output_path found in job {job.job_id} params")
+                return
+
+            output_path = cast(str, full_job.params["output_path"])
+
+            # Download embedding file to temporary location
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+
+            try:
+                await self.compute_client.download_job_file(
+                    job_id=job.job_id,
+                    file_path=output_path,
+                    dest=tmp_path,
+                )
+
+                # Load .npy file
+                import numpy as np
+
+                embedding: NDArray[np.float32] = cast(
+                    NDArray[np.float32], np.load(tmp_path)
+                )
+
+                # Validate embedding dimension (DINOv2-S is 384)
+                if embedding.shape[0] != 384:
+                    logger.error(
+                        f"Invalid embedding dimension for image {image_id}: expected 384, got {embedding.shape[0]}"
+                    )
+                    return
+
+            finally:
+                # Cleanup temporary file
+                if tmp_path.exists():
+                    tmp_path.unlink()
+
+            # Store in Qdrant (DINO collection) with image_id as point_id
+            _ = self.dino_store.add_vector(
+                StoreItem(
+                    id=image_id,
+                    embedding=embedding,
+                    payload={"image_id": image_id},
+                )
+            )
+
+            logger.info(
+                f"Successfully stored DINO embedding for image {image_id} in Qdrant"
+            )
+
+            # Cleanup: Delete successful job record
+            if self.job_submission_service:
+                self.job_submission_service.delete_job_record(job.job_id)
+
+        except Exception as e:
+            logger.error(
+                f"Failed to handle DINO embedding completion for image {image_id}: {e}"
             )
 
     async def handle_face_embedding_complete(

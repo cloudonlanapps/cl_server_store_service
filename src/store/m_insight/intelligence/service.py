@@ -15,6 +15,8 @@ from . import schemas
 from ..m_insight.models import EntityVersionData
 from cl_client.models import JobResponse
 from .logic.qdrant_image_store import SearchPreferences
+from .logic.dino_store_singleton import get_dino_store
+from cl_ml_tools.plugins.dino_embedding.schema import DinoEmbeddingOutput
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,11 @@ class MInsightEmbeddingService:
         # We assume file_storage is needed if we are triggering jobs
         from ..store.entity_storage import EntityStorageService
         self.file_storage = EntityStorageService(str(config.media_storage_dir))
+        
+        # Initialize stores
+        pysdk_config = get_pysdk_config()
+        self.qdrant_store = get_qdrant_store(pysdk_config)
+        self.dino_store = get_dino_store(pysdk_config)
 
     def _now_timestamp(self) -> int:
         """Return current UTC timestamp in milliseconds."""
@@ -36,25 +43,25 @@ class MInsightEmbeddingService:
         return int(datetime.now(UTC).timestamp() * 1000)
 
     async def trigger_async_jobs(self, entity: EntityVersionData) -> dict[str, str | None]:
-        """Trigger face detection and CLIP embedding jobs for an entity version."""
+        """Trigger face detection, CLIP, and DINO embedding jobs for an entity version."""
         # Get absolute file path
         if not entity.file_path:
             logger.warning(f"Entity {entity.id} has no file_path")
-            return {"face_detection_job": None, "clip_embedding_job": None}
+            return {"face_detection_job": None, "clip_embedding_job": None, "dino_embedding_job": None}
 
         absolute_path = self.file_storage.get_absolute_path(entity.file_path)
         if not absolute_path.exists():
             logger.warning(f"File not found for entity {entity.id}: {absolute_path}")
-            return {"face_detection_job": None, "clip_embedding_job": None}
+            return {"face_detection_job": None, "clip_embedding_job": None, "dino_embedding_job": None}
 
         compute_client = get_compute_client()
-        qdrant_store = get_qdrant_store()
 
         # Create handlers with job_service and config
         job_service = JobSubmissionService(compute_client)
         callback_handler = JobCallbackHandler(
             compute_client,
-            qdrant_store,
+            self.qdrant_store,
+            self.dino_store,
             config=self.config,
             job_submission_service=job_service,
         )
@@ -71,6 +78,12 @@ class MInsightEmbeddingService:
             if job.status == "completed":
                 await callback_handler.handle_clip_embedding_complete(entity.id, job)
 
+        async def dino_embedding_callback(job: JobResponse) -> None:
+            """Handle DINO embedding job completion."""
+            job_service.update_job_status(job.job_id, job.status, job.error_message)
+            if job.status == "completed":
+                await callback_handler.handle_dino_embedding_complete(entity.id, job)
+
         # Submit jobs
         face_job_id = await job_service.submit_face_detection(
             entity_id=entity.id,
@@ -84,6 +97,12 @@ class MInsightEmbeddingService:
             on_complete_callback=clip_embedding_callback,
         )
 
+        dino_job_id = await job_service.submit_dino_embedding(
+            entity_id=entity.id,
+            file_path=str(absolute_path),
+            on_complete_callback=dino_embedding_callback,
+        )
+
         logger.info(
             f"Submitted jobs for entity {entity.id}: "
             + f"face_detection={face_job_id}, clip_embedding={clip_job_id}"
@@ -92,6 +111,7 @@ class MInsightEmbeddingService:
         return {
             "face_detection_job": face_job_id,
             "clip_embedding_job": clip_job_id,
+            "dino_embedding_job": dino_job_id,
         }
 
     def get_entity_faces(self, entity_id: int) -> list[schemas.FaceResponse]:
@@ -189,6 +209,45 @@ class MInsightEmbeddingService:
             created_at=person.created_at,
             updated_at=person.updated_at,
             face_count=face_count,
+        )
+
+    def search_similar_images_dino(
+        self, entity_id: int, limit: int = 10, threshold: float | None = None
+    ) -> schemas.SimilarImagesDinoResponse:
+        """Search for similar images using DINOv2 embeddings."""
+        # Get embedding for query image
+        item = self.dino_store.get_vector(entity_id)
+        if not item:
+            return schemas.SimilarImagesDinoResponse(
+                query_image_id=entity_id,
+                results=[],
+            )
+
+        # Search
+        pysdk_config = get_pysdk_config()
+        search_results = self.dino_store.search(
+            query_vector=item.embedding,
+            limit=limit + 1,  # +1 to account for the query image itself
+            search_options=SearchPreferences(
+                score_threshold=threshold if threshold is not None else pysdk_config.clip_embedding_threshold
+            ),
+        )
+
+        results: list[schemas.SimilarImageDinoResult] = []
+        for result in search_results:
+            if result.id == entity_id:
+                continue
+
+            results.append(
+                schemas.SimilarImageDinoResult(
+                    image_id=int(result.id),
+                    score=result.score,
+                )
+            )
+
+        return schemas.SimilarImagesDinoResponse(
+            query_image_id=entity_id,
+            results=results,
         )
 
     def get_all_known_persons(self) -> list[schemas.KnownPersonResponse]:

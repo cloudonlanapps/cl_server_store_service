@@ -139,6 +139,57 @@ class JobSubmissionService:
         finally:
             db.close()
 
+    async def submit_dino_embedding(
+        self,
+        entity_id: int,
+        file_path: str,
+        on_complete_callback: OnJobResponseCallback,
+    ) -> str | None:
+        """Submit DINOv2 embedding job.
+
+        Args:
+            entity_id: Entity ID to associate with job
+            file_path: Absolute path to image file
+            on_complete_callback: Callback to invoke when job completes
+
+        Returns:
+            Job ID if successful, None if failed
+        """
+        from ...common.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            job_response = await self.compute_client.dino_embedding.embed_image(
+                image=Path(file_path),
+                wait=False,
+                on_complete=on_complete_callback,
+            )
+
+            now = self._now_timestamp()
+            entity_job = EntityJob(
+                image_id=entity_id,
+                job_id=job_response.job_id,
+                task_type="dino_embedding",
+                status="queued",
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(entity_job)
+            db.commit()
+
+            logger.info(
+                f"Submitted dino_embedding job {job_response.job_id} for entity {entity_id}"
+            )
+            return job_response.job_id
+        except Exception as e:
+            logger.error(
+                f"Failed to submit dino_embedding job for entity {entity_id}: {e}"
+            )
+            db.rollback()
+            return None
+        finally:
+            db.close()
+
     async def submit_face_embedding(
         self,
         face_id: int,
