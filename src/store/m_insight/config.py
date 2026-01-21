@@ -41,5 +41,5 @@ class MInsightConfig:
             server_port=args.store_port,
             mqtt_broker=args.mqtt_broker,
             mqtt_port=args.mqtt_port,
-            mqtt_topic=args.mqtt_topic,
+            mqtt_topic=args.mqtt_topic or f"store/{args.store_port}/items",
         )

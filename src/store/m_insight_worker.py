@@ -132,7 +132,7 @@ class Args(Namespace):
         log_level: str = "INFO",
         mqtt_broker: str = "localhost",
         mqtt_port: int | None = None,
-        mqtt_topic: str = "m_insight/wakeup",
+        mqtt_topic: str | None = None,
         store_port: int = 8001,
     ) -> None:
         super().__init__()
@@ -291,8 +291,8 @@ def main() -> int:
     parser.add_argument(
         "--mqtt-topic",
         "-t",
-        default="m_insight/wakeup",
-        help="MQTT topic for wake-up signals (default: m_insight/wakeup)",
+        default=None,
+        help="MQTT topic for wake-up signals (default: store/{store_port}/items)",
     )
     parser.add_argument(
         "--store-port",
