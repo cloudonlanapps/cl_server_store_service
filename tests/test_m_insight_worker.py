@@ -58,13 +58,16 @@ def m_insight_processor_mock(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int,
 def m_insight_worker(
     clean_data_dir: Path,
     integration_config: Any,
+    test_engine: Engine,
 ) -> mInsight:
     """Create mInsight worker instance for testing.
     
     Note: Does not start the worker - tests control when to run reconciliation.
+    Uses the test database engine instead of creating its own.
     """
     from store.m_insight.config import MInsightConfig
     from store.common import database
+    from sqlalchemy.orm import sessionmaker
     
     # Create config
     config = MInsightConfig(
@@ -79,9 +82,9 @@ def m_insight_worker(
         mqtt_topic="test/m_insight",
     )
     
-    # Initialize database if not already done
-    if not database.SessionLocal:
-        database.init_db(config)
+    # Use test database engine instead of initializing a new database
+    # This ensures worker uses the same in-memory database as tests
+    database.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     
     # Create worker
     worker = mInsight(config=config)
@@ -121,19 +124,19 @@ def get_intelligence_for_image(session: Session, image_id: int) -> ImageIntellig
 
 def test_empty_sync_state_queues_all_images(
     client: TestClient,
-    sample_image: Path,
-    m_insight_worker: mInsightWorker,
+    test_images_unique: list[Path],
+    m_insight_worker: mInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
     """Test that empty sync state processes all existing images."""
-    # Create 3 images via API
+    # Create 3 images via API using 3 different image files
     image_ids = []
-    for i in range(3):
-        with sample_image.open("rb") as f:
+    for i, image_path in enumerate(test_images_unique):
+        with image_path.open("rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (f"test{i}.jpg", f, "image/jpeg")},
+                files={"image": (f"test{i}.png", f, "image/png")},
                 data={
                     "label": f"Test Image {i}",
                     "is_collection": "false",
@@ -164,19 +167,19 @@ def test_empty_sync_state_queues_all_images(
 
 def test_existing_sync_state_only_newer_versions(
     client: TestClient,
-    sample_image: Path,
-    m_insight_worker: mInsightWorker,
+    test_images_unique: list[Path],
+    m_insight_worker: mInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
     """Test that existing sync state only processes new images."""
     # Create initial image
     response = client.post(
-        "/entities",
-        files={"file": ("test1.jpg", sample_image.open("rb"), "image/jpeg")},
-        data={"label": "Initial Image"},
+        "/entities/",
+        files={"image": ("test1.png", test_images_unique[0].open("rb"), "image/png")},
+        data={"label": "Initial Image", "is_collection": "false"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 201
     first_id = response.json()["id"]
     
     # Run first reconciliation
@@ -187,13 +190,13 @@ def test_existing_sync_state_only_newer_versions(
     # Clear mock calls
     m_insight_processor_mock.clear()
     
-    # Create new image
+    # Create new image (different file)
     response = client.post(
-        "/entities",
-        files={"file": ("test2.jpg", sample_image.open("rb"), "image/jpeg")},
-        data={"label": "New Image"},
+        "/entities/",
+        files={"image": ("test2.png", test_images_unique[1].open("rb"), "image/png")},
+        data={"label": "New Image", "is_collection": "false"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 201
     second_id = response.json()["id"]
     
     # Run second reconciliation
@@ -221,25 +224,26 @@ def test_existing_sync_state_only_newer_versions(
 def test_multiple_md5_changes_single_queue(
     client: TestClient,
     sample_images: list[Path],
-    m_insight_worker: mInsightWorker,
+    m_insight_worker: mInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
     """Test that multiple md5 updates result in single processing with latest md5."""
     # Create initial image
     response = client.post(
-        "/entities",
-        files={"file": ("test.jpg", sample_images[0].open("rb"), "image/jpeg")},
-        data={"label": "Test Image"},
+        "/entities/",
+        files={"image": ("test.jpg", sample_images[0].open("rb"), "image/jpeg")},
+        data={"label": "Test Image", "is_collection": "false"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 201
     image_id = response.json()["id"]
     
     # Update with different images (different md5)
     for i in range(1, 3):
         response = client.put(
             f"/entities/{image_id}",
-            files={"file": (f"test{i}.jpg", sample_images[i].open("rb"), "image/jpeg")},
+            files={"image": (f"test{i}.jpg", sample_images[i].open("rb"), "image/jpeg")},
+            data={"label": "Test Image", "is_collection": "false"},
         )
         assert response.status_code == 200
     
@@ -265,24 +269,26 @@ def test_multiple_md5_changes_single_queue(
 def test_process_called_once_per_image(
     client: TestClient,
     sample_images: list[Path],
-    m_insight_worker: mInsightWorker,
+    m_insight_worker: mInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
     """Test that process() is called exactly once per image despite multiple updates."""
     # Create image
     response = client.post(
-        "/entities",
-        files={"file": ("test.jpg", sample_images[0].open("rb"), "image/jpeg")},
-        data={"label": "Test Image"},
+        "/entities/",
+        files={"image": ("test.jpg", sample_images[0].open("rb"), "image/jpeg")},
+        data={"label": "Test Image", "is_collection": "false"},
     )
+    assert response.status_code == 201
     image_id = response.json()["id"]
     
     # Update 5 times
     for i in range(1, 6):
         client.put(
             f"/entities/{image_id}",
-            files={"file": (f"test{i}.jpg", sample_images[i % len(sample_images)].open("rb"), "image/jpeg")},
+            files={"image": (f"test{i}.jpg", sample_images[i % len(sample_images)].open("rb"), "image/jpeg")},
+            data={"label": "Test Image", "is_collection": "false"},
         )
     
     # Run reconciliation
@@ -302,17 +308,18 @@ def test_process_called_once_per_image(
 def test_no_duplicate_processing(
     client: TestClient,
     sample_image: Path,
-    m_insight_worker: mInsightWorker,
+    m_insight_worker: mInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
     """Test that running reconciliation twice doesn't reprocess images."""
     # Create image
     response = client.post(
-        "/entities",
-        files={"file": ("test.jpg", sample_image.open("rb"), "image/jpeg")},
-        data={"label": "Test Image"},
+        "/entities/",
+        files={"image": ("test.jpg", sample_image.open("rb"), "image/jpeg")},
+        data={"label": "Test Image", "is_collection": "false"},
     )
+    assert response.status_code == 201
     image_id = response.json()["id"]
     
     # First reconciliation
@@ -342,29 +349,35 @@ def test_no_duplicate_processing(
 def test_delete_image_removes_intelligence(
     client: TestClient,
     sample_image: Path,
-    m_insight_worker: mInsightWorker,
+    m_insight_worker: mInsight,
     test_db_session: Session,
 ) -> None:
     """Test that deleting image cascades to intelligence row."""
     # Create and process image
     response = client.post(
-        "/entities",
-        files={"file": ("test.jpg", sample_image.open("rb"), "image/jpeg")},
-        data={"label": "Test Image"},
+        "/entities/",
+        files={"image": ("test.jpg", sample_image.open("rb"), "image/jpeg")},
+        data={"label": "Test Image", "is_collection": "false"},
     )
+    assert response.status_code == 201
     image_id = response.json()["id"]
     
     m_insight_worker.run_once()
     
     # Verify intelligence row exists
     assert get_intelligence_for_image(test_db_session, image_id) is not None
-    
-    # Delete image
+
+    # Soft-delete image first
+    from store.store.service import EntityService
+    service = EntityService(test_db_session, client.app.state.config)
+    service.soft_delete_entity(image_id)
+
+    # Hard delete image
     response = client.delete(f"/entities/{image_id}")
-    assert response.status_code == 200
+    assert response.status_code == 204
     
-    # Verify intelligence row cascade-deleted
-    test_db_session.expire_all()  # Refresh session
+    # Verify intelligence row was cascade-deleted
+    test_db_session.expire_all()  # Refresh session to see changes
     assert get_intelligence_for_image(test_db_session, image_id) is None
 
 
@@ -372,32 +385,33 @@ def test_delete_image_removes_intelligence(
 def test_restart_does_not_reinsert_deleted(
     client: TestClient,
     sample_image: Path,
-    m_insight_worker: mInsightWorker,
+    m_insight_worker: mInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
     """Test that deleted images are not reprocessed after restart."""
     # Create, process, and delete image
     response = client.post(
-        "/entities",
-        files={"file": ("test.jpg", sample_image.open("rb"), "image/jpeg")},
-        data={"label": "Test Image"},
+        "/entities/",
+        files={"image": ("test.jpg", sample_image.open("rb"), "image/jpeg")},
+        data={"label": "Test Image", "is_collection": "false"},
     )
+    assert response.status_code == 201
     image_id = response.json()["id"]
     
     m_insight_worker.run_once()
+    
+    # Soft-delete then hard-delete
+    from store.store.service import EntityService
+    service = EntityService(test_db_session, client.app.state.config)
+    service.soft_delete_entity(image_id)
     client.delete(f"/entities/{image_id}")
     
     # Clear mock
     m_insight_processor_mock.clear()
     
     # Simulate restart: create new worker and reconcile
-    from store.store.config import StoreConfig
-    new_worker = mInsightWorker(
-        worker_id="restart-worker",
-        config=m_insight_worker.config,
-        mqtt_topic="test/m_insight",
-    )
+    new_worker = mInsight(config=m_insight_worker.config)
     
     processed_count = new_worker.run_once()
     
@@ -415,17 +429,17 @@ def test_restart_does_not_reinsert_deleted(
 
 def test_non_image_entities_ignored(
     client: TestClient,
-    m_insight_worker: mInsightWorker,
+    m_insight_worker: mInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
     """Test that non-image entities (collections) are ignored."""
     # Create collection (non-image entity)
     response = client.post(
-        "/entities",
-        json={"label": "Test Collection", "is_collection": True},
+        "/entities/",
+        data={"label": "Test Collection", "is_collection": "true"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 201
     collection_id = response.json()["id"]
     
     # Run reconciliation

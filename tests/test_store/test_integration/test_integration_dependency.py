@@ -124,11 +124,15 @@ class TestEntityOperations:
         created_item = Item.model_validate(create_response.json())
         entity_id = created_item.id
 
-        # Delete entity
+        # Soft-delete entity first
+        soft_delete_response = client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
+        assert soft_delete_response.status_code == 200
+
+        # Hard delete entity
         delete_response = client.delete(f"/entities/{entity_id}")
         assert delete_response.status_code == 204
 
-        # Verify entity is deleted (soft delete)
+        # Verify deletion
         get_response = client.get(f"/entities/{entity_id}")
         assert get_response.status_code == 404
 
@@ -204,6 +208,14 @@ class TestMultipleSequentialRequests:
         updated_item = Item.model_validate(read_resp2.json())
         assert updated_item.label == "Updated Mixed Test"
 
-        # Delete
+        # Soft-delete first
+        soft_delete_resp = client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
+        assert soft_delete_resp.status_code == 200
+
+        # Hard delete
         delete_resp = client.delete(f"/entities/{entity_id}")
         assert delete_resp.status_code == 204
+
+        # Verify deletion
+        final_read = client.get(f"/entities/{entity_id}")
+        assert final_read.status_code == 404

@@ -5,7 +5,9 @@ Tests for CRUD operations on entities.
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from store.common.models import Entity
 from store.common.schemas import Item, PaginatedResponse
 
 
@@ -179,7 +181,7 @@ class TestEntityCRUD:
     def test_delete_collection_with_children(
         self, client: TestClient, sample_image: Path
     ) -> None:
-        """Test that deleting a collection with children fails."""
+        """Test that deleting a soft-deleted collection cascades to children."""
         # Create collection
         col_resp = client.post(
             "/entities/", data={"is_collection": "true", "label": "Parent"}
@@ -188,7 +190,7 @@ class TestEntityCRUD:
 
         # Add child file
         with open(sample_image, "rb") as f:
-            client.post(
+            child_resp = client.post(
                 "/entities/",
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={
@@ -197,12 +199,20 @@ class TestEntityCRUD:
                     "parent_id": str(col_id),
                 },
             )
+        child_id = child_resp.json()["id"]
         assert client.get(f"/entities/{col_id}").status_code == 200
 
-        # Try to delete collection (hard delete)
+        # Soft-delete collection first
+        soft_delete_resp = client.patch(f"/entities/{col_id}", data={"is_deleted": "true"})
+        assert soft_delete_resp.status_code == 200
+
+        # Hard delete collection (should cascade to children)
         resp = client.delete(f"/entities/{col_id}")
-        assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
-        assert "children" in resp.text
+        assert resp.status_code == 204
+
+        # Verify both collection and child are hard-deleted
+        assert client.get(f"/entities/{col_id}").status_code == 404
+        assert client.get(f"/entities/{child_id}").status_code == 404
 
     def test_indirect_deletion_detection(
         self, client: TestClient, sample_image: Path
@@ -258,7 +268,7 @@ class TestEntityCRUD:
     def test_delete_entity_hard_delete(
         self, client: TestClient, sample_image: Path
     ) -> None:
-        """Test hard deleting an entity."""
+        """Test hard deleting an entity (requires soft-delete first)."""
         # Create parent collection
         parent_resp = client.post(
             "/entities/",
@@ -284,7 +294,11 @@ class TestEntityCRUD:
         assert created_item.id is not None
         entity_id = created_item.id
 
-        # Delete entity
+        # Soft-delete entity first
+        soft_delete_resp = client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
+        assert soft_delete_resp.status_code == 200
+
+        # Hard delete entity
         response = client.delete(f"/entities/{entity_id}")
         assert response.status_code == 204
 
@@ -493,3 +507,124 @@ class TestEntityCRUD:
         assert len(items) == 2  # Parent + 1 file
         ids = [item["id"] for item in items]
         assert entity_to_delete not in ids
+
+    def test_delete_without_soft_delete_fails(
+        self, client: TestClient
+    ) -> None:
+        """Test that hard-delete without soft-delete first returns 422."""
+        # Create entity
+        response = client.post(
+            "/entities/",
+            data={"is_collection": "true", "label": "Test Collection"},
+        )
+        assert response.status_code == 201
+        entity_id = response.json()["id"]
+
+        # Try to hard-delete without soft-delete first
+        response = client.delete(f"/entities/{entity_id}")
+        assert response.status_code == 422
+        assert "must be soft-deleted first" in response.text
+
+    def test_cascade_deletion_soft_deletes_children(
+        self, client: TestClient, sample_image: Path, test_db_session: Session
+    ) -> None:
+        """Test that deleting a collection soft-deletes children before hard-deleting them."""
+        # Create collection
+        response = client.post(
+            "/entities/",
+            data={"is_collection": "true", "label": "Parent Collection"},
+        )
+        assert response.status_code == 201
+        parent_id = response.json()["id"]
+
+        # Create child
+        with sample_image.open("rb") as f:
+            response = client.post(
+                "/entities/",
+                files={"image": ("test.jpg", f, "image/jpeg")},
+                data={
+                    "is_collection": "false",
+                    "label": "Child Image",
+                    "parent_id": str(parent_id),
+                },
+            )
+        assert response.status_code == 201
+        child_id = response.json()["id"]
+
+        # Soft-delete parent
+        response = client.patch(f"/entities/{parent_id}", data={"is_deleted": "true"})
+        assert response.status_code == 200
+
+        # Hard-delete parent (should cascade to child)
+        response = client.delete(f"/entities/{parent_id}")
+        assert response.status_code == 204
+
+        # Verify both are hard-deleted
+        assert client.get(f"/entities/{parent_id}").status_code == 404
+        assert client.get(f"/entities/{child_id}").status_code == 404
+
+    def test_soft_delete_marks_entity_deleted(
+        self, client: TestClient, test_db_session: Session
+    ) -> None:
+        """Test that soft-delete marks entity as deleted and creates version record."""
+        # Create entity
+        response = client.post(
+            "/entities/",
+            data={"is_collection": "true", "label": "Test Collection"},
+        )
+        entity_id = response.json()["id"]
+
+        # Verify entity exists and is not deleted
+        entity = test_db_session.query(Entity).filter(Entity.id == entity_id).first()
+        assert entity is not None
+        assert entity.is_deleted is False
+        
+        # Get initial version count
+        initial_version_count = len(entity.versions.all())
+
+        # Soft-delete
+        response = client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
+        assert response.status_code == 200
+
+        # Verify entity still exists but is marked as deleted
+        test_db_session.expire_all()
+        entity = test_db_session.query(Entity).filter(Entity.id == entity_id).first()
+        assert entity is not None
+        assert entity.is_deleted is True
+        
+        # Verify a new version record was created
+        final_version_count = len(entity.versions.all())
+        assert final_version_count == initial_version_count + 1
+        
+        # Verify the latest version has is_deleted=True
+        latest_version = entity.versions.all()[-1]
+        assert latest_version.is_deleted is True
+
+    def test_hard_delete_removes_entity_completely(
+        self, client: TestClient, test_db_session: Session
+    ) -> None:
+        """Test that hard-delete removes entity from database."""
+        # Create entity
+        response = client.post(
+            "/entities/",
+            data={"is_collection": "true", "label": "Test Collection"},
+        )
+        entity_id = response.json()["id"]
+
+        # Soft-delete
+        response = client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
+        assert response.status_code == 200
+
+        # Verify entity still exists in database
+        entity = test_db_session.query(Entity).filter(Entity.id == entity_id).first()
+        assert entity is not None
+        assert entity.is_deleted is True
+
+        # Hard-delete
+        response = client.delete(f"/entities/{entity_id}")
+        assert response.status_code == 204
+
+        # Verify entity is completely removed from database
+        test_db_session.expire_all()
+        entity = test_db_session.query(Entity).filter(Entity.id == entity_id).first()
+        assert entity is None

@@ -89,7 +89,7 @@ class mInsight:
         if entity_version.type != "image":
             return False
         
-        # Must not be deleted
+        # Must not be deleted (soft delete creates version with is_deleted=True)
         if entity_version.is_deleted:
             return False
         

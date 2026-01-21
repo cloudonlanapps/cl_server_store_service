@@ -127,12 +127,28 @@ def integration_config(request: pytest.FixtureRequest) -> IntegrationConfig:
 
 @pytest.fixture(scope="function")
 def test_engine() -> Generator[Engine, None, None]:
-    """Create a test database engine with versioning support."""
+    """Create a test database engine with versioning support.
+    
+    Note: We manually create the engine here instead of using create_db_engine() because:
+    1. In-memory SQLite databases require StaticPool to share the same database across connections
+    2. create_db_engine() doesn't use StaticPool
+    3. Without StaticPool, each connection would get its own isolated in-memory database
+    
+    We still use the same enable_wal_mode event listener which detects in-memory databases
+    and skips WAL mode while enabling foreign keys.
+    """
     engine = create_engine(
         TEST_DB_URL,
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    
+    # Register the same event listener used in production
+    # It will detect this is in-memory and skip WAL mode but enable foreign keys
+    from sqlalchemy import event
+    from store.common.database import enable_wal_mode
+    
+    event.listen(engine, "connect", enable_wal_mode)
 
     from sqlalchemy.orm import configure_mappers
 
@@ -203,6 +219,27 @@ def sample_images(test_images_dir: Path) -> list[Path]:
             f"Not enough test images found. Please add at least 2 images to {test_images_dir}"
         )
     return images[:30]
+
+
+@pytest.fixture
+def test_images_unique() -> list[Path]:
+    """Get 3 unique test images for mInsight worker tests.
+    
+    These are simple colored squares stored in ~/Work/cl_server_test_media/
+    that are guaranteed to have different MD5 hashes.
+    """
+    test_media_dir = Path.home() / "Work" / "cl_server_test_media"
+    images = [
+        test_media_dir / "test_red.png",
+        test_media_dir / "test_green.png",
+        test_media_dir / "test_blue.png",
+    ]
+    
+    for img in images:
+        if not img.exists():
+            pytest.skip(f"Test image not found: {img}. Run test setup to generate images.")
+    
+    return images
 
 
 # ============================================================================

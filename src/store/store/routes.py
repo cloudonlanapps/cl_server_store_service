@@ -135,11 +135,11 @@ async def create_entity(
         filename = image.filename or "file"
 
     try:
-        item = service.create_entity(body, file_bytes, filename, user_id)
+        item, is_duplicate = service.create_entity(body, file_bytes, filename, user_id)
 
-        # Broadcast MQTT event after successful creation and file save
+        # Broadcast MQTT event only if this was a new entity (not a duplicate)
         broadcaster = getattr(request.app.state, "broadcaster", None)
-        if broadcaster and item.md5:
+        if broadcaster and item.md5 and not is_duplicate:
             topic = f"store/{config.server_port}/items"
             payload = {
                 "id": item.id,
@@ -257,14 +257,16 @@ async def put_entity(
 
     try:
         # Update entity (file is optional - None updates only metadata)
-        item = service.update_entity(entity_id, body, file_bytes, filename, user_id)
-        if not item:
+        result = service.update_entity(entity_id, body, file_bytes, filename, user_id)
+        if not result:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
+        
+        item, is_duplicate = result
 
-        # Broadcast MQTT event after successful update and file save
+        # Broadcast MQTT event only if file was actually updated (not a duplicate)
         # Note: Broadcaster only emits if a file was actually updated (item.md5 is not None for media)
         broadcaster = getattr(request.app.state, "broadcaster", None)
-        if broadcaster and item.md5 and image:
+        if broadcaster and item.md5 and image and not is_duplicate:
             topic = f"store/{config.server_port}/items"
             payload = {
                 "id": item.id,
@@ -368,9 +370,12 @@ async def delete_entity(
     _ = user
     config: StoreConfig = request.app.state.config
     service = EntityService(db, config)
-    item = service.delete_entity(entity_id)
-    if not item:
+    
+    # Delete entity (will raise ValueError if not soft-deleted first)
+    deleted = service.delete_entity(entity_id)
+    if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
+    
     # No return statement - FastAPI will return 204 automatically
 
 

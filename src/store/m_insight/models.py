@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import override
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -58,8 +58,7 @@ class EntityVersionData(BaseModel):
     # Version tracking (from SQLAlchemy-Continuum)
     transaction_id: int
     
-    class Config:
-        from_attributes = True  # Allow creation from ORM objects
+    model_config = ConfigDict(from_attributes=True)  # Allow creation from ORM objects
 
 
 class EntitySyncState(Base):

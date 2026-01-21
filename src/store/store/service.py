@@ -363,7 +363,7 @@ class EntityService:
         image: bytes | None = None,
         filename: str = "file",
         user_id: str | None = None,
-    ) -> Item:
+    ) -> tuple[Item, bool]:
         """
         Create a new entity.
 
@@ -407,7 +407,7 @@ class EntityService:
             duplicate = self._check_duplicate_md5(file_meta.md5)
             if duplicate:
                 # Return the existing item instead of raising an error
-                return self._entity_to_item(duplicate)
+                return (self._entity_to_item(duplicate), True)  # is_duplicate=True
 
             # Save file to storage (convert Pydantic model to dict for storage)
             logger.debug(f"{filename} is sent for saving with metadata {file_meta.model_dump()}")
@@ -471,7 +471,7 @@ class EntityService:
                 f"Duplicate MD5 detected: {file_meta.md5 if file_meta else 'unknown'}"
             )
 
-        return self._entity_to_item(entity)
+        return (self._entity_to_item(entity), False)  # is_duplicate=False
 
     def update_entity(
         self,
@@ -480,7 +480,7 @@ class EntityService:
         image: bytes | None,
         filename: str = "file",
         user_id: str | None = None,
-    ) -> Item | None:
+    ) -> tuple[Item, bool] | None:
         """
         Fully update an existing entity (PUT) - file upload is optional for non-collections.
 
@@ -532,7 +532,7 @@ class EntityService:
             duplicate = self._check_duplicate_md5(file_meta.md5, exclude_entity_id=entity_id)
             if duplicate:
                 # Return the existing item instead of raising an error
-                return self._entity_to_item(duplicate)
+                return (self._entity_to_item(duplicate), True)  # is_duplicate=True
 
             # Delete old file if exists
             old_file_path = entity.file_path
@@ -574,7 +574,7 @@ class EntityService:
                 f"Duplicate MD5 detected: {file_meta.md5 if file_meta else ''}"
             )
 
-        return self._entity_to_item(entity)
+        return (self._entity_to_item(entity), False)  # is_duplicate=False
 
     def patch_entity(
         self, entity_id: int, body: BodyPatchEntity, user_id: str | None = None
@@ -620,34 +620,83 @@ class EntityService:
 
         return self._entity_to_item(entity)
 
-    def delete_entity(self, entity_id: int) -> Item | None:
+    def delete_entity(self, entity_id: int, *, _from_parent: bool = False) -> bool:
         """
-        Soft delete an entity (set is_deleted=True).
+        Delete an entity (hard delete with proper versioning).
+
+        When called directly (from API route):
+        - Entity MUST already be soft-deleted, otherwise raises ValueError
+        - Recursively soft-deletes and hard-deletes all children
+        
+        When called recursively (from parent's deletion):
+        - Auto-soft-deletes the entity if not already soft-deleted
+        - Then proceeds with hard deletion
+
+        Args:
+            entity_id: Entity ID
+            _from_parent: Internal flag indicating this is a recursive call from parent deletion
+
+        Returns:
+            True if entity was deleted, False if entity not found
+            
+        Raises:
+            ValueError: If entity is not soft-deleted (only for direct calls)
+        """
+        entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
+        if not entity:
+            return False
+
+        # Direct call: require entity to be soft-deleted first
+        if not _from_parent and not entity.is_deleted:
+            raise ValueError(
+                f"Cannot delete entity {entity_id}: entity must be soft-deleted first. "
+                "Call soft_delete_entity() before deletion."
+            )
+
+        # Recursive call from parent: soft-delete if not already
+        if _from_parent and not entity.is_deleted:
+            entity.is_deleted = True
+            self.db.commit()  # Create version record
+
+        # Recursively handle children if this is a collection
+        children = self.db.query(Entity).filter(Entity.parent_id == entity_id).all()
+        if children:
+            for child in children:
+                # Recursively delete child (will auto-soft-delete via _from_parent=True)
+                self.delete_entity(child.id, _from_parent=True)
+
+        # Hard delete this entity - remove file and database record
+        if entity.file_path:
+            _ = self.file_storage.delete_file(entity.file_path)
+
+        self.db.delete(entity)
+        self.db.commit()
+
+        return True
+    
+    def soft_delete_entity(self, entity_id: int) -> Item | None:
+        """
+        Soft delete an entity (mark as deleted without removing).
+
+        This creates a version record with is_deleted=True for audit trail.
+        The entity remains in the database but is marked as deleted.
+        
+        Note: This does NOT soft-delete children. Children must be explicitly
+        soft-deleted or will be soft-deleted automatically during hard deletion.
 
         Args:
             entity_id: Entity ID
 
         Returns:
-            Deleted Item instance or None if not found
+            Soft-deleted Item instance or None if not found
         """
         entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
         if not entity:
             return None
 
-        # Prevent deletion if entity has children
-        children_count = self.db.query(Entity).filter(Entity.parent_id == entity_id).count()
-        if children_count > 0:
-            raise ValueError(
-                f"Cannot delete entity {entity_id}: it has {children_count} child(ren). "
-                "Delete or move the children first."
-            )
-
-        # 1. Hard delete: remove file and database record
-        if entity.file_path:
-            _ = self.file_storage.delete_file(entity.file_path)
-
-        self.db.delete(entity)
-        _ = self.db.commit()
+        # Mark as soft-deleted
+        entity.is_deleted = True
+        self.db.commit()
 
         return self._entity_to_item(entity)
 
