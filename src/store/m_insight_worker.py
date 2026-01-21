@@ -22,6 +22,7 @@ from loguru import logger
 
 # Global shutdown event and signal counter
 shutdown_event = asyncio.Event()
+reconciliation_trigger = asyncio.Event()
 shutdown_signal_count = 0
 
 
@@ -186,8 +187,8 @@ async def mqtt_listener_task(config, processor) -> None:
         def on_message(_client: object, _userdata: object, _message: object) -> None:
             """MQTT message callback - trigger reconciliation."""
             logger.debug(f"Received MQTT wake-up on {config.mqtt_topic}")
-            # Payload is ignored - just trigger reconciliation
-            _ = processor.run_once()
+            # Signal the main loop to run reconciliation
+            reconciliation_trigger.set()
         
         # Type ignore: broadcaster.client is dynamically typed from cl_ml_tools
         _ = broadcaster.client.subscribe(config.mqtt_topic)  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue, reportUnknownMemberType]
@@ -220,25 +221,42 @@ async def run_loop(config) -> None:
     
     logger.info(f"mInsight process {config.id} starting...")
     
-    # Perform initial reconciliation
-    _ = processor.run_once()
-    
-    # Start MQTT listener if enabled
+    # Start background tasks
     mqtt_task = None
     hb_task = None
     if config.mqtt_port:
         mqtt_task = asyncio.create_task(mqtt_listener_task(config, processor))
         hb_task = asyncio.create_task(heartbeat_task(broadcaster))
-    
+
     try:
-        # Wait for shutdown signal
-        _ = await shutdown_event.wait()
+        # Loop until shutdown
+        while not shutdown_event.is_set():
+            # Run reconciliation
+            _ = processor.run_once()
+            
+            # Wait for next trigger or shutdown
+            # We use a combined wait to handle both MQTT triggers and exit
+            trigger_task = asyncio.create_task(reconciliation_trigger.wait())
+            shutdown_task = asyncio.create_task(shutdown_event.wait())
+            
+            done, pending = await asyncio.wait(
+                [trigger_task, shutdown_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            
+            # Reset trigger if it was the one that completed
+            if trigger_task in done:
+                reconciliation_trigger.clear()
+            
+            # Cleanup pending trigger/shutdown tasks
+            for task in pending:
+                task.cancel()
     finally:
         logger.info(f"mInsight process {config.id} shutting down...")
         
-        # Cancel MQTT listener
+        # Cancel background tasks
         if mqtt_task:
-            _ = mqtt_task.cancel()
+            mqtt_task.cancel()
             try:
                 await mqtt_task
             except asyncio.CancelledError:
@@ -250,9 +268,9 @@ async def run_loop(config) -> None:
                 await hb_task
             except asyncio.CancelledError:
                 pass
-            
-            # Final status
-            broadcaster.publish_status("offline")
+        
+        # Final status
+        broadcaster.publish_status("offline")
 
 
 def main() -> int:

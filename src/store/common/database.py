@@ -73,13 +73,36 @@ def create_db_engine(
     Returns:
         SQLAlchemy engine instance
     """
-    engine = create_engine(
-        db_url,
-        connect_args={"check_same_thread": False},
-        echo=echo,
-        pool_size=20,
-        max_overflow=40,
-    )
+    kwargs: dict[str, object] = {
+        "connect_args": {"check_same_thread": False},
+        "echo": echo,
+    }
+
+    # SQLite-specific pooling logic
+    if db_url.lower().startswith("sqlite"):
+        # Check if this is an in-memory database
+        # These URLs typically contain ':memory:' or are empty
+        if ":memory:" in db_url or db_url.strip() == "sqlite://":
+             # In-memory SQLite uses StaticPool by default, 
+             # which doesn't support pool_size or max_overflow
+             pass
+        else:
+            # For file-based SQLite, we want a real pool to support high concurrency
+            # especially for WAL mode and batch tests.
+            from sqlalchemy.pool import QueuePool
+            kwargs.update({
+                "poolclass": QueuePool,
+                "pool_size": 20,
+                "max_overflow": 40,
+            })
+    else:
+        # For other databases (Postgres, MySQL, etc.), use standard pooling
+        kwargs.update({
+            "pool_size": 20,
+            "max_overflow": 40,
+        })
+
+    engine = create_engine(db_url, **kwargs)  # type: ignore[arg-type]
 
     # Register WAL mode listener for SQLite
     if db_url.lower().startswith("sqlite"):

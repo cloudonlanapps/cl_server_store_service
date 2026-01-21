@@ -296,15 +296,16 @@ class mInsight:
         if self.broadcaster:
              self.broadcaster.publish_start(version_start=last_version, version_end=max_transaction_id)
         
-        # Atomic write: Update last version BEFORE processing (restart safety)
-        self._update_last_version(max_transaction_id)
-        logger.debug(f"Advanced version to {max_transaction_id}")
-        
         # Process each image (each process() call has its own atomic operations)
         processed_count = 0
         for entity_version in entity_deltas.values():
             if self.process(entity_version):
                 processed_count += 1
+        
+        # Atomic write: Update last version AFTER processing (crash-safety)
+        # This ensures if we crash mid-process, we'll re-process from the previous version marker
+        self._update_last_version(max_transaction_id)
+        logger.debug(f"Advanced version to {max_transaction_id}")
         
         if self.broadcaster:
             self.broadcaster.publish_end(processed_count=processed_count)

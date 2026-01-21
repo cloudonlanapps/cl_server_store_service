@@ -23,6 +23,7 @@ class TestWALMode:
 
         # Verify all pragmas were executed
         expected_pragmas = [
+            "PRAGMA database_list",
             "PRAGMA journal_mode=WAL",
             "PRAGMA synchronous=NORMAL",
             "PRAGMA cache_size=-64000",
