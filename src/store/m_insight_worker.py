@@ -308,7 +308,7 @@ def main() -> int:
     config = MInsightConfig.from_cli_args(args)
     
     # Initialize Database (Worker needs access to DB)
-    from . import database
+    from .common import versioning, database
     database.init_db(config)
 
     # Print startup info
