@@ -124,6 +124,7 @@ class Args(Namespace):
     mqtt_broker: str
     mqtt_port: int | None
     mqtt_topic: str
+    store_port: int
 
     def __init__(
         self,
@@ -132,6 +133,7 @@ class Args(Namespace):
         mqtt_broker: str = "localhost",
         mqtt_port: int | None = None,
         mqtt_topic: str = "m_insight/wakeup",
+        store_port: int = 8001,
     ) -> None:
         super().__init__()
         self.id = id
@@ -139,6 +141,7 @@ class Args(Namespace):
         self.mqtt_broker = mqtt_broker
         self.mqtt_port = mqtt_port
         self.mqtt_topic = mqtt_topic
+        self.store_port = store_port
 
 
 
@@ -290,6 +293,12 @@ def main() -> int:
         "-t",
         default="m_insight/wakeup",
         help="MQTT topic for wake-up signals (default: m_insight/wakeup)",
+    )
+    parser.add_argument(
+        "--store-port",
+        type=int,
+        default=8001,
+        help="Port of the store service (default: 8001)",
     )
 
     args = parser.parse_args(namespace=Args())

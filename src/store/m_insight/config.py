@@ -38,7 +38,7 @@ class MInsightConfig:
             media_storage_dir=cl_dir / "media",
             public_key_path=cl_dir / "keys" / "public_key.pem",
             auth_disabled=False,
-            server_port=8001,
+            server_port=args.store_port,
             mqtt_broker=args.mqtt_broker,
             mqtt_port=args.mqtt_port,
             mqtt_topic=args.mqtt_topic,
