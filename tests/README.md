@@ -2,6 +2,13 @@
 
 This directory contains the test suite for the store microservice. The tests cover media management, job orchestration, authentication, permissions, and integration workflows using `pytest`.
 
+## Overview & Structure
+
+The test suite is organized into two categories:
+
+- **Unit tests** (`test_*.py`) — Test individual components with in-memory SQLite databases and mocked dependencies
+- **Integration tests** (`test_integration_*.py`) — Test end-to-end workflows with full service integration
+
 ## Prerequisites
 
 - Python 3.12+
@@ -90,11 +97,11 @@ The tests are organized into the following categories:
 
 ## Plugin Testing
 
-For detailed information on creating and testing compute plugins, see [PLUGINS.md](PLUGINS.md).
+For detailed information on creating and testing compute plugins, see [../../docs/store-plugins-testing.md](../../docs/store-plugins-testing.md).
 
 Quick reference:
 - Use `test_plugin_template.py.template` as a starting point
-- Follow the checklist in PLUGINS.md for comprehensive coverage
+- Follow the checklist in store-plugins-testing.md for comprehensive coverage
 - Test both functional behavior and authentication/authorization
 
 ## Configuration
@@ -104,3 +111,7 @@ The test configuration is defined in `pyproject.toml` under `[tool.pytest.ini_op
 - **Coverage**: Automatically enabled with HTML + terminal reports
 - **Coverage Threshold**: 90% minimum (tests fail if below)
 - **Asyncio Mode**: Auto-detection for async tests
+
+## Quick Reference
+
+For a quick command reference, see [QUICK.md](QUICK.md)

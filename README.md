@@ -8,6 +8,8 @@ A FastAPI-based microservice for managing media entities and compute jobs. This 
 **Database:** SQLite with WAL mode
 
 > **For Developers:** See [INTERNALS.md](INTERNALS.md) for package structure, development workflow, and contribution guidelines.
+>
+> **For Testing:** See [tests/README.md](tests/README.md) for comprehensive testing guide, test organization, and coverage requirements.
 
 ## Quick Start
 
@@ -36,8 +38,10 @@ export CL_SERVER_DIR=~/.data/cl_server_data
 
 ### Installation
 
+**Individual Package Installation:**
+
 ```bash
-# Clone and navigate to the store service
+# Navigate to the store service directory
 cd services/store
 
 # Install dependencies (uv will create .venv automatically)
@@ -46,6 +50,10 @@ uv sync
 # Run database migrations
 uv run alembic upgrade head
 ```
+
+**Workspace Installation (All Packages):**
+
+See root [README.md](../../README.md) for installing all packages using `./install.sh`.
 
 ### Starting the Server
 
@@ -74,25 +82,70 @@ uv run alembic upgrade head     # Run migrations
 uv run alembic revision --autogenerate -m "description"  # Create migration
 ```
 
-## Environment Variables
+## CLI Commands & Usage
 
-### Required
+The service provides two CLI commands for running the server and worker processes.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CL_SERVER_DIR` | Path to persistent data directory (database, media, logs) | **Required** |
+**Note:** `CL_SERVER_DIR` environment variable is required for database and media storage location.
 
-### Optional Configuration
+### Command 1: store (Server)
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | SQLite database location | `$CL_SERVER_DIR/media_store.db` |
-| `MEDIA_STORAGE_DIR` | Directory for storing media files | `$CL_SERVER_DIR/media` |
-| `PUBLIC_KEY_PATH` | ECDSA public key for verifying tokens | `$CL_SERVER_DIR/public_key.pem` |
-| `AUTH_DISABLED` | Disable authentication (demo mode) | `false` |
-| `READ_AUTH_ENABLED` | Require authentication for read APIs | `false` |
+Starts the FastAPI server for media entity and job management.
 
-**Note:** The public key (`public_key.pem`) should be obtained from the authentication service for JWT token verification.
+```bash
+# Basic usage (development mode with auto-reload)
+uv run store --reload
+
+# Production mode
+uv run store
+
+# Custom configuration
+uv run store --host 0.0.0.0 --port 8080 --no-auth --mqtt-port 1883
+```
+
+**Available Options:**
+- `--host HOST` - Host to bind to (default: `0.0.0.0`)
+- `--port, -p PORT` - Port to bind to (default: `8001`)
+- `--no-auth` - Disable authentication (demo mode)
+- `--no-migrate` - Skip running database migrations on startup
+- `--mqtt-server HOST` - MQTT broker host (default: `localhost`)
+- `--mqtt-port PORT` - MQTT broker port. Enables MQTT broadcasting when set
+- `--reload` - Enable uvicorn auto-reload for development
+
+**Example:**
+```bash
+# Development server with MQTT enabled
+uv run store --reload --mqtt-port 1883
+
+# Production server without authentication
+uv run store --port 8001 --no-auth
+```
+
+### Command 2: m-insight-worker (Worker)
+
+Starts the mInsight worker process for background job processing and entity reconciliation.
+
+```bash
+# Basic usage
+uv run m-insight-worker
+
+# Custom configuration
+uv run m-insight-worker --id worker-01 --mqtt-port 1883 --store-port 8001
+```
+
+**Available Options:**
+- `--id ID` - Worker ID for identification (default: `m-insight-default`)
+- `--log-level LEVEL` - Logging level (default: `INFO`)
+- `--mqtt-broker HOST` - MQTT broker host (default: `localhost`)
+- `--mqtt-port PORT` - MQTT broker port. Enables MQTT listening when set
+- `--mqtt-topic TOPIC` - MQTT topic to subscribe to
+- `--store-port PORT` - Store service port (default: `8001`)
+
+**Example:**
+```bash
+# Worker with MQTT enabled
+uv run m-insight-worker --id production-worker --mqtt-port 1883 --log-level DEBUG
+```
 
 ## Features
 
@@ -927,21 +980,22 @@ lsof -i :8001
 kill -9 <PID>
 ```
 
-### Missing Environment Variables
+### Missing CL_SERVER_DIR
 
-If the service fails to start with an error about missing variables:
+If the service fails to start with an error about missing `CL_SERVER_DIR`:
 
 ```bash
-# Check required variables are set
-echo $CL_VENV_DIR
+# Check if CL_SERVER_DIR is set
 echo $CL_SERVER_DIR
 
-# Set them if missing
-export CL_VENV_DIR=/path/to/venv/dir
-export CL_SERVER_DIR=/path/to/data/dir
+# Set it if missing
+export CL_SERVER_DIR=~/.data/cl_server_data
 
-# Then run start.sh again
-./start.sh
+# Ensure directory exists
+mkdir -p $CL_SERVER_DIR
+
+# Then start the server again
+uv run store --reload
 ```
 
 ### Authentication Failures (401/403)
@@ -981,7 +1035,6 @@ If you see errors about media storage:
 1. Verify `CL_SERVER_DIR` is set and directory exists
 2. Ensure directory has write permissions
 3. Check available disk space
-4. Verify `MEDIA_STORAGE_DIR` path is accessible
 
 ### Public Key Not Found
 
@@ -989,8 +1042,7 @@ If you see errors about missing `public_key.pem`:
 
 1. Ensure the authentication service has generated the key pair
 2. Copy `public_key.pem` from auth service to `$CL_SERVER_DIR`
-3. Verify `PUBLIC_KEY_PATH` environment variable points to the correct location
-4. Or run with `--no-auth` for testing without authentication
+3. Or run with `--no-auth` for testing without authentication
 
 ## Integration Example
 
@@ -1076,50 +1128,12 @@ except requests.exceptions.HTTPError as e:
         headers = {"Authorization": f"Bearer {token}"}
 ```
 
-## Architecture
+## Documentation
 
-### Technology Stack
+- **[INTERNALS.md](./INTERNALS.md)** - Developer documentation, architecture, contributing guide
+- **[tests/README.md](./tests/README.md)** - Testing guide with fixtures and patterns
+- **[Architecture Overview](../../docs/ARCHITECTURE.md)** - System-wide architecture and inter-service communication
 
-- **Framework:** FastAPI
-- **Database:** SQLite with SQLAlchemy ORM
-- **Versioning:** SQLAlchemy-Continuum
-- **Media Processing:** cl_ml_tools.algorithms (perceptual hashing, EXIF extraction)
-- **Metadata Tools:** ExifTool (EXIF data), ffprobe (video duration)
-- **Authentication:** JWT with ES256 (ECDSA) signature verification
+## License
 
-### Directory Structure
-
-```
-cl_server_store_service/
-├── src/
-│   ├── __init__.py          # FastAPI app initialization
-│   ├── routes.py            # API endpoint definitions
-│   ├── service.py           # Business logic layer
-│   ├── models.py            # SQLAlchemy models
-│   ├── schemas.py           # Pydantic schemas
-│   ├── database.py          # Database configuration
-│   ├── auth.py              # Authentication logic
-│   ├── config.py            # Configuration management
-│   ├── config_service.py    # Configuration service
-│   ├── file_storage.py      # File storage management
-│   └── versioning.py        # Versioning setup
-├── alembic/                 # Database migrations
-├── tests/                   # Test suite
-├── start.sh                 # Service startup script
-├── common.sh                # Common utilities
-└── README.md                # This file
-```
-
-### Data Model
-
-The service manages two main entity types:
-
-1. **Collections**: Containers for organizing media (folders)
-2. **Media Items**: Individual media files (images, videos)
-
-Each entity includes:
-- Metadata (label, description, timestamps)
-- File information (size, dimensions, MIME type, MD5 hash)
-- Versioning information (tracked automatically)
-- User tracking (added_by, updated_by)
-- Hierarchical relationships (parent_id)
+MIT License - see [LICENSE](./LICENSE) file for details.
