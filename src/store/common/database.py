@@ -28,17 +28,32 @@ def enable_wal_mode(
 
     This function should be registered as an event listener on SQLite engines.
     WAL mode enables concurrent reads and single writer, critical for multi-process access.
+    
+    Note: WAL mode is skipped for in-memory databases as they don't support it,
+    but foreign keys are still enabled for all SQLite databases.
     """
     _ = connection_record
     cursor = dbapi_conn.cursor()
     try:
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA cache_size=-64000")
-        cursor.execute("PRAGMA temp_store=MEMORY")
-        cursor.execute("PRAGMA mmap_size=30000000000")
-        cursor.execute("PRAGMA wal_autocheckpoint=1000")
-        cursor.execute("PRAGMA busy_timeout=10000")
+        # Check if this is an in-memory database
+        # In-memory databases have an empty string as the file path
+        cursor.execute("PRAGMA database_list")
+        db_list = cursor.fetchall()
+        # db_list format: [(seq, name, file), ...]
+        # For in-memory: file is '' (empty string)
+        is_memory = any(row[2] == '' for row in db_list)
+        
+        if not is_memory:
+            # Only set WAL mode for file-based databases
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA cache_size=-64000")
+            cursor.execute("PRAGMA temp_store=MEMORY")
+            cursor.execute("PRAGMA mmap_size=30000000000")
+            cursor.execute("PRAGMA wal_autocheckpoint=1000")
+            cursor.execute("PRAGMA busy_timeout=10000")
+        
+        # Always enable foreign keys for all SQLite databases (memory or file-based)
         cursor.execute("PRAGMA foreign_keys=ON")
     finally:
         cursor.close()
