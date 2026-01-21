@@ -60,8 +60,17 @@ class Entity(Base):
     # Soft delete flag
     is_deleted: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
 
-    # Relationships
-    
+    # Intelligence Relationships
+    faces: Mapped[list[Face]] = relationship(
+        "Face", back_populates="image", cascade="all, delete-orphan"
+    )
+    jobs: Mapped[list[EntityJob]] = relationship(
+        "EntityJob", back_populates="image", cascade="all, delete-orphan"
+    )
+    intelligence: Mapped[ImageIntelligence | None] = relationship(
+        "ImageIntelligence", back_populates="image", uselist=False, cascade="all, delete-orphan"
+    )
+
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:
         from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
@@ -91,5 +100,15 @@ class ServiceConfig(Base):
     @override
     def __repr__(self) -> str:
         return f"<ServiceConfig(key={self.key}, value={self.value})>"
+
+
+# Import intelligence models to ensure they are registered with Base for Alembic
+# Import these AFTER Entity and other core models
+from ..m_insight.models import ImageIntelligence  # noqa: F401
+from ..m_insight.intelligence.models import Face, EntityJob, KnownPerson, FaceMatch  # noqa: F401
+
+if TYPE_CHECKING:
+    from ..m_insight.models import ImageIntelligence
+    from ..m_insight.intelligence.models import Face, EntityJob, KnownPerson, FaceMatch
 
 

@@ -1,10 +1,19 @@
 
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
+
+from ...common.schemas import Item
+
+
 # Face detection and job schemas
 class FaceResponse(BaseModel):
     """Response schema for detected face."""
 
     id: int = Field(..., description="Face ID")
-    entity_id: int = Field(..., description="Entity ID this face belongs to")
+    image_id: int = Field(..., description="Image ID this face belongs to")
     bbox: BBox = Field(
         ..., description="Normalized bounding box [x1, y1, x2, y2] in range [0.0, 1.0]"
     )
@@ -21,7 +30,7 @@ class EntityJobResponse(BaseModel):
     """Response schema for entity job status."""
 
     id: int = Field(..., description="Job record ID")
-    entity_id: int = Field(..., description="Entity ID")
+    image_id: int = Field(..., description="Image ID")
     job_id: str = Field(..., description="Compute service job ID")
     task_type: str = Field(..., description="Task type (face_detection or clip_embedding)")
     status: str = Field(..., description="Job status (queued, in_progress, completed, failed)")
@@ -34,7 +43,7 @@ class EntityJobResponse(BaseModel):
 class SimilarImageResult(BaseModel):
     """Response schema for similar image search result."""
 
-    entity_id: int = Field(..., description="Entity ID of similar image")
+    image_id: int = Field(..., description="Image (Entity) ID of similar image")
     score: float = Field(..., description="Similarity score [0.0, 1.0]")
     entity: Item | None = Field(None, description="Entity details (optional)")
 
@@ -43,7 +52,7 @@ class SimilarImagesResponse(BaseModel):
     """Response schema for similar image search."""
 
     results: list[SimilarImageResult] = Field(..., description="List of similar images")
-    query_entity_id: int = Field(..., description="Query entity ID")
+    query_image_id: int = Field(..., description="Query image (entity) ID")
 
 
 # KnownPerson (face recognition) schemas

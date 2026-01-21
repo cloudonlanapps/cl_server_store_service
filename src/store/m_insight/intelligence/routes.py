@@ -196,11 +196,11 @@ async def find_similar_images(
         from ..store.service import EntityService
         entity_service = EntityService(db, config)
         for result in results:
-            result.entity = entity_service.get_entity_by_id(result.entity_id)
+            result.entity = entity_service.get_entity_by_id(result.image_id)
 
     return schemas.SimilarImagesResponse(
         results=results,
-        query_entity_id=entity_id,
+        query_image_id=entity_id,
     )
 
 @router.get(

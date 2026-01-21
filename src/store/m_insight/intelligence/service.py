@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from sqlalchemy.orm import Session
 from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
@@ -8,19 +9,15 @@ from .logic.job_callbacks import JobCallbackHandler
 from .logic.qdrant_singleton import get_qdrant_store
 from .logic.compute_singleton import get_compute_client, get_pysdk_config
 from .logic.face_store_singleton import get_face_store
-from ..common import models, schemas
-from ..common.schemas import (
-    FaceResponse,
-    EntityJobResponse,
-    SimilarImageResult,
-    KnownPersonResponse,
-    FaceMatchResult,
-    SimilarFacesResult,
-)
+from ..common.models import Entity
+from .models import Face, EntityJob, KnownPerson, FaceMatch
+from . import schemas
+from ..m_insight.models import EntityVersionData
 from cl_client.models import JobResponse
 from .logic.qdrant_image_store import SearchPreferences
 
 logger = logging.getLogger(__name__)
+
 
 class MInsightEmbeddingService:
     """Service layer for intelligence/ML operations."""
@@ -38,8 +35,8 @@ class MInsightEmbeddingService:
         from datetime import UTC, datetime
         return int(datetime.now(UTC).timestamp() * 1000)
 
-    async def trigger_async_jobs(self, entity: models.Entity) -> dict[str, str | None]:
-        """Trigger face detection and CLIP embedding jobs for an entity."""
+    async def trigger_async_jobs(self, entity: EntityVersionData) -> dict[str, str | None]:
+        """Trigger face detection and CLIP embedding jobs for an entity version."""
         # Get absolute file path
         if not entity.file_path:
             logger.warning(f"Entity {entity.id} has no file_path")
@@ -97,16 +94,16 @@ class MInsightEmbeddingService:
             "clip_embedding_job": clip_job_id,
         }
 
-    def get_entity_faces(self, entity_id: int) -> list[FaceResponse]:
+    def get_entity_faces(self, entity_id: int) -> list[schemas.FaceResponse]:
         """Get all faces detected in an entity."""
-        faces = self.db.query(models.Face).filter(models.Face.entity_id == entity_id).all()
+        faces = self.db.query(Face).filter(Face.image_id == entity_id).all()
 
-        results: list[FaceResponse] = []
+        results: list[schemas.FaceResponse] = []
         for face in faces:
             results.append(
-                FaceResponse(
+                schemas.FaceResponse(
                     id=face.id,
-                    entity_id=face.entity_id,
+                    image_id=face.image_id,
                     bbox=BBox.model_validate_json(face.bbox),
                     confidence=face.confidence,
                     landmarks=FaceLandmarks.model_validate_json(face.landmarks),
@@ -117,16 +114,16 @@ class MInsightEmbeddingService:
             )
         return results
 
-    def get_entity_jobs(self, entity_id: int) -> list[EntityJobResponse]:
+    def get_entity_jobs(self, entity_id: int) -> list[schemas.EntityJobResponse]:
         """Get all jobs for an entity."""
-        jobs = self.db.query(models.EntityJob).filter(models.EntityJob.entity_id == entity_id).all()
+        jobs = self.db.query(EntityJob).filter(EntityJob.image_id == entity_id).all()
 
-        results: list[EntityJobResponse] = []
+        results: list[schemas.EntityJobResponse] = []
         for job in jobs:
             results.append(
-                EntityJobResponse(
+                schemas.EntityJobResponse(
                     id=job.id,
-                    entity_id=job.entity_id,
+                    image_id=job.image_id,
                     job_id=job.job_id,
                     task_type=job.task_type,
                     status=job.status,
@@ -141,7 +138,7 @@ class MInsightEmbeddingService:
 
     def search_similar_images(
         self, entity_id: int, limit: int = 5, score_threshold: float = 0.85
-    ) -> list[SimilarImageResult]:
+    ) -> list[schemas.SimilarImageResult]:
         """Search for similar images using CLIP embeddings."""
         qdrant_store = get_qdrant_store()
 
@@ -164,12 +161,12 @@ class MInsightEmbeddingService:
         )
 
         # Filter out the query entity itself and convert to Pydantic
-        filtered_results: list[SimilarImageResult] = []
+        filtered_results: list[schemas.SimilarImageResult] = []
         for result in results:
             if result.id != entity_id:
                 filtered_results.append(
-                    SimilarImageResult(
-                        entity_id=int(result.id),  # type: ignore[arg-type]
+                    schemas.SimilarImageResult(
+                        image_id=int(result.id),  # type: ignore[arg-type]
                         score=float(result.score),
                         entity=None,  # Will be populated by route handler if requested
                     )
@@ -177,16 +174,16 @@ class MInsightEmbeddingService:
 
         return filtered_results[:limit]
 
-    def get_known_person(self, person_id: int) -> KnownPersonResponse | None:
+    def get_known_person(self, person_id: int) -> schemas.KnownPersonResponse | None:
         """Get known person details."""
-        person = self.db.query(models.KnownPerson).filter(models.KnownPerson.id == person_id).first()
+        person = self.db.query(KnownPerson).filter(KnownPerson.id == person_id).first()
         if not person:
             return None
 
         # Count faces for this person
-        face_count = self.db.query(models.Face).filter(models.Face.known_person_id == person_id).count()
+        face_count = self.db.query(Face).filter(Face.known_person_id == person_id).count()
 
-        return KnownPersonResponse(
+        return schemas.KnownPersonResponse(
             id=person.id,
             name=person.name,
             created_at=person.created_at,
@@ -194,17 +191,17 @@ class MInsightEmbeddingService:
             face_count=face_count,
         )
 
-    def get_all_known_persons(self) -> list[KnownPersonResponse]:
+    def get_all_known_persons(self) -> list[schemas.KnownPersonResponse]:
         """Get all known persons."""
-        persons = self.db.query(models.KnownPerson).all()
+        persons = self.db.query(KnownPerson).all()
 
-        results: list[KnownPersonResponse] = []
+        results: list[schemas.KnownPersonResponse] = []
         for person in persons:
             # Count faces for this person
-            face_count = self.db.query(models.Face).filter(models.Face.known_person_id == person.id).count()
+            face_count = self.db.query(Face).filter(Face.known_person_id == person.id).count()
 
             results.append(
-                KnownPersonResponse(
+                schemas.KnownPersonResponse(
                     id=person.id,
                     name=person.name,
                     created_at=person.created_at,
@@ -215,16 +212,16 @@ class MInsightEmbeddingService:
 
         return results
 
-    def get_known_person_faces(self, person_id: int) -> list[FaceResponse]:
+    def get_known_person_faces(self, person_id: int) -> list[schemas.FaceResponse]:
         """Get all faces for a known person."""
-        faces = self.db.query(models.Face).filter(models.Face.known_person_id == person_id).all()
+        faces = self.db.query(Face).filter(Face.known_person_id == person_id).all()
 
-        results: list[FaceResponse] = []
+        results: list[schemas.FaceResponse] = []
         for face in faces:
             results.append(
-                FaceResponse(
+                schemas.FaceResponse(
                     id=face.id,
-                    entity_id=face.entity_id,
+                    image_id=face.image_id,
                     bbox=BBox.model_validate_json(face.bbox),
                     confidence=face.confidence,
                     landmarks=FaceLandmarks.model_validate_json(face.landmarks),
@@ -236,9 +233,9 @@ class MInsightEmbeddingService:
 
         return results
 
-    def update_known_person_name(self, person_id: int, name: str) -> KnownPersonResponse | None:
+    def update_known_person_name(self, person_id: int, name: str) -> schemas.KnownPersonResponse | None:
         """Update known person name."""
-        person = self.db.query(models.KnownPerson).filter(models.KnownPerson.id == person_id).first()
+        person = self.db.query(KnownPerson).filter(KnownPerson.id == person_id).first()
         if not person:
             return None
 
@@ -250,19 +247,19 @@ class MInsightEmbeddingService:
 
         return self.get_known_person(person_id)
 
-    def get_face_matches(self, face_id: int) -> list[FaceMatchResult]:
+    def get_face_matches(self, face_id: int) -> list[schemas.FaceMatchResult]:
         """Get all match records for a face."""
-        matches = self.db.query(models.FaceMatch).filter(models.FaceMatch.face_id == face_id).all()
+        matches = self.db.query(FaceMatch).filter(FaceMatch.face_id == face_id).all()
 
-        results: list[FaceMatchResult] = []
+        results: list[schemas.FaceMatchResult] = []
         for match in matches:
             # Optionally load matched face details
-            matched_face = self.db.query(models.Face).filter(models.Face.id == match.matched_face_id).first()
+            matched_face = self.db.query(Face).filter(Face.id == match.matched_face_id).first()
             matched_face_response = None
             if matched_face:
-                matched_face_response = FaceResponse(
+                matched_face_response = schemas.FaceResponse(
                     id=matched_face.id,
-                    entity_id=matched_face.entity_id,
+                    image_id=matched_face.image_id,
                     bbox=BBox.model_validate_json(matched_face.bbox),
                     confidence=matched_face.confidence,
                     landmarks=FaceLandmarks.model_validate_json(matched_face.landmarks),
@@ -272,7 +269,7 @@ class MInsightEmbeddingService:
                 )
 
             results.append(
-                FaceMatchResult(
+                schemas.FaceMatchResult(
                     id=match.id,
                     face_id=match.face_id,
                     matched_face_id=match.matched_face_id,
@@ -286,7 +283,7 @@ class MInsightEmbeddingService:
 
     def search_similar_faces_by_id(
         self, face_id: int, limit: int = 5, threshold: float = 0.7
-    ) -> list[SimilarFacesResult]:
+    ) -> list[schemas.SimilarFacesResult]:
         """Search for similar faces using face store."""
         face_store = get_face_store()
 
@@ -307,16 +304,16 @@ class MInsightEmbeddingService:
         )
 
         # Filter out the query face itself and convert to Pydantic
-        filtered_results: list[SimilarFacesResult] = []
+        filtered_results: list[schemas.SimilarFacesResult] = []
         for result in results:
             if result.id != face_id:
                 # Optionally load face details
-                face = self.db.query(models.Face).filter(models.Face.id == result.id).first()
+                face = self.db.query(Face).filter(Face.id == result.id).first()
                 face_response = None
                 if face:
-                    face_response = FaceResponse(
+                    face_response = schemas.FaceResponse(
                         id=face.id,
-                        entity_id=face.entity_id,
+                        image_id=face.image_id,
                         bbox=BBox.model_validate_json(face.bbox),
                         confidence=face.confidence,
                         landmarks=FaceLandmarks.model_validate_json(face.landmarks),
@@ -326,7 +323,7 @@ class MInsightEmbeddingService:
                     )
 
                 filtered_results.append(
-                    SimilarFacesResult(
+                    schemas.SimilarFacesResult(
                         face_id=int(result.id),  # type: ignore[arg-type]
                         score=float(result.score),
                         known_person_id=(

@@ -96,6 +96,12 @@ class ImageIntelligence(Base):
     image_path: Mapped[str] = mapped_column(Text, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    # Relationship to Entity
+    image: Mapped[Entity] = relationship("Entity", back_populates="intelligence")
+
+    if TYPE_CHECKING:
+        from ..common.models import Entity
+
     @override
     def __repr__(self) -> str:
         return f"<ImageIntelligence(image_id={self.image_id}, md5={self.md5}, status={self.status}, version={self.version})>"

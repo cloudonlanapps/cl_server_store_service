@@ -1,13 +1,23 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, override
+
+from sqlalchemy import BigInteger, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from ...common.models import Base, Entity
+
+
 class Face(Base):
     """SQLAlchemy model for detected faces."""
 
     __tablename__ = "faces"  # pyright: ignore[reportUnannotatedClassAttribute]
 
-    # Primary key
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Primary key (derived from image_id and face index)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    # Foreign key to Entity
-    entity_id: Mapped[int] = mapped_column(
+    # Foreign key to Image (Entity)
+    image_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
@@ -32,18 +42,20 @@ class Face(Base):
     )
 
     # Relationships
-    entity: Mapped[Entity] = relationship("Entity", back_populates="faces")
+    image: Mapped[Entity] = relationship("Entity", back_populates="faces")
     known_person: Mapped[KnownPerson | None] = relationship("KnownPerson", back_populates="faces")
 
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:
         from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
 
+        from typings.sqlalchemy_continuum import VersionsRelationship
+
         versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
 
     @override
     def __repr__(self) -> str:
-        return f"<Face(id={self.id}, entity_id={self.entity_id}, confidence={self.confidence})>"
+        return f"<Face(id={self.id}, image_id={self.image_id}, confidence={self.confidence})>"
 
 
 class EntityJob(Base):
@@ -55,8 +67,8 @@ class EntityJob(Base):
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
-    # Foreign key to Entity
-    entity_id: Mapped[int] = mapped_column(
+    # Foreign key to Image (Entity)
+    image_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
@@ -77,8 +89,8 @@ class EntityJob(Base):
     # Error tracking
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Relationship to Entity
-    entity: Mapped[Entity] = relationship("Entity", back_populates="jobs")
+    # Relationship to Image (Entity)
+    image: Mapped[Entity] = relationship("Entity", back_populates="jobs")
 
     @override
     def __repr__(self) -> str:
@@ -107,6 +119,8 @@ class KnownPerson(Base):
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:
         from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
+
+        from typings.sqlalchemy_continuum import VersionsRelationship
 
         versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
 
