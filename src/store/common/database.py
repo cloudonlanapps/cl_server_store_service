@@ -7,8 +7,8 @@ from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.orm import Session, sessionmaker
 
 # CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
-# Using absolute import to avoid circular dependency with __init__.py
-from . import versioning  # pyright: ignore[reportUnusedImport]  # noqa: F401
+# Using absolute import to avoid circular dependency
+import store.common.versioning as _versioning  # noqa: F401
 from .utils import get_db_url
 
 # Global session factory

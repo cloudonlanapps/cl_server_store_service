@@ -26,7 +26,7 @@ from sqlalchemy import (  # noqa: E402
 from sqlalchemy.orm import Mapped, mapped_column, relationship  # noqa: E402
 
 # CRITICAL: Import versioning BEFORE defining models with __versioned__
-from . import versioning  # noqa: E402, F401  # pyright: ignore[reportUnusedImport]
+import store.common.versioning as _versioning  # noqa: E402, F401
 
 if TYPE_CHECKING:
     from typings.sqlalchemy_continuum import VersionsRelationship

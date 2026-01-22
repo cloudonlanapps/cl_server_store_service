@@ -78,7 +78,7 @@ async def get_public_key(config: BaseConfig) -> str:
     for attempt in range(_max_load_attempts):
         # Use configured path
         path = config.public_key_path
-        if path.exists():
+        if path and path.exists():
             try:
                 with open(path) as f:
                     key = f.read().strip()
