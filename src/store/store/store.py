@@ -2,6 +2,7 @@
 
 import os
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -62,6 +63,8 @@ async def lifespan(app: FastAPI):
         # -------- Shutdown --------
         if hasattr(app.state, "monitor"):
              app.state.monitor.stop()
+        if hasattr(app.state, "broadcaster") and hasattr(app.state.broadcaster, "disconnect"):
+             app.state.broadcaster.disconnect()
         logger.info("Store service shutdown complete")
 
 
