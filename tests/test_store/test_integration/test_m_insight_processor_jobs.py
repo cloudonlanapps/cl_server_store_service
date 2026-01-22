@@ -46,6 +46,8 @@ async def processor(mock_config):
         p.job_service.submit_face_detection.return_value = "face-1"
         p.job_service.submit_clip_embedding.return_value = "clip-1"
         p.job_service.submit_dino_embedding.return_value = "dino-1"
+        # update_job_status is synchronous, so we must make it a MagicMock, not AsyncMock
+        p.job_service.update_job_status = MagicMock()
         
         p.callback_handler = AsyncMock()
         

@@ -102,10 +102,6 @@ def main() -> int:
         "--face-collection", default="face_embeddings", help="Qdrant collection for face embeddings"
     )
 
-    # PySDK Configuration arguments (REMOVED)
-
-    # Other args...
-
     args = parser.parse_args(namespace=Args())
     
     # Create Configurations
