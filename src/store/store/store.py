@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
         broadcast_type = "mqtt" if config.mqtt_port else "none"
         app.state.broadcaster = get_broadcaster(
             broadcast_type=broadcast_type,
-            broker=config.mqtt_broker,
+            broker=config.mqtt_server,
             port=config.mqtt_port,
         )
         logger.info(f"MQTT Broadcaster initialized (type={broadcast_type})")

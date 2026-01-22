@@ -31,8 +31,8 @@ class TestJobProcessing:
             cl_server_dir=clean_data_dir,
             media_storage_dir=clean_data_dir / "media",
             public_key_path=clean_data_dir / "keys" / "public_key.pem",
-            auth_disabled=True,
-            server_port=8001
+            no_auth=True,
+            port=8001
         )
 
     @pytest.mark.asyncio
@@ -139,7 +139,7 @@ class TestJobProcessing:
             media_storage_dir=clean_data_dir / "media",
             public_key_path=clean_data_dir / "keys" / "public_key.pem",
             face_embedding_threshold=0.7,
-            mqtt_broker="localhost",
+            mqtt_server="localhost",
             mqtt_port=1883
         )
 
@@ -196,7 +196,7 @@ class TestJobProcessing:
         mock_qdrant = MagicMock()
         mock_dino = MagicMock()
         mock_config = MInsightConfig(
-            id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_broker="lh", mqtt_port=123
+            id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_server="lh", mqtt_port=123
         ) # Minimal mock
         
         handler = JobCallbackHandler(
@@ -266,7 +266,7 @@ class TestJobProcessing:
         mock_face_store.search.return_value = [] # No matches
 
         mock_config = MInsightConfig(
-             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_broker="lh", mqtt_port=123,
+             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_server="lh", mqtt_port=123,
              face_embedding_threshold=0.7
         )
         
@@ -315,7 +315,7 @@ class TestJobProcessing:
         mock_qdrant = MagicMock()
         mock_dino = MagicMock()
         mock_config = MInsightConfig(
-             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_broker="lh", mqtt_port=123
+             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_server="lh", mqtt_port=123
         )
         
         handler = JobCallbackHandler(

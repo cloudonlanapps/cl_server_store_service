@@ -183,7 +183,7 @@ class TestJWTUserID:
 class TestReadAuthBehaviorWithConfig:
     """Test that read authentication behavior changes based on database config."""
 
-    def test_read_auth_disabled_allows_access(self, client, db_session):
+    def test_read_no_auth_allows_access(self, client, db_session):
         """Test that read endpoints are accessible when read auth is disabled."""
         # Set read auth to disabled
         config_service = ConfigService(db_session)

@@ -14,7 +14,7 @@ def mock_m_insight_config(mock_store_config):
         cl_server_dir=mock_store_config.cl_server_dir,
         media_storage_dir=mock_store_config.media_storage_dir,
         public_key_path=mock_store_config.public_key_path,
-        auth_disabled=mock_store_config.auth_disabled,
+        no_auth=mock_store_config.no_auth,
         
         # MInsightConfig fields
         auth_service_url="http://auth",
@@ -22,7 +22,7 @@ def mock_m_insight_config(mock_store_config):
         compute_username="admin",
         compute_password="password",
         qdrant_url="http://qdrant",
-        mqtt_broker="localhost",
+        mqtt_server="localhost",
         mqtt_port=1883
     )
 
@@ -33,8 +33,8 @@ def mock_store_config(integration_config):
         cl_server_dir=Path("/tmp/fake"),
         media_storage_dir=Path("/tmp/fake/media"),
         public_key_path=Path("/tmp/fake/keys/public_key.pem"),
-        auth_disabled=True,
-        server_port=integration_config.store_port
+        no_auth=True,
+        port=integration_config.store_port
     )
 
 @pytest.fixture

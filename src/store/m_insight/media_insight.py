@@ -67,7 +67,7 @@ class MediaInsight:
             server_config = ServerConfig(
                 auth_url=self.config.auth_service_url,
                 compute_url=self.config.compute_service_url,
-                mqtt_broker=self.config.mqtt_broker,
+                mqtt_server=self.config.mqtt_server,
                 mqtt_port=self.config.mqtt_port,
             )
             
@@ -81,17 +81,17 @@ class MediaInsight:
             # Initialize Vector Stores
             clip_store = get_clip_store(
                 url=self.config.qdrant_url,
-                collection_name=self.config.qdrant_collections.clip_embedding_collection_name,
+                collection_name=self.config.qdrant_collection,
                 vector_size=512 # Default for CLIP
             )
             dino_store = get_dino_store(
                 url=self.config.qdrant_url,
-                collection_name=self.config.qdrant_collections.dino_embedding_collection_name,
+                collection_name=self.config.dino_collection,
                 vector_size=384 # Default for DINOv2-S
             )
             face_store = get_face_store(
                 url=self.config.qdrant_url,
-                collection_name=self.config.qdrant_collections.face_embedding_collection_name,
+                collection_name=self.config.face_collection,
                 vector_size=self.config.face_vector_size
             )
 

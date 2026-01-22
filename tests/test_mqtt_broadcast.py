@@ -28,7 +28,7 @@ def test_mqtt_broadcast_on_create(client: TestClient, sample_image: Path):
     
     # Verify broadcast
     config = client.app.state.config
-    expected_topic = f"store/{config.server_port}/items"
+    expected_topic = f"store/{config.port}/items"
     
     assert mock_broadcaster.publish_event.called
     args, kwargs = mock_broadcaster.publish_event.call_args
@@ -69,7 +69,7 @@ def test_mqtt_broadcast_on_update(client: TestClient, sample_image: Path, sample
     
     # Verify broadcast
     config = client.app.state.config
-    expected_topic = f"store/{config.server_port}/items"
+    expected_topic = f"store/{config.port}/items"
     assert mock_broadcaster.publish_event.called
     _, kwargs = mock_broadcaster.publish_event.call_args
     assert kwargs["topic"] == expected_topic
@@ -98,7 +98,7 @@ def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt
     config = client.app.state.config
     mqtt_server = mqtt_config["server"]
     mqtt_port = mqtt_config["port"]
-    topic = f"store/{config.server_port}/items"
+    topic = f"store/{config.port}/items"
     
     events_received = []
     connect_event = threading.Event()
@@ -170,7 +170,7 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
     config = client.app.state.config
     mqtt_server = mqtt_config["server"]
     mqtt_port = mqtt_config["port"]
-    topic = f"store/{config.server_port}/items"
+    topic = f"store/{config.port}/items"
     
     events_received = []
     connect_event = threading.Event()

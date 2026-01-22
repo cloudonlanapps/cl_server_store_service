@@ -140,7 +140,7 @@ async def create_entity(
         # Broadcast MQTT event only if this was a new entity (not a duplicate)
         broadcaster = getattr(request.app.state, "broadcaster", None)
         if broadcaster and item.md5 and not is_duplicate:
-            topic = f"store/{config.server_port}/items"
+            topic = f"store/{config.port}/items"
             payload = {
                 "id": item.id,
                 "md5": item.md5,
@@ -267,7 +267,7 @@ async def put_entity(
         # Note: Broadcaster only emits if a file was actually updated (item.md5 is not None for media)
         broadcaster = getattr(request.app.state, "broadcaster", None)
         if broadcaster and item.md5 and image and not is_duplicate:
-            topic = f"store/{config.server_port}/items"
+            topic = f"store/{config.port}/items"
             payload = {
                 "id": item.id,
                 "md5": item.md5,

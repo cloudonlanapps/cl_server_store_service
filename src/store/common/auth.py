@@ -115,7 +115,7 @@ async def get_current_user(
     # Get config from app state
     config: BaseConfig = request.app.state.config  # pyright: ignore[reportAny]
 
-    if config.auth_disabled:
+    if config.no_auth:
         return None
 
     if token is None:
@@ -169,7 +169,7 @@ def require_permission(permission: Permission):
     ) -> UserPayload | None:
         config: BaseConfig = request.app.state.config  # pyright: ignore[reportAny]
 
-        if config.auth_disabled:
+        if config.no_auth:
             return current_user
 
         if permission == "media_store_read":
@@ -205,7 +205,7 @@ async def require_admin(
 ) -> UserPayload | None:
     config: BaseConfig = request.app.state.config  # pyright: ignore[reportAny]
 
-    if config.auth_disabled:
+    if config.no_auth:
         return current_user
 
     if current_user is None:

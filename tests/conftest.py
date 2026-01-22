@@ -377,9 +377,9 @@ def client(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        auth_disabled=False,
-        server_port=random.randint(20000, 30000),
-        mqtt_broker=integration_config.mqtt_server,
+        no_auth=False,
+        port=random.randint(20000, 30000),
+        mqtt_server=integration_config.mqtt_server,
         mqtt_port=integration_config.mqtt_port,
     )
     app.state.config = store_config
@@ -458,9 +458,9 @@ def auth_client(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        auth_disabled=False,
-        server_port=8001,
-        mqtt_broker=integration_config.mqtt_server,
+        no_auth=False,
+        port=8001,
+        mqtt_server=integration_config.mqtt_server,
         mqtt_port=integration_config.mqtt_port,
     )
     app.state.config = store_config

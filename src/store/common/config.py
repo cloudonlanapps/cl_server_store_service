@@ -1,37 +1,47 @@
+from __future__ import annotations
+
+from argparse import Namespace
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class QdrantCollectionsConfig(BaseModel):
-    """Configuration for Qdrant collection names."""
+class BaseConfig(BaseModel, Namespace):
+    """Base configuration shared between Store and MInsight, compliant with Namespace."""
 
-    clip_embedding_collection_name: str = Field(
-        default="clip_embeddings", description="Collection name for CLIP embeddings"
-    )
-    dino_embedding_collection_name: str = Field(
-        default="dino_embeddings", description="Collection name for DINOv2 embeddings"
-    )
-    face_embedding_collection_name: str = Field(
-        default="face_embeddings", description="Collection name for face embeddings"
-    )
+    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
+    def __init__(self, **kwargs):
+        # Satisfy both BaseModel and Namespace
+        BaseModel.__init__(self, **kwargs)
+        Namespace.__init__(self)
 
-class BaseConfig(BaseModel):
-    """Base configuration shared between Store and MInsight."""
-
-    # Paths
-    cl_server_dir: Path
-    media_storage_dir: Path
-    public_key_path: Path
+    # Paths (populated after CLI parsing by finalize_base)
+    cl_server_dir: Path | None = None
+    media_storage_dir: Path | None = None
+    public_key_path: Path | None = None
 
     # Auth
-    auth_disabled: bool = False
+    no_auth: bool = False
 
     # Qdrant configuration
     qdrant_url: str = "http://localhost:6333"
-    qdrant_collections: QdrantCollectionsConfig = Field(default_factory=QdrantCollectionsConfig)
+
+    # Vector Store Collections
+    qdrant_collection: str = "clip_embeddings"  # For CLIP
+    dino_collection: str = "dino_embeddings"
+    face_collection: str = "face_embeddings"
 
     # MQTT configuration
-    mqtt_broker: str = "localhost"
+    mqtt_server: str = "localhost"
     mqtt_port: int | None = None
+
+    def finalize_base(self):
+        """Finalize base configuration after CLI parsing."""
+        from .utils import ensure_cl_server_dir
+
+        # Initialize Paths
+        cl_dir = ensure_cl_server_dir(create_if_missing=True)
+        self.cl_server_dir = cl_dir
+        self.media_storage_dir = cl_dir / "media"
+        self.public_key_path = cl_dir / "keys" / "public_key.pem"

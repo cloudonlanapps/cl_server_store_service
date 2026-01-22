@@ -52,59 +52,6 @@ def signal_handler(signum: int, _frame: FrameType | None) -> None:
         sys.exit(1)
 
 
-class Args(Namespace):
-    """CLI arguments for m_insight worker."""
-    
-    id: str
-    log_level: str
-    mqtt_broker: str
-    mqtt_port: int | None
-    mqtt_topic: str
-    store_port: int
-    auth_url: str
-    compute_url: str
-    compute_username: str
-    compute_password: str
-    qdrant_url: str
-    qdrant_collection: str
-    dino_collection: str
-    face_collection: str
-    no_auth: bool
-
-    def __init__(
-        self,
-        id: str = "m-insight-default",
-        log_level: str = "INFO",
-        mqtt_broker: str = "localhost",
-        mqtt_port: int = 1883,
-        mqtt_topic: str | None = None,
-        store_port: int = 8001,
-        auth_url: str = "http://localhost:8010",
-        compute_url: str = "http://localhost:8012",
-        compute_username: str = "admin",
-        compute_password: str = "admin",
-        qdrant_url: str = "http://localhost:6333",
-        qdrant_collection: str = "image_embeddings",
-        dino_collection: str = "dino_embeddings",
-        face_collection: str = "face_embeddings",
-        no_auth: bool = False,
-    ) -> None:
-        super().__init__()
-        self.id = id
-        self.log_level = log_level
-        self.mqtt_broker = mqtt_broker
-        self.mqtt_port = mqtt_port
-        self.mqtt_topic = mqtt_topic
-        self.store_port = store_port
-        self.auth_url = auth_url
-        self.compute_url = compute_url
-        self.compute_username = compute_username
-        self.compute_password = compute_password
-        self.qdrant_url = qdrant_url
-        self.qdrant_collection = qdrant_collection
-        self.dino_collection = dino_collection
-        self.face_collection = face_collection
-        self.no_auth = no_auth
 
 
 
@@ -134,7 +81,7 @@ async def mqtt_listener_task(config, processor) -> None:
         
         broadcaster = get_broadcaster(
             broadcast_type="mqtt",
-            broker=config.mqtt_broker,
+            broker=config.mqtt_server,
             port=config.mqtt_port,
         )
         
@@ -323,12 +270,12 @@ def main() -> int:
         action="store_true",
         help="Disable authentication for compute service",
     )
-
-    args = parser.parse_args(namespace=Args())
-
     # Initialize Config
     from .m_insight.config import MInsightConfig
-    config = MInsightConfig.from_cli_args(args)
+    
+    config = MInsightConfig()
+    _ = parser.parse_args(namespace=config)
+    config.finalize()
     
     # Initialize Database (Worker needs access to DB)
     from .common import database
@@ -336,9 +283,9 @@ def main() -> int:
 
     # Print startup info
     print(f"Starting m_insight process: {config.id}")
-    print(f"MQTT broker: {config.mqtt_broker}:{config.mqtt_port}")
+    print(f"MQTT broker: {config.mqtt_server}:{config.mqtt_port}")
     print(f"MQTT topic: {config.mqtt_topic}")
-    print(f"Log level: {args.log_level}")
+    print(f"Log level: {config.log_level}")
     print(f"Database: {config.cl_server_dir}/store.db")
     print("Press Ctrl+C to stop\n")
 

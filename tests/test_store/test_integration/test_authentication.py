@@ -47,11 +47,11 @@ class TestAuthenticationLogic:
 
         return private_pem, str(public_key_path)
 
-    def _create_mock_request(self, auth_disabled=False):
+    def _create_mock_request(self, no_auth=False):
         """Create a mock request with configured app state."""
         request = MagicMock()
         config = MagicMock()
-        config.auth_disabled = auth_disabled
+        config.no_auth = no_auth
         request.app.state.config = config
         return request
 
@@ -66,7 +66,7 @@ class TestAuthenticationLogic:
             is_admin=False,
         )
 
-        request = self._create_mock_request(auth_disabled=False)
+        request = self._create_mock_request(no_auth=False)
         permission_checker = require_permission("media_store_write")
         
         result = asyncio.run(permission_checker(request, user))
@@ -78,7 +78,7 @@ class TestAuthenticationLogic:
 
         user = UserPayload(id="admin", permissions=[], is_admin=True)
 
-        request = self._create_mock_request(auth_disabled=False)
+        request = self._create_mock_request(no_auth=False)
         permission_checker = require_permission("media_store_write")
         
         result = asyncio.run(permission_checker(request, user))
@@ -94,7 +94,7 @@ class TestAuthenticationLogic:
             is_admin=False,
         )
 
-        request = self._create_mock_request(auth_disabled=False)
+        request = self._create_mock_request(no_auth=False)
         
         with pytest.raises(HTTPException) as exc_info:
             permission_checker = require_permission("media_store_write")
@@ -106,7 +106,7 @@ class TestAuthenticationLogic:
         """None user (no auth) should be rejected when auth is not disabled."""
         from store.common.auth import require_permission
 
-        request = self._create_mock_request(auth_disabled=False)
+        request = self._create_mock_request(no_auth=False)
         
         with pytest.raises(HTTPException) as exc_info:
             permission_checker = require_permission("media_store_write")
@@ -126,7 +126,7 @@ class TestAuthenticationLogic:
             is_admin=False,
         )
 
-        request = self._create_mock_request(auth_disabled=False)
+        request = self._create_mock_request(no_auth=False)
 
         # Mock ConfigService to return True for read_auth_enabled
         # This ensures the permission check proceeds normally
@@ -144,7 +144,7 @@ class TestAuthenticationLogic:
         from store.common.auth import UserPayload, require_admin
 
         user = UserPayload(id="admin", permissions=[], is_admin=True)
-        request = self._create_mock_request(auth_disabled=False)
+        request = self._create_mock_request(no_auth=False)
 
         result = asyncio.run(require_admin(request, user))
         assert result == user
@@ -158,7 +158,7 @@ class TestAuthenticationLogic:
             permissions=["media_store_write"],
             is_admin=False,
         )
-        request = self._create_mock_request(auth_disabled=False)
+        request = self._create_mock_request(no_auth=False)
 
         with pytest.raises(HTTPException) as exc_info:
             asyncio.run(require_admin(request, user))
@@ -170,13 +170,13 @@ class TestAuthenticationModes:
     """Test authentication mode configurations."""
 
     def test_demo_mode_bypasses_permission_check(self):
-        """When auth_disabled=true, permission checks should be bypassed."""
+        """When no_auth=true, permission checks should be bypassed."""
         from store.common.auth import require_permission
 
-        # Mock request with auth_disabled=True
+        # Mock request with no_auth=True
         request = MagicMock()
         config = MagicMock()
-        config.auth_disabled = True
+        config.no_auth = True
         request.app.state.config = config
 
         permission_checker = require_permission("media_store_write")
@@ -184,13 +184,13 @@ class TestAuthenticationModes:
         assert result is None
 
     def test_demo_mode_bypasses_admin_check(self):
-        """When auth_disabled=true, admin checks should be bypassed."""
+        """When no_auth=true, admin checks should be bypassed."""
         from store.common.auth import require_admin
 
-        # Mock request with auth_disabled=True
+        # Mock request with no_auth=True
         request = MagicMock()
         config = MagicMock()
-        config.auth_disabled = True
+        config.no_auth = True
         request.app.state.config = config
 
         result = asyncio.run(require_admin(request, None))

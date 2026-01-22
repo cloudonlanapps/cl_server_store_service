@@ -1,56 +1,48 @@
-from store.main import Args
+from __future__ import annotations
 
-from ..common.config import BaseConfig, QdrantCollectionsConfig
-from ..common.utils import ensure_cl_server_dir
+from pydantic import Field
+
+from ..common.config import BaseConfig
 
 
 class MInsightConfig(BaseConfig):
-    """mInsight process configuration."""
+    """Unified mInsight configuration and CLI arguments."""
 
-    # Process identity
-    id: str
-
-    store_port: int = 8011
-
-    # ML Service URLs (Worker only)
-    auth_service_url: str = "http://localhost:8010"
-    compute_service_url: str = "http://localhost:8012"
+    # CLI Fields (mapped to Args)
+    id: str = "m-insight-default"
+    log_level: str = "INFO"
+    store_port: int = 8001
+    
+    # CLI-only fields for argparse to populate
+    auth_url: str | None = None
+    compute_url: str | None = None
     compute_username: str = "admin"
     compute_password: str = "admin"
+    mqtt_topic_raw: str | None = Field(default=None, alias="mqtt_topic")
 
-    # Worker processing settings
+    # Worker processing settings (non-CLI defaults)
     face_vector_size: int = 512
     face_embedding_threshold: float = 0.7
 
-    # MQTT configuration (Override default to add topic)
+    # Actual internal state
+    auth_service_url: str = "http://localhost:8010"
+    compute_service_url: str = "http://localhost:8012"
     mqtt_topic: str = "m_insight/wakeup"
 
-    @classmethod
-    def from_cli_args(cls, args: Args) -> "MInsightConfig":
-        """Create config from CLI arguments and environment."""
-        cl_dir = ensure_cl_server_dir(create_if_missing=True)
+    def finalize(self):
+        """Finalize configuration after CLI parsing."""
+        # 1. Base finalization (paths, basic auth/mqtt, shared collections)
+        self.finalize_base()
 
-        return cls(
-            # BaseConfig fields
-            cl_server_dir=cl_dir,
-            media_storage_dir=cl_dir / "media",
-            public_key_path=cl_dir / "keys" / "public_key.pem",
-            auth_disabled=args.no_auth,
-            qdrant_url=args.qdrant_url,
-            qdrant_collections=QdrantCollectionsConfig(
-                clip_embedding_collection_name=args.clip_collection,
-                dino_embedding_collection_name=args.dino_collection,
-                face_embedding_collection_name=args.face_collection,
-            ),
-            mqtt_broker=args.mqtt_broker,
-            mqtt_port=args.mqtt_port,
-            # MInsightConfig fields
-            id=args.id,
-            store_port=args.store_port,
-            # ML Services
-            auth_service_url=args.auth_url,
-            compute_service_url=args.compute_url,
-            compute_username=args.compute_username,
-            compute_password=args.compute_password,
-            mqtt_topic=args.mqtt_topic or f"store/{args.store_port}/items",
-        )
+        # 2. Sync CLI URLs to internal URLs
+        if self.auth_url:
+            self.auth_service_url = self.auth_url
+        if self.compute_url:
+            self.compute_service_url = self.compute_url
+
+        # 3. Handle MQTT topic logic
+        if self.mqtt_topic_raw:
+            self.mqtt_topic = self.mqtt_topic_raw
+        elif not self.mqtt_topic or self.mqtt_topic == "m_insight/wakeup":
+            # Default pattern if not explicitly set
+            self.mqtt_topic = f"store/{self.store_port}/items"

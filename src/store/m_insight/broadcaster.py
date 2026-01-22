@@ -27,7 +27,7 @@ class MInsightBroadcaster:
 
         self.broadcaster = get_broadcaster(
             broadcast_type="mqtt",
-            broker=self.config.mqtt_broker,
+            broker=self.config.mqtt_server,
             port=self.config.mqtt_port,
         )
 

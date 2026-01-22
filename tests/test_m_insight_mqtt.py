@@ -43,7 +43,7 @@ def test_m_insight_worker(
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         store_port=integration_config.store_port,
-        mqtt_broker=integration_config.mqtt_server,
+        mqtt_server=integration_config.mqtt_server,
         mqtt_port=integration_config.mqtt_port,
         mqtt_topic="test/m_insight_mqtt",
     )
@@ -140,7 +140,7 @@ def test_m_insight_heartbeat_status(
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         store_port=integration_config.store_port,
-        mqtt_broker=integration_config.mqtt_server,
+        mqtt_server=integration_config.mqtt_server,
         mqtt_port=port,
     )
     

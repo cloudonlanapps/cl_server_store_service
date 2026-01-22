@@ -1,30 +1,19 @@
-from store.main import Args
+from __future__ import annotations
 
-from ..common.config import BaseConfig, QdrantCollectionsConfig
-from ..common.utils import ensure_cl_server_dir
+from ..common.config import BaseConfig
 
 
 class StoreConfig(BaseConfig):
-    """Store service configuration."""
+    """Unified Store service configuration and CLI arguments."""
 
-    server_port: int = 8011
+    # CLI Fields (mapped from argparse)
+    host: str = "0.0.0.0"
+    port: int = 8001
+    debug: bool = False
+    reload: bool = False
+    log_level: str = "info"
+    no_migrate: bool = False
 
-    @classmethod
-    def from_cli_args(cls, args: Args) -> "StoreConfig":
-        """Create config from CLI arguments and environment."""
-        cl_dir = ensure_cl_server_dir(create_if_missing=True)
-
-        return cls(
-            cl_server_dir=cl_dir,
-            media_storage_dir=cl_dir / "media",
-            public_key_path=cl_dir / "keys" / "public_key.pem",
-            auth_disabled=args.no_auth,
-            qdrant_url=args.qdrant_url,
-            qdrant_collections=QdrantCollectionsConfig(
-                clip_embedding_collection_name=args.qdrant_collection,
-                face_embedding_collection_name=args.face_collection,
-            ),
-            mqtt_broker=args.mqtt_server,
-            mqtt_port=args.mqtt_port,
-            server_port=args.port,
-        )
+    def finalize(self):
+        """Finalize configuration after CLI parsing."""
+        self.finalize_base()

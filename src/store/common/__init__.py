@@ -1,6 +1,6 @@
 """Common module for shared utilities and models."""
 
-from .config import BaseConfig, QdrantCollectionsConfig
+from .config import BaseConfig
 from .models import (
     Base,
     Entity,
@@ -16,7 +16,6 @@ from .storage import StorageService
 
 __all__: list[str] = [
     "BaseConfig",
-    "QdrantCollectionsConfig",
     "Base",
     "Entity",
     "EntityJob",

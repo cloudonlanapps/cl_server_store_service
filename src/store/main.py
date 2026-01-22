@@ -16,51 +16,7 @@ from .store.config import StoreConfig
 from .store.media_metadata import validate_tools
 
 
-class Args(Namespace):
-    host: str
-    port: int
-    debug: bool
-    reload: bool
-    log_level: str
-    no_auth: bool
-    no_migrate: bool
-    mqtt_server: str
-    mqtt_port: int | None
-    qdrant_url: str
-    clip_collection: str
-    dino_collection: str
-    face_collection: str
 
-    def __init__(
-        self,
-        host: str = "0.0.0.0",
-        port: int = 8001,
-        debug: bool = False,
-        reload: bool = False,
-        log_level: str = "info",
-        no_auth: bool = False,
-        no_migrate: bool = False,
-        mqtt_server: str = "localhost",
-        mqtt_port: int | None = None,
-        qdrant_url: str = "http://localhost:6333",
-        qdrant_collection: str = "clip_embeddings",
-        dino_collection: str = "dino_embeddings",
-        face_collection: str = "face_embeddings",
-    ) -> None:
-        super().__init__()
-        self.host = host
-        self.port = port
-        self.debug = debug
-        self.reload = reload
-        self.log_level = log_level
-        self.no_auth = no_auth
-        self.no_migrate = no_migrate
-        self.mqtt_server = mqtt_server
-        self.mqtt_port = mqtt_port
-        self.qdrant_url = qdrant_url
-        self.clip_collection = qdrant_collection
-        self.face_collection = face_collection
-        self.dino_collection = dino_collection
 
 
 def create_app(config: StoreConfig) -> FastAPI:
@@ -103,10 +59,10 @@ def main() -> int:
         "--face-collection", default="face_embeddings", help="Qdrant collection for face embeddings"
     )
 
-    args = parser.parse_args(namespace=Args())
-
     # Create Configurations
-    config = StoreConfig.from_cli_args(args)
+    config = StoreConfig()
+    args = parser.parse_args(namespace=config)
+    config.finalize()
 
     # Initialize and configure app
     app = create_app(config)

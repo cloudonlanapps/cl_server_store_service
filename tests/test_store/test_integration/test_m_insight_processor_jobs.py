@@ -20,13 +20,13 @@ def mock_config():
         cl_server_dir=Path("/tmp/fake"),
         media_storage_dir=Path("/tmp/fake/media"),
         public_key_path=Path("/tmp/fake/keys/public_key.pem"),
-        auth_disabled=True,
+        no_auth=True,
         auth_service_url="http://auth",
         compute_service_url="http://compute",
         compute_username="admin",
         compute_password="password",
         qdrant_url="http://qdrant",
-        mqtt_broker="localhost",
+        mqtt_server="localhost",
         mqtt_port=1883
     )
 

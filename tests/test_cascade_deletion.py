@@ -89,8 +89,8 @@ def test_hard_delete_collection_cascades_to_children(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        auth_disabled=True,
-        server_port=8001,
+        no_auth=True,
+        port=8001,
     )
     service = EntityService(test_db_session, config)
     service.soft_delete_entity(collection_id)
@@ -156,8 +156,8 @@ def test_hard_delete_nested_collections_cascades_recursively(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        auth_disabled=True,
-        server_port=8001,
+        no_auth=True,
+        port=8001,
     )
     service = EntityService(test_db_session, config)
     service.soft_delete_entity(parent_id)

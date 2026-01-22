@@ -35,16 +35,16 @@ class IntelligenceRetrieveService:
         # Initialize stores from StoreConfig
         self.qdrant_store = get_clip_store(
             url=config.qdrant_url,
-            collection_name=config.qdrant_collections.clip_embedding_collection_name,
+            collection_name=config.qdrant_collection,
         )
         self.face_store = get_face_store(
             url=config.qdrant_url,
-            collection_name=config.qdrant_collections.face_embedding_collection_name,
+            collection_name=config.face_collection,
             vector_size=getattr(config, "face_vector_size", 512),
         )
         self.dino_store = get_dino_store(
             url=config.qdrant_url,
-            collection_name=config.qdrant_collections.dino_embedding_collection_name,
+            collection_name=config.dino_collection,
         )
 
     def _get_entity_or_raise(self, entity_id: int) -> None:
