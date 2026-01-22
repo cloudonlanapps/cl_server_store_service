@@ -165,6 +165,7 @@ def test_search_similar_faces_by_id(retrieve_service, mock_db):
 async def test_search_similar_images_with_details(client, mock_db):
     """Test find_similar_images route with include_details=True."""
     from store.common import models as common_models
+    from store.m_insight.intelligence.schemas import SimilarImageResult
     # Use patch to mock IntelligenceRetrieveService and EntityService in the routes module
     with patch("store.m_insight.intelligence.routes.IntelligenceRetrieveService") as mock_service_class, \
          patch("store.store.service.EntityService") as mock_entity_service_class:
@@ -176,10 +177,9 @@ async def test_search_similar_images_with_details(client, mock_db):
         mock_db.query.return_value.filter.return_value.first.return_value = mock_entity
         
         mock_service = mock_service_class.return_value
-        mock_result = MagicMock()
-        mock_result.image_id = 2
-        mock_result.score = 0.9
-        mock_result.entity = None
+        # MUST use actual schema object or dict because Pydantic validation expects it
+        # MagicMock fails validation because from_attributes=True is not invalid on the schema
+        mock_result = SimilarImageResult(image_id=2, score=0.9, entity=None)
         mock_service.search_similar_images.return_value = [mock_result]
         
         mock_entity_service = mock_entity_service_class.return_value

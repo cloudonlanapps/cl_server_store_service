@@ -45,6 +45,7 @@ class SimilarImageResult(BaseModel):
 
     image_id: int = Field(..., description="Image Entity ID")
     score: float = Field(..., description="Similarity score (0-1)")
+    entity: Item | None = Field(None, description="Entity details if requested")
 
 
 class SimilarImagesResponse(BaseModel):
