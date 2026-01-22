@@ -56,6 +56,7 @@ def test_hard_delete_collection_cascades_to_children(
     client: TestClient,
     sample_image: Path,
     test_db_session: Session,
+    clean_data_dir: Path,
 ) -> None:
     """Test that hard-deleting a soft-deleted collection cascades to children."""
     # Create a collection
@@ -85,9 +86,9 @@ def test_hard_delete_collection_cascades_to_children(
     from store.store.config import StoreConfig
     
     config = StoreConfig(
-        cl_server_dir=test_db_session.bind.url.database,
-        media_storage_dir="/tmp",
-        public_key_path=None,
+        cl_server_dir=clean_data_dir,
+        media_storage_dir=clean_data_dir / "media",
+        public_key_path=clean_data_dir / "keys" / "public_key.pem",
         auth_disabled=True,
         server_port=8001,
     )
@@ -110,6 +111,7 @@ def test_hard_delete_nested_collections_cascades_recursively(
     client: TestClient,
     sample_image: Path,
     test_db_session: Session,
+    clean_data_dir: Path,
 ) -> None:
     """Test that hard-deleting a collection recursively cascades through nested children."""
     # Create parent collection
@@ -151,9 +153,9 @@ def test_hard_delete_nested_collections_cascades_recursively(
     from store.store.config import StoreConfig
     
     config = StoreConfig(
-        cl_server_dir=test_db_session.bind.url.database,
-        media_storage_dir="/tmp",
-        public_key_path=None,
+        cl_server_dir=clean_data_dir,
+        media_storage_dir=clean_data_dir / "media",
+        public_key_path=clean_data_dir / "keys" / "public_key.pem",
         auth_disabled=True,
         server_port=8001,
     )
