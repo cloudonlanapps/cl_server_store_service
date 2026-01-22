@@ -8,7 +8,7 @@ from store.common.auth import UserPayload, require_permission
 from store.common.database import get_db
 from store.store.config import StoreConfig
 
-from . import models as intel_models
+# from . import models as intel_models
 from . import schemas as intel_schemas
 from .retrieval_service import IntelligenceRetrieveService
 
@@ -61,7 +61,7 @@ async def download_face_embedding(
     import numpy as np
     from fastapi.responses import Response
 
-    from .models import Face
+    from store.common.models import Face
 
     # Get face store and retrieve embedding
     config: StoreConfig = request.app.state.config
@@ -244,7 +244,7 @@ async def find_similar_faces(
     service = IntelligenceRetrieveService(db, config)
 
     # Check if face exists
-    face = db.query(intel_models.Face).filter(intel_models.Face.id == face_id).first()
+    face = db.query(models.Face).filter(models.Face.id == face_id).first()
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
 
@@ -282,7 +282,7 @@ async def get_face_matches(
     service = IntelligenceRetrieveService(db, config)
 
     # Check if face exists
-    face = db.query(intel_models.Face).filter(intel_models.Face.id == face_id).first()
+    face = db.query(models.Face).filter(models.Face.id == face_id).first()
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
 
@@ -353,8 +353,8 @@ async def get_person_faces(
 
     # Check if person exists
     person = (
-        db.query(intel_models.KnownPerson)
-        .filter(intel_models.KnownPerson.id == person_id)
+        db.query(models.KnownPerson)
+        .filter(models.KnownPerson.id == person_id)
         .first()
     )
     if not person:

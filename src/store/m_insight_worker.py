@@ -61,6 +61,14 @@ class Args(Namespace):
     mqtt_port: int | None
     mqtt_topic: str
     store_port: int
+    auth_url: str
+    compute_url: str
+    compute_username: str
+    compute_password: str
+    qdrant_url: str
+    qdrant_collection: str
+    dino_collection: str
+    face_collection: str
     no_auth: bool
 
     def __init__(
@@ -71,6 +79,14 @@ class Args(Namespace):
         mqtt_port: int = 1883,
         mqtt_topic: str | None = None,
         store_port: int = 8001,
+        auth_url: str = "http://localhost:8010",
+        compute_url: str = "http://localhost:8012",
+        compute_username: str = "admin",
+        compute_password: str = "admin",
+        qdrant_url: str = "http://localhost:6333",
+        qdrant_collection: str = "image_embeddings",
+        dino_collection: str = "dino_embeddings",
+        face_collection: str = "face_embeddings",
         no_auth: bool = False,
     ) -> None:
         super().__init__()
@@ -80,6 +96,14 @@ class Args(Namespace):
         self.mqtt_port = mqtt_port
         self.mqtt_topic = mqtt_topic
         self.store_port = store_port
+        self.auth_url = auth_url
+        self.compute_url = compute_url
+        self.compute_username = compute_username
+        self.compute_password = compute_password
+        self.qdrant_url = qdrant_url
+        self.qdrant_collection = qdrant_collection
+        self.dino_collection = dino_collection
+        self.face_collection = face_collection
         self.no_auth = no_auth
 
 
@@ -141,14 +165,14 @@ async def run_loop(config) -> None:
     Args:
         config: MInsightConfig instance
     """
-    from .m_insight.worker import mInsight
+    from .m_insight.media_insight import MediaInsight
     
     # Initialize Broadcaster
     broadcaster = MInsightBroadcaster(config)
     broadcaster.init()
     
     # Create processor with broadcaster
-    processor = mInsight(config=config, broadcaster=broadcaster)
+    processor = MediaInsight(config=config, broadcaster=broadcaster)
     
     logger.info(f"mInsight process {config.id} starting...")
     
@@ -186,8 +210,8 @@ async def run_loop(config) -> None:
         logger.info(f"mInsight process {config.id} shutting down...")
 
         # Shutdown IntelligenceProcessingService singletons
-        from .m_insight.processing_service import IntelligenceProcessingService
-        await IntelligenceProcessingService.shutdown()
+        # Shutdown MInsightProcessor resources
+        await processor.shutdown()
         
         # Cancel background tasks
         if mqtt_task:

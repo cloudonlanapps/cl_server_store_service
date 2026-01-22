@@ -4,7 +4,7 @@ Tests for file storage organization and management.
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from store.store.entity_storage import EntityStorageService
+from store.common.storage import StorageService
 
 
 class TestFileStorage:

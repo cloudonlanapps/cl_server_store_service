@@ -15,9 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 make_versioned(user_cls=None)
 
 # Configure mappers after models are imported
+# Configure mappers after models are imported
 from store.common.models import Base
-from store.m_insight.models import ImageIntelligence
-from store.m_insight.intelligence.models import Face, EntityJob, KnownPerson, FaceMatch
+# Models are now consolidated in store.common.models, so importing Base (and the module) registers them.
 configure_mappers()
 
 from store.common.utils import get_db_url

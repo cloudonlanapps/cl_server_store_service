@@ -8,9 +8,8 @@ from sqlalchemy.orm import Session
 from store.store.config import StoreConfig
 
 from . import schemas
-from .models import EntityJob, Face, FaceMatch, KnownPerson
-from .vector_stores import get_clip_store, get_dino_store, get_face_store
-from .qdrant_image_store import SearchPreferences
+from store.common.models import EntityJob, Face, FaceMatch, KnownPerson
+from .vector_stores import SearchPreferences, get_clip_store, get_dino_store, get_face_store
 
 logger = logging.getLogger(__name__)
 

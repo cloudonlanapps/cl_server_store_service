@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, override
+from pathlib import Path
 
 # Import shared Base
 from sqlalchemy.orm import DeclarativeBase
@@ -8,7 +9,8 @@ from sqlalchemy.orm import DeclarativeBase
 class Base(DeclarativeBase):
     """Base class for Store service models."""
     pass
-from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Integer, String
+
+from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # CRITICAL: Import versioning BEFORE defining models with __versioned__
@@ -16,6 +18,7 @@ from . import versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 if TYPE_CHECKING:
     from typings.sqlalchemy_continuum import VersionsRelationship
+    from .storage import StorageService
 
 
 class Entity(Base):
@@ -74,7 +77,6 @@ class Entity(Base):
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:
         from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
-
         versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
 
     @override
@@ -102,13 +104,234 @@ class ServiceConfig(Base):
         return f"<ServiceConfig(key={self.key}, value={self.value})>"
 
 
-# Import intelligence models to ensure they are registered with Base for Alembic
-# These are imported at runtime after all models are defined
-# The relationship() uses string references, so circular imports work for ORM
+class EntitySyncState(Base):
+    """Tracks the last processed Entity version for m_insight reconciliation.
+    
+    This is a singleton table with only one row (id=1).
+    """
 
-if TYPE_CHECKING:
-    from ..m_insight.models import ImageIntelligence
-    from ..m_insight.models import EntityJob, Face, FaceMatch, KnownPerson
+    __tablename__ = "entity_sync_state"  # pyright: ignore[reportUnannotatedClassAttribute]
 
-# Runtime import happens when these modules are imported elsewhere
-# (e.g., via alembic or when the full application starts)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    last_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    @override
+    def __repr__(self) -> str:
+        return f"<EntitySyncState(id={self.id}, last_version={self.last_version})>"
+
+
+class ImageIntelligence(Base):
+    """Stores intelligence metadata for each image entity.
+    
+    One row per image, tracking md5, processing status, image path, and version.
+    Cascade deletes when parent entity is deleted.
+    """
+
+    __tablename__ = "image_intelligence"  # pyright: ignore[reportUnannotatedClassAttribute]
+
+    image_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    md5: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    # Overall processing status
+    # pending, processing, completed, failed
+    status: Mapped[str] = mapped_column(String, nullable=False, default="queued")
+    
+    # Processing Status for individual steps logic is managed via EntityJob usually,
+    # but here we also track job IDs.
+    
+    # Job tracking fields
+    face_detection_job_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    clip_job_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    dino_job_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    face_embedding_job_ids: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    
+    # Re-using status field as 'processing_status' from plan, 
+    # but keeping name 'status' as it was before, unless I should rename it?
+    # Plan says: processing_status: Mapped[str] = mapped_column(String, default="pending")
+    # Existing was: status: Mapped[str] = mapped_column(String, nullable=False, default="queued")
+    # I will add processing_status as a NEW field to match plan exactly and maybe migrate 'status' later or just use 'status'.
+    # The plan shows:
+    # processing_status: Mapped[str] = mapped_column(String, default="pending")
+    # And it showed status as existing. 
+    # Actually, let's look at the plan again.
+    # Plan: update trigger_async_jobs to update ImageIntelligence with job IDs.
+    # Plan Section 5.1: 
+    # processing_status: Mapped[str] = mapped_column(String, default="pending") 
+    # existing 'status' was there. 
+    # I'll stick to 'processing_status' as requested in plan to avoid confusion, 
+    # but I might need to check if 'status' is used elsewhere.
+    # The existing 'status' was 88: status: Mapped[str] = mapped_column(String, nullable=False, default="queued")
+    # I will add processing_status.
+    
+    processing_status: Mapped[str] = mapped_column(String, default="pending")
+
+    image_path: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Relationship to Entity
+    image: Mapped[Entity] = relationship("Entity", back_populates="intelligence")
+
+    @override
+    def __repr__(self) -> str:
+        return f"<ImageIntelligence(image_id={self.image_id}, md5={self.md5}, status={self.status}, processing_status={self.processing_status})>"
+
+
+class Face(Base):
+    """SQLAlchemy model for detected faces."""
+
+    __tablename__ = "faces"  # pyright: ignore[reportUnannotatedClassAttribute]
+
+    # Primary key (derived from image_id and face index)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    # Foreign key to Image (Entity)
+    image_id: Mapped[int] = mapped_column(
+        "entity_id", Integer, ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # Bounding box as JSON list [x1, y1, x2, y2] (normalized [0.0, 1.0])
+    bbox: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Detection confidence score
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+
+    # Landmarks as JSON list [[x1, y1], [x2, y2], ...] (5 keypoints)
+    landmarks: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Path to cropped face image file
+    file_path: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Timestamp in milliseconds
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # Link to known person (identified by face recognition)
+    known_person_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("known_persons.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    # Relationships
+    image: Mapped[Entity] = relationship("Entity", back_populates="faces")
+    known_person: Mapped[KnownPerson | None] = relationship("KnownPerson", back_populates="faces")
+
+    # SQLAlchemy-Continuum adds this relationship dynamically
+    if TYPE_CHECKING:
+        from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
+        versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
+
+    @override
+    def __repr__(self) -> str:
+        return f"<Face(id={self.id}, image_id={self.image_id}, confidence={self.confidence})>"
+
+    def get_file_path(self, storage_service: StorageService, entity: Entity | None = None) -> Path:
+        """Resolve absolute file path using storage service.
+
+        Args:
+            storage_service: StorageService instance configured with media_dir
+            entity: Optional Entity/EntityVersionData for additional context (date field) - not used for Face currently
+
+        Returns:
+            Absolute Path to the face image file
+        """
+        if not self.file_path:
+            raise ValueError(f"Face {self.id} has no file_path")
+        return storage_service.get_absolute_path(self.file_path)
+
+
+class EntityJob(Base):
+    """Relationship table connecting entities to compute jobs."""
+
+    __tablename__ = "entity_jobs"  # pyright: ignore[reportUnannotatedClassAttribute]
+    # Note: NO versioning for this table (it's operational, not domain data)
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Foreign key to Image (Entity)
+    image_id: Mapped[int] = mapped_column(
+        "entity_id", Integer, ForeignKey("entities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # Job tracking
+    job_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    task_type: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # "face_detection" or "clip_embedding"
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, index=True
+    )  # "queued", "in_progress", "completed", "failed"
+
+    # Timestamps (in milliseconds)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    completed_at: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    # Error tracking
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Relationship to Image (Entity)
+    image: Mapped[Entity] = relationship("Entity", back_populates="jobs")
+
+    @override
+    def __repr__(self) -> str:
+        return f"<EntityJob(id={self.id}, job_id={self.job_id}, task_type={self.task_type}, status={self.status})>"
+
+
+class KnownPerson(Base):
+    """Person identified by face embeddings."""
+
+    __tablename__ = "known_persons"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning  # pyright: ignore[reportUnannotatedClassAttribute]
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # User-provided name (optional, can be set later)
+    name: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+
+    # Timestamps (in milliseconds)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # Relationship to Face
+    faces: Mapped[list[Face]] = relationship("Face", back_populates="known_person")
+
+    # SQLAlchemy-Continuum adds this relationship dynamically
+    if TYPE_CHECKING:
+        from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
+        versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
+
+    @override
+    def __repr__(self) -> str:
+        return f"<KnownPerson(id={self.id}, name={self.name})>"
+
+
+class FaceMatch(Base):
+    """Track face similarity matches for audit and debugging."""
+
+    __tablename__ = "face_matches"  # pyright: ignore[reportUnannotatedClassAttribute]
+    # Note: NO versioning for this table (it's operational, not domain data)
+
+    # Primary key
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Foreign keys to Face table
+    face_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("faces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    matched_face_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("faces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    # Similarity score (0.0-1.0)
+    similarity_score: Mapped[float] = mapped_column(Float, nullable=False)
+
+    # Timestamp (in milliseconds)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    @override
+    def __repr__(self) -> str:
+        return f"<FaceMatch(id={self.id}, face_id={self.face_id}, matched_face_id={self.matched_face_id}, score={self.similarity_score:.3f})>"

@@ -200,33 +200,7 @@ def auth_service(integration_config: IntegrationConfig) -> str:
     return integration_config.auth_url
 
 
-@pytest.fixture(scope="session", autouse=True)
-async def initialize_pysdk(
-    integration_config: IntegrationConfig,
-    qdrant_service: Any,
-    compute_service: str,
-    auth_service: str,
-):
-    """Initialize PySDK compute client singleton for intelligence services."""
-    from store.m_insight.intelligence.logic.pysdk_config import PySDKRuntimeConfig
-    from store.m_insight.intelligence.logic.compute_singleton import (
-        async_get_compute_client,
-        shutdown_compute_client,
-    )
 
-    pysdk_config = PySDKRuntimeConfig(
-        auth_service_url=integration_config.auth_url,
-        compute_service_url=integration_config.compute_url,
-        compute_username=integration_config.username,
-        compute_password=integration_config.password,
-        qdrant_url=integration_config.qdrant_url,
-        mqtt_broker=integration_config.mqtt_server,
-        mqtt_port=integration_config.mqtt_port or 1883,
-    )
-
-    await async_get_compute_client(pysdk_config)
-    yield
-    await shutdown_compute_client()
 
 
 # ============================================================================
@@ -261,16 +235,15 @@ def test_engine() -> Generator[Engine, None, None]:
 
     from sqlalchemy.orm import configure_mappers
 
-    from store.common.models import Base
-    from store.m_insight.models import EntitySyncState, ImageIntelligence  # Import m_insight models
-    from store.m_insight.intelligence.models import Face, EntityJob, KnownPerson, FaceMatch  # Import intelligence models
+    # Updated to import models module directly as requested
+    from store.common import models
 
     configure_mappers()
-    Base.metadata.create_all(bind=engine)
+    models.Base.metadata.create_all(bind=engine)
 
     yield engine
 
-    Base.metadata.drop_all(bind=engine)
+    models.Base.metadata.drop_all(bind=engine)
     engine.dispose()
 
 
@@ -640,6 +613,6 @@ def read_token(jwt_token_generator: Any) -> str:
 @pytest.fixture(scope="function")
 def file_storage_service(clean_data_dir: Path) -> Any:
     """Create an EntityStorageService instance using the clean media directory."""
-    from store.store.entity_storage import EntityStorageService
+    from store.common.storage import StorageService
 
-    return EntityStorageService(base_dir=str(clean_data_dir / "media"))
+    return StorageService(base_dir=str(clean_data_dir / "media"))

@@ -99,15 +99,4 @@ class UpdateReadAuthConfig(BaseModel):
     enabled: bool = Field(..., description="Whether to enable read authentication")
 
 
-class QdrantCollectionsConfig(BaseModel):
-    """Configuration for Qdrant collection names."""
 
-    clip_embedding_collection_name: str = Field(
-        default="clip_embeddings", description="Collection name for CLIP embeddings"
-    )
-    dino_embedding_collection_name: str = Field(
-        default="dino_embeddings", description="Collection name for DINOv2 embeddings"
-    )
-    face_embedding_collection_name: str = Field(
-        default="face_embeddings", description="Collection name for face embeddings"
-    )

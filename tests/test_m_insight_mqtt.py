@@ -4,9 +4,9 @@ import pytest
 from pathlib import Path
 import paho.mqtt.client as mqtt
 
-from store.m_insight_worker import MInsightBroadcaster
+from store.m_insight.broadcaster import MInsightBroadcaster
 from store.m_insight.config import MInsightConfig
-from store.m_insight.worker import mInsight
+from store.m_insight.media_insight import MediaInsight
 from store.common import database
 from store.common.models import Entity
 from sqlalchemy.orm import sessionmaker
@@ -56,7 +56,7 @@ def test_m_insight_worker(
     # Update config with valid port
     config.mqtt_port = port
     
-    worker = mInsight(config=config)
+    worker = MediaInsight(config=config)
     yield worker
 
 

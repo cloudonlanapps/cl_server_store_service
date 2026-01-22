@@ -2,8 +2,8 @@ from datetime import datetime
 import pytest
 from fastapi.testclient import TestClient
 from store.common import models
-from store.m_insight.intelligence import models as intelligence_models
-from store.m_insight import models as minsight_models
+from store.common import models as intelligence_models
+from store.common import models as minsight_models
 from sqlalchemy.orm import Session
 
 @pytest.mark.usefixtures("qdrant_service", "compute_service", "auth_service")

@@ -1,17 +1,22 @@
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch, AsyncMock
-from store.common import versioning # Must be first
-from store.m_insight.models import ImageIntelligence
-from store.m_insight.intelligence.models import Face, EntityJob
-from store.m_insight.intelligence.logic.job_callbacks import JobCallbackHandler
-from store.m_insight.intelligence.logic.pysdk_config import PySDKRuntimeConfig
+from store.common import Entity, EntityJob, Face, ImageIntelligence, versioning
+from store.m_insight import JobCallbackHandler, MInsightConfig
 from cl_client.models import JobResponse
-from store.common.models import Entity
+
 
 @pytest.fixture
-def mock_pysdk_config():
-    return PySDKRuntimeConfig(
+def mock_m_insight_config(mock_store_config):
+    return MInsightConfig(
+        id="test-worker",
+        # BaseConfig fields
+        cl_server_dir=mock_store_config.cl_server_dir,
+        media_storage_dir=mock_store_config.media_storage_dir,
+        public_key_path=mock_store_config.public_key_path,
+        auth_disabled=mock_store_config.auth_disabled,
+        
+        # MInsightConfig fields
         auth_service_url="http://auth",
         compute_service_url="http://compute",
         compute_username="admin",
@@ -33,17 +38,17 @@ def mock_store_config(integration_config):
     )
 
 @pytest.fixture
-def callback_handler(mock_pysdk_config, mock_store_config):
+def callback_handler(mock_m_insight_config):
     mock_compute = MagicMock()
     mock_compute.get_job = AsyncMock()
     mock_qdrant = MagicMock()
     mock_dino = MagicMock()
     return JobCallbackHandler(
         compute_client=mock_compute,
-        qdrant_store=mock_qdrant,
-        dino_store=mock_dino,
-        config=mock_store_config,
-        pysdk_config=mock_pysdk_config
+        clip_store=MagicMock(),
+        dino_store=MagicMock(),
+        face_store=MagicMock(),
+        config=mock_m_insight_config,
     )
 
 @pytest.mark.asyncio
@@ -59,7 +64,7 @@ async def test_callback_failed_job_status(callback_handler):
     )
     
     with patch("store.common.database.SessionLocal") as mock_session_local:
-        with patch("store.m_insight.intelligence.logic.job_callbacks.logger") as mock_logger:
+        with patch("store.m_insight.job_callbacks.logger") as mock_logger:
             await callback_handler.handle_face_detection_complete(image_id=1, job=job)
             assert mock_logger.error.called
             assert "failed for image 1" in mock_logger.error.call_args[0][0]
@@ -85,7 +90,7 @@ async def test_callback_missing_detections(callback_handler):
     callback_handler.compute_client.get_job.return_value = full_job
     
     with patch("store.common.database.SessionLocal") as mock_session_local:
-        with patch("store.m_insight.intelligence.logic.job_callbacks.logger") as mock_logger:
+        with patch("store.m_insight.job_callbacks.logger") as mock_logger:
             await callback_handler.handle_face_detection_complete(image_id=1, job=job)
             assert mock_logger.warning.called
             assert "No faces found" in mock_logger.warning.call_args[0][0]
@@ -114,7 +119,7 @@ async def test_callback_entity_not_found(callback_handler):
         mock_db = mock_session_local.return_value
         mock_db.query.return_value.filter.return_value.first.return_value = None
         
-        with patch("store.m_insight.intelligence.logic.job_callbacks.logger") as mock_logger:
+        with patch("store.m_insight.job_callbacks.logger") as mock_logger:
             await callback_handler.handle_face_detection_complete(image_id=999, job=job)
             assert mock_logger.error.called
             assert "not found" in mock_logger.error.call_args[0][0].lower()
@@ -135,7 +140,7 @@ async def test_callback_database_error(callback_handler):
         # Trigger exception inside the try block
         callback_handler.compute_client.get_job.side_effect = Exception("Fetch failed")
         
-        with patch("store.m_insight.intelligence.logic.job_callbacks.logger") as mock_logger:
+        with patch("store.m_insight.job_callbacks.logger") as mock_logger:
             await callback_handler.handle_face_detection_complete(image_id=1, job=job)
             assert mock_logger.error.called
             # The actual log message depends on the exception message
@@ -161,7 +166,7 @@ async def test_callback_clip_malformed_output(callback_handler):
     callback_handler.compute_client.get_job.return_value = full_job
     
     with patch("store.common.database.SessionLocal") as mock_session_local:
-        with patch("store.m_insight.intelligence.logic.job_callbacks.logger") as mock_logger:
+        with patch("store.m_insight.job_callbacks.logger") as mock_logger:
             await callback_handler.handle_clip_embedding_complete(image_id=1, job=job)
             assert mock_logger.error.called
 
@@ -173,7 +178,7 @@ async def test_callback_job_not_found(callback_handler):
     callback_handler.compute_client.get_job = AsyncMock(return_value=None)
     
     with patch("store.common.database.SessionLocal"), \
-         patch("store.m_insight.intelligence.logic.job_callbacks.logger") as mock_logger:
+         patch("store.m_insight.job_callbacks.logger") as mock_logger:
         await callback_handler.handle_face_detection_complete(image_id=1, job=job)
         assert mock_logger.warning.called
         assert "not completed when fetching" in mock_logger.warning.call_args[0][0]
@@ -195,7 +200,7 @@ async def test_callback_validation_error(callback_handler):
         db = mock_session_local.return_value
         db.query.return_value.filter.return_value.first.return_value = MagicMock(id=1, create_date=1000)
         
-        with patch("store.m_insight.intelligence.logic.job_callbacks.logger") as mock_logger:
+        with patch("store.m_insight.job_callbacks.logger") as mock_logger:
             await callback_handler.handle_face_detection_complete(image_id=1, job=job)
             assert mock_logger.error.called
             assert "Invalid task_output format" in mock_logger.error.call_args[0][0]

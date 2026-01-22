@@ -37,13 +37,13 @@ class MInsightBroadcaster:
             _ = self.broadcaster.set_will(topic=status_topic, payload=lwt_payload, qos=1, retain=True)
 
     def _create_status_payload(self, status: str):
-        from .models import MInsightStatusPayload
+        from .schemas import MInsightStatusPayload
         return MInsightStatusPayload(status=status, timestamp=int(time.time() * 1000))
 
     def publish_start(self, version_start: int, version_end: int):
         if not self.broadcaster:
             return
-        from .models import MInsightStartPayload
+        from .schemas import MInsightStartPayload
 
         topic = f"{self.topic_base}/started"
         payload = MInsightStartPayload(
@@ -56,7 +56,7 @@ class MInsightBroadcaster:
     def publish_end(self, processed_count: int):
         if not self.broadcaster:
             return
-        from .models import MInsightStopPayload
+        from .schemas import MInsightStopPayload
 
         topic = f"{self.topic_base}/ended"
         payload = MInsightStopPayload(

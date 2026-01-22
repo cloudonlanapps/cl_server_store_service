@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
-from .models import EntityJob
-
-if TYPE_CHECKING:
-    from cl_client import ComputeClient
-    from cl_client.models import OnJobResponseCallback
+from store.common import EntityJob, Entity, Face
+from store.common.storage import StorageService
+from .schemas import EntityVersionData
+from cl_client import ComputeClient
+from cl_client.models import OnJobResponseCallback
 
 from loguru import logger
 
@@ -19,14 +19,17 @@ class JobSubmissionService:
     """Service for submitting and tracking async compute jobs."""
 
     compute_client: ComputeClient
+    storage_service: StorageService
 
-    def __init__(self, compute_client: ComputeClient) -> None:
+    def __init__(self, compute_client: ComputeClient, storage_service: StorageService) -> None:
         """Initialize job submission service.
 
         Args:
             compute_client: ComputeClient instance for job submission
+            storage_service: StorageService for file path resolution
         """
         self.compute_client = compute_client
+        self.storage_service = storage_service
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -39,15 +42,13 @@ class JobSubmissionService:
 
     async def submit_face_detection(
         self,
-        entity_id: int,
-        file_path: str,
+        entity: Union[Entity, EntityVersionData],
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit face detection job.
 
         Args:
-            entity_id: Entity ID to associate with job
-            file_path: Absolute path to image file
+            entity: Entity or EntityVersionData object
             on_complete_callback: Callback to invoke when job completes
 
         Returns:
@@ -55,97 +56,126 @@ class JobSubmissionService:
         """
         from store.common.database import SessionLocal
 
-        db = SessionLocal()
         try:
+            # Resolve file path using StorageService
+            # Both Entity and EntityVersionData should support get_file_path(storage_service)
+            # Note: Entity model currently has get_file_path? No, Face has it. 
+            # I need to ensure Entity has it or use logic here.
+            # EntityVersionData has it (added in schemas.py).
+            # Entity model (in models.py) DOES NOT have it yet?
+            # Let's check if I added it. I added it to Face.
+            # If entity is passed, I might need to manual resolve or add helper.
+            # However, logic is consistent: storage_service.get_absolute_path(entity.file_path)
+            
+            if not entity.file_path:
+                 logger.warning(f"Entity {entity.id} has no file_path")
+                 return None
+                 
+            file_path = self.storage_service.get_absolute_path(entity.file_path)
+
+            if not file_path.exists():
+                logger.warning(f"File not found for entity {entity.id}: {file_path}")
+                return None
+
             job_response = await self.compute_client.face_detection.detect(
-                image=Path(file_path),
+                image=file_path,
                 wait=False,
                 on_complete=on_complete_callback,
             )
 
-            now = self._now_timestamp()
-            entity_job = EntityJob(
-                image_id=entity_id,
-                job_id=job_response.job_id,
-                task_type="face_detection",
-                status="queued",
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(entity_job)
-            db.commit()
+            db = SessionLocal()
+            try:
+                now = self._now_timestamp()
+                entity_job = EntityJob(
+                    image_id=entity.id,
+                    job_id=job_response.job_id,
+                    task_type="face_detection",
+                    status="queued",
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(entity_job)
+                db.commit()
 
-            logger.info(
-                f"Submitted face_detection job {job_response.job_id} for entity {entity_id}"
-            )
-            return job_response.job_id
+                logger.info(
+                    f"Submitted face_detection job {job_response.job_id} for entity {entity.id}"
+                )
+                return job_response.job_id
+            except Exception as e:
+                logger.error(f"Failed to save job record for face_detection entity {entity.id}: {e}")
+                db.rollback()
+                return None
+            finally:
+                db.close()
+                
         except Exception as e:
-            logger.error(f"Failed to submit face_detection job for entity {entity_id}: {e}")
-            db.rollback()
+            logger.error(f"Failed to submit face_detection job for entity {entity.id}: {e}")
             return None
-        finally:
-            db.close()
 
     async def submit_clip_embedding(
         self,
-        entity_id: int,
-        file_path: str,
+        entity: Union[Entity, EntityVersionData],
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit CLIP embedding job.
 
         Args:
-            entity_id: Entity ID to associate with job
-            file_path: Absolute path to image file
+            entity: Entity or EntityVersionData object
             on_complete_callback: Callback to invoke when job completes
 
         Returns:
             Job ID if successful, None if failed
         """
         from store.common.database import SessionLocal
-
-        db = SessionLocal()
+        
         try:
+            if not entity.file_path:
+                 return None
+            file_path = self.storage_service.get_absolute_path(entity.file_path)
+
             job_response = await self.compute_client.clip_embedding.embed_image(
-                image=Path(file_path),
+                image=file_path,
                 wait=False,
                 on_complete=on_complete_callback,
             )
 
-            now = self._now_timestamp()
-            entity_job = EntityJob(
-                image_id=entity_id,
-                job_id=job_response.job_id,
-                task_type="clip_embedding",
-                status="queued",
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(entity_job)
-            db.commit()
+            db = SessionLocal()
+            try:
+                now = self._now_timestamp()
+                entity_job = EntityJob(
+                    image_id=entity.id,
+                    job_id=job_response.job_id,
+                    task_type="clip_embedding",
+                    status="queued",
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(entity_job)
+                db.commit()
 
-            logger.info(
-                f"Submitted clip_embedding job {job_response.job_id} for entity {entity_id}"
-            )
-            return job_response.job_id
+                logger.info(
+                    f"Submitted clip_embedding job {job_response.job_id} for entity {entity.id}"
+                )
+                return job_response.job_id
+            except Exception as e:
+                logger.error(f"Failed to save job record for clip_embedding entity {entity.id}: {e}")
+                db.rollback()
+                return None
+            finally:
+                db.close()
         except Exception as e:
-            logger.error(f"Failed to submit clip_embedding job for entity {entity_id}: {e}")
-            db.rollback()
+            logger.error(f"Failed to submit clip_embedding job for entity {entity.id}: {e}")
             return None
-        finally:
-            db.close()
 
     async def submit_dino_embedding(
         self,
-        entity_id: int,
-        file_path: str,
+        entity: Union[Entity, EntityVersionData],
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit DINOv2 embedding job.
 
         Args:
-            entity_id: Entity ID to associate with job
-            file_path: Absolute path to image file
+            entity: Entity or EntityVersionData object
             on_complete_callback: Callback to invoke when job completes
 
         Returns:
@@ -153,50 +183,56 @@ class JobSubmissionService:
         """
         from store.common.database import SessionLocal
 
-        db = SessionLocal()
         try:
+            if not entity.file_path:
+                 return None
+            file_path = self.storage_service.get_absolute_path(entity.file_path)
+
             job_response = await self.compute_client.dino_embedding.embed_image(
-                image=Path(file_path),
+                image=file_path,
                 wait=False,
                 on_complete=on_complete_callback,
             )
 
-            now = self._now_timestamp()
-            entity_job = EntityJob(
-                image_id=entity_id,
-                job_id=job_response.job_id,
-                task_type="dino_embedding",
-                status="queued",
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(entity_job)
-            db.commit()
+            db = SessionLocal()
+            try:
+                now = self._now_timestamp()
+                entity_job = EntityJob(
+                    image_id=entity.id,
+                    job_id=job_response.job_id,
+                    task_type="dino_embedding",
+                    status="queued",
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(entity_job)
+                db.commit()
 
-            logger.info(
-                f"Submitted dino_embedding job {job_response.job_id} for entity {entity_id}"
-            )
-            return job_response.job_id
+                logger.info(
+                    f"Submitted dino_embedding job {job_response.job_id} for entity {entity.id}"
+                )
+                return job_response.job_id
+            except Exception as e:
+                logger.error(f"Failed to save job record for dino_embedding entity {entity.id}: {e}")
+                db.rollback()
+                return None
+            finally:
+                db.close()
         except Exception as e:
-            logger.error(f"Failed to submit dino_embedding job for entity {entity_id}: {e}")
-            db.rollback()
+            logger.error(f"Failed to submit dino_embedding job for entity {entity.id}: {e}")
             return None
-        finally:
-            db.close()
 
     async def submit_face_embedding(
         self,
-        face_id: int,
-        entity_id: int,
-        file_path: str,
+        face: Face,
+        entity: Union[Entity, EntityVersionData],
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit face embedding job for a detected face.
 
         Args:
-            face_id: Face record ID (used as entity_id in EntityJob for tracking)
-            entity_id: Original image Entity ID (for reference/logging)
-            file_path: Path to cropped face image
+            face: Face object
+            entity: Parent Entity object (for tracking)
             on_complete_callback: MQTT callback when job completes
 
         Returns:
@@ -204,38 +240,46 @@ class JobSubmissionService:
         """
         from store.common.database import SessionLocal
 
-        db = SessionLocal()
         try:
+            # Resolve face file path
+            # Face model has get_file_path(storage_service)
+            file_path = face.get_file_path(self.storage_service)
+
             job_response = await self.compute_client.face_embedding.embed_faces(
-                image=Path(file_path),
+                image=file_path,
                 wait=False,
                 on_complete=on_complete_callback,
             )
 
-            now = self._now_timestamp()
-            # Track face_embedding jobs under the parent entity
-            entity_job = EntityJob(
-                image_id=entity_id,  # Use parent image_id, not face_id
-                job_id=job_response.job_id,
-                task_type="face_embedding",
-                status="queued",
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(entity_job)
-            db.commit()
+            db = SessionLocal()
+            try:
+                now = self._now_timestamp()
+                # Track face_embedding jobs under the parent entity
+                entity_job = EntityJob(
+                    image_id=entity.id,  # Use parent image_id
+                    job_id=job_response.job_id,
+                    task_type="face_embedding",
+                    status="queued",
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(entity_job)
+                db.commit()
 
-            logger.info(
-                f"Submitted face_embedding job {job_response.job_id} "
-                + f"for face {face_id} (entity {entity_id})"
-            )
-            return job_response.job_id
+                logger.info(
+                    f"Submitted face_embedding job {job_response.job_id} "
+                    + f"for face {face.id} (entity {entity.id})"
+                )
+                return job_response.job_id
+            except Exception as e:
+                logger.error(f"Failed to save job record for face {face.id}: {e}")
+                db.rollback()
+                return None
+            finally:
+                db.close()
         except Exception as e:
-            logger.error(f"Failed to submit face_embedding job for face {face_id}: {e}")
-            db.rollback()
+            logger.error(f"Failed to submit face_embedding job for face {face.id}: {e}")
             return None
-        finally:
-            db.close()
 
     def delete_job_record(self, job_id: str) -> None:
         """Delete job record after successful completion.
@@ -274,6 +318,9 @@ class JobSubmissionService:
         try:
             entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
             if not entity_job:
+                # This logic changes slightly if we delete records on completion
+                # But currently we keep them? 
+                # If not found, just log warning
                 logger.warning(f"Job {job_id} not found in database")
                 return
 

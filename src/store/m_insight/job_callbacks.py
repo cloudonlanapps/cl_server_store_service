@@ -11,17 +11,14 @@ from pydantic import ValidationError
 
 from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput
 
-from .models import Face, FaceMatch, KnownPerson
-from store.common.models import Entity
-from .vector_stores import StoreItem
+from store.common.models import Face, FaceMatch, Entity, KnownPerson, ImageIntelligence
+from .vector_stores import StoreItem, QdrantVectorStore
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient
     from cl_client.models import JobResponse
 
-    from store.store.config import StoreConfig
     from .job_service import JobSubmissionService
-    from .vector_stores import QdrantImageStore, SearchPreferences
     from .config import MInsightConfig
 
 
@@ -29,33 +26,34 @@ class JobCallbackHandler:
     """Handler for job completion callbacks."""
 
     compute_client: ComputeClient
-    clip_store: QdrantImageStore
-    dino_store: QdrantImageStore
+    clip_store: QdrantVectorStore
+    dino_store: QdrantVectorStore
+    face_store: QdrantVectorStore
 
     def __init__(
         self,
         compute_client: ComputeClient,
-        clip_store: QdrantImageStore,
-        dino_store: QdrantImageStore,
-        config: StoreConfig,
-        minsight_config: MInsightConfig,
+        clip_store: QdrantVectorStore,
+        dino_store: QdrantVectorStore,
+        face_store: QdrantVectorStore,
+        config: MInsightConfig,
         job_submission_service: JobSubmissionService | None = None,
     ) -> None:
         """Initialize callback handler.
 
         Args:
             compute_client: ComputeClient for file downloads
-            clip_store: QdrantImageStore for CLIP embedding storage
-            dino_store: QdrantImageStore for DINOv2 embedding storage
-            config: Store configuration
-            minsight_config: MInsight configuration
+            clip_store: QdrantVectorStore for CLIP embedding storage
+            dino_store: QdrantVectorStore for DINOv2 embedding storage
+            face_store: QdrantVectorStore for Face embedding storage
+            config: MInsight configuration
             job_submission_service: Service for submitting jobs (optional for initialization)
         """
         self.compute_client = compute_client
         self.clip_store = clip_store
         self.dino_store = dino_store
+        self.face_store = face_store
         self.config = config
-        self.minsight_config = minsight_config
         self.job_submission_service: JobSubmissionService | None = (
             job_submission_service
         )
@@ -68,45 +66,6 @@ class JobCallbackHandler:
             Current timestamp in milliseconds since epoch
         """
         return int(datetime.now(UTC).timestamp() * 1000)
-
-    @staticmethod
-    def _convert_bbox_to_list(bbox_dict: dict[str, float]) -> list[float]:
-        """Convert bbox dict to list format.
-
-        Args:
-            bbox_dict: Bbox as dict with x1, y1, x2, y2 keys
-
-        Returns:
-            Bbox as list [x1, y1, x2, y2]
-        """
-        return [
-            bbox_dict["x1"],
-            bbox_dict["y1"],
-            bbox_dict["x2"],
-            bbox_dict["y2"],
-        ]
-
-    @staticmethod
-    def _convert_landmarks_to_list(
-        landmarks_dict: dict[str, list[float]],
-    ) -> list[list[float]]:
-        """Convert landmarks dict to list format.
-
-        Args:
-            landmarks_dict: Landmarks as dict with keypoint names
-
-        Returns:
-            Landmarks as list of [x, y] coordinates
-        """
-        # Order: right_eye, left_eye, nose_tip, mouth_right, mouth_left
-        keypoint_order = [
-            "right_eye",
-            "left_eye",
-            "nose_tip",
-            "mouth_right",
-            "mouth_left",
-        ]
-        return [landmarks_dict[key] for key in keypoint_order]
 
     async def _download_face_image(
         self, job_id: str, file_path: str, dest: Path
@@ -210,6 +169,11 @@ class JobCallbackHandler:
 
             # Phase 1: Download face images and create Face records
             saved_faces: list[tuple[int, Path]] = []  # (face_id, face_path)
+            
+            # Using storage_service for path resolution would be ideal here if available, 
+            # but _get_face_storage_path logic is specific. 
+            # Could move to common/models.py Face.get_file_path reverse logic?
+            # For now keeping logic here as it implies creation logic.
 
             for index, face_data in enumerate(faces_data):
                 try:
@@ -293,6 +257,7 @@ class JobCallbackHandler:
 
             # Phase 2: Submit face_embedding jobs (after commit to avoid locks)
             if self.job_submission_service:
+                face_job_ids = []
                 for face_id, face_path in saved_faces:
                     try:
                         # Capture face_id in closure
@@ -308,22 +273,84 @@ class JobCallbackHandler:
                                 self.job_submission_service.update_job_status(
                                     job.job_id, job.status, job.error_message
                                 )
-
-                        _ = await self.job_submission_service.submit_face_embedding(
-                            face_id=face_id,
-                            entity_id=image_id,
-                            file_path=str(face_path),
-                            on_complete_callback=face_embedding_callback,
-                        )
+                        
+                        # Fetch the Face object to pass to submit_face_embedding
+                        # We need to re-query or use the ID. 
+                        # JobSubmissionService.submit_face_embedding now expects 'face' object and 'entity version data'?
+                        # Or maybe just IDs? 
+                        # Plan said: submit_face_embedding(face: Face, entity: EntityVersionData, ...)
+                        # But here we are inside a callback where we have IDs. 
+                        # We must query the objects to pass them, or update JobSubmissionService to take IDs?
+                        # I will assume JobSubmissionService will be updated to take Objects (per plan), so I need to query them.
+                        
+                        f_obj = db.query(Face).filter(Face.id == face_id).first()
+                        
+                        # We need EntityVersionData for entity.
+                        # We have 'entity' ORM object. Convert to EntityVersionData Pydantic model?
+                        # Or does JobSubmissionService take ORM objects? 
+                        # Plan said: "submit_face_embedding(face: Face, entity: EntityVersionData, ...)"
+                        # Let's convert entity to EntityVersionData if possible.
+                        # EntityVersionData is for VERSIONED data. Here we have live Entity. 
+                        # It should be compatible if we look at fields.
+                        
+                        from .schemas import EntityVersionData as EVD
+                        # Construct minimal EVD or query version? 
+                        # EntityVersionData expects transaction_id which Entity doesn't have directly (it has versions rel).
+                        # Taking a shortcut: If JobSubmissionService only needs path, we can pass what is needed.
+                        # But plan dictates signature change. 
+                        # I will UPDATE JobSubmissionService to be flexible or take Entity/Face objects.
+                        
+                        if f_obj:
+                            # Create a temporary/partial EVD or we assume JobSubmissionService handles it.
+                            # For now, I will update JobSubmissionService to take Face object and maybe Entity object or EVD.
+                            
+                            # Actually, inside callback we might not have the version data handy easily without querying.
+                            # For simplicity, I will stick to IDs and path in this call if JobSubmissionService supports it, 
+                            # OR I'll query what I need.
+                            
+                            pass 
+                            
+                            # WAIT. In the plan I said:
+                            # submit_face_embedding(face: Face, entity: EntityVersionData, on_complete_callback)
+                            
+                            # Here in callback we have the Entity object. 
+                            # Does it matter if it is Entity or EntityVersionData? 
+                            # Primarily for get_file_path() I presume.
+                            
+                            # Let's update JobSubmissionService to accept Face and Entity (or EVD).
+                            # I'll pass the ORM objects if compatible or update JobSubmissionService to take Union.
+                            
+                            # For now, I'll call it with arguments I have.
+                            # submit_face_embedding method signature update is pending in next step.
+                            # I will invoke it assuming I pass the objects.
+                            
+                            job_id = await self.job_submission_service.submit_face_embedding(
+                                face=f_obj,
+                                entity=entity, # Passing ORM entity
+                                on_complete_callback=face_embedding_callback,
+                            )
+                            if job_id:
+                                face_job_ids.append(job_id)
+                        
                     except Exception as e:
                         logger.error(
                             f"Failed to submit face_embedding job for face {face_id}: {e}"
                         )
 
-            # Cleanup: Delete successful job record (DISABLED to allow client polling)
-            # if self.job_submission_service:
-            #     self.job_submission_service.delete_job_record(job.job_id)
-
+                # Update ImageIntelligence with job IDs
+                if face_job_ids:
+                    try:
+                        intelligence = db.query(ImageIntelligence).filter(ImageIntelligence.image_id == image_id).first()
+                        if intelligence:
+                            current_ids = intelligence.face_embedding_job_ids or []
+                            # Use casting or direct assignment
+                            # SQLAlchemy might need a copy to detect change for JSON type
+                            new_ids = list(current_ids) + face_job_ids
+                            intelligence.face_embedding_job_ids = new_ids
+                            db.commit()
+                            logger.info(f"Updated ImageIntelligence for {image_id} with {len(face_job_ids)} face embedding jobs")
+                    except Exception as e:
+                        logger.error(f"Failed to update ImageIntelligence with face job IDs for {image_id}: {e}")
         except Exception as e:
             logger.error(
                 f"Failed to handle face detection completion for image {image_id}: {e}"
@@ -413,10 +440,6 @@ class JobCallbackHandler:
                 f"Successfully stored CLIP embedding for image {image_id} in Qdrant"
             )
 
-            # Cleanup: Delete successful job record (DISABLED to allow client polling)
-            # if self.job_submission_service:
-            #     self.job_submission_service.delete_job_record(job.job_id)
-
         except Exception as e:
             logger.error(
                 f"Failed to handle CLIP embedding completion for image {image_id}: {e}"
@@ -502,10 +525,6 @@ class JobCallbackHandler:
                 f"Successfully stored DINO embedding for image {image_id} in Qdrant"
             )
 
-            # Cleanup: Delete successful job record (DISABLED to allow client polling)
-            # if self.job_submission_service:
-            #     self.job_submission_service.delete_job_record(job.job_id)
-
         except Exception as e:
             logger.error(
                 f"Failed to handle DINO embedding completion for image {image_id}: {e}"
@@ -574,9 +593,9 @@ class JobCallbackHandler:
                 )
 
                 # Validate embedding dimension
-                if embedding.shape[0] != 512:
+                if embedding.shape[0] != self.config.face_vector_size:
                     logger.error(
-                        f"Invalid embedding dimension for face {face_id}: expected 512, got {embedding.shape[0]}"
+                        f"Invalid embedding dimension for face {face_id}: expected {self.config.face_vector_size}, got {embedding.shape[0]}"
                     )
                     return
 
@@ -585,23 +604,14 @@ class JobCallbackHandler:
                 if tmp_path.exists():
                     tmp_path.unlink()
 
-            # Get face store
-            from .vector_stores import get_face_store
-
-            face_store = get_face_store(
-                url=self.config.qdrant_url,
-                collection_name=self.config.qdrant_collections.face_embedding_collection_name,
-                vector_size=self.minsight_config.face_vector_size,
-            )
-
             # Search face store for similar faces (get multiple matches for analysis)
             from .vector_stores import SearchPreferences
 
-            similar_faces = face_store.search(
+            similar_faces = self.face_store.search(
                 query_vector=embedding,
                 limit=10,  # Get up to 10 matches
                 search_options=SearchPreferences(
-                    score_threshold=self.minsight_config.face_embedding_threshold
+                    score_threshold=self.config.face_embedding_threshold
                 ),
             )
 
@@ -684,7 +694,7 @@ class JobCallbackHandler:
             # Add face embedding to face store
             import numpy as np
 
-            _ = face_store.add_vector(
+            _ = self.face_store.add_vector(
                 StoreItem(
                     id=face_id,
                     embedding=np.array(embedding, dtype=np.float32),
@@ -698,10 +708,6 @@ class JobCallbackHandler:
 
             db.commit()
             logger.info(f"Successfully processed face embedding for face {face_id}")
-
-            # Cleanup: Delete successful job record (DISABLED to allow client polling)
-            # if self.job_submission_service:
-            #     self.job_submission_service.delete_job_record(job.job_id)
 
         except Exception as e:
             logger.error(

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 
-class EntityStorageService:
+class StorageService:
     """Service for managing entity file storage with organized directory structure.
 
     Organizes files by date: store/YYYY/MM/DD/{md5}.{ext}

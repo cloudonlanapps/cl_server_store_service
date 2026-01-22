@@ -1,9 +1,9 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from store.common import versioning # Must be first
-from store.m_insight.intelligence.logic.job_service import JobSubmissionService
-from store.m_insight.intelligence.models import EntityJob
-from store.common.models import Entity
+from store.m_insight import JobSubmissionService
+from store.common import Entity, EntityJob
+from pathlib import Path
 
 @pytest.fixture
 def mock_compute():
@@ -11,11 +11,16 @@ def mock_compute():
     return client
 
 @pytest.fixture
-def job_service(mock_compute):
-    return JobSubmissionService(mock_compute)
+
+def mock_storage():
+    return MagicMock()
+
+@pytest.fixture
+def job_service(mock_compute, mock_storage):
+    return JobSubmissionService(mock_compute, mock_storage)
 
 @pytest.mark.asyncio
-@patch("store.m_insight.intelligence.logic.job_service.EntityJob")
+@patch("store.m_insight.job_service.EntityJob")
 async def test_submit_face_detection(mock_entity_job_class, job_service, mock_compute):
     """Test face detection job submission."""
     mock_response = MagicMock(job_id="job-123")
@@ -24,11 +29,17 @@ async def test_submit_face_detection(mock_entity_job_class, job_service, mock_co
     with patch("store.common.database.SessionLocal") as mock_session:
         db = mock_session.return_value
         
-        job_id = await job_service.submit_face_detection(
-            entity_id=1,
-            file_path="/path/to/img.jpg",
-            on_complete_callback=lambda x: None
-        )
+        mock_entity = MagicMock()
+        mock_entity.id = 1
+        mock_entity.file_path = "img.jpg"
+        
+        # Mock storage resolution
+        job_service.storage_service.get_absolute_path.return_value = Path("/path/to/img.jpg")
+        with patch("pathlib.Path.exists", return_value=True):
+            job_id = await job_service.submit_face_detection(
+                entity=mock_entity,
+                on_complete_callback=lambda x: None
+            )
         
         assert job_id == "job-123"
         mock_compute.face_detection.detect.assert_called_once()
@@ -36,7 +47,7 @@ async def test_submit_face_detection(mock_entity_job_class, job_service, mock_co
         db.commit.assert_called_once()
 
 @pytest.mark.asyncio
-@patch("store.m_insight.intelligence.logic.job_service.EntityJob")
+@patch("store.m_insight.job_service.EntityJob")
 async def test_submit_clip_embedding(mock_entity_job_class, job_service, mock_compute):
     """Test CLIP embedding job submission."""
     mock_response = MagicMock(job_id="clip-123")
@@ -45,9 +56,14 @@ async def test_submit_clip_embedding(mock_entity_job_class, job_service, mock_co
     with patch("store.common.database.SessionLocal") as mock_session:
         db = mock_session.return_value
         
+        mock_entity = MagicMock()
+        mock_entity.id = 1
+        mock_entity.file_path = "img.jpg"
+        
+        job_service.storage_service.get_absolute_path.return_value = Path("/path/to/img.jpg")
+        
         job_id = await job_service.submit_clip_embedding(
-            entity_id=1,
-            file_path="/path/to/img.jpg",
+            entity=mock_entity,
             on_complete_callback=lambda x: None
         )
         
@@ -56,7 +72,7 @@ async def test_submit_clip_embedding(mock_entity_job_class, job_service, mock_co
         db.add.assert_called_once()
 
 @pytest.mark.asyncio
-@patch("store.m_insight.intelligence.logic.job_service.EntityJob")
+@patch("store.m_insight.job_service.EntityJob")
 async def test_submit_dino_embedding(mock_entity_job_class, job_service, mock_compute):
     """Test DINO embedding job submission."""
     mock_response = MagicMock(job_id="dino-123")
@@ -65,9 +81,14 @@ async def test_submit_dino_embedding(mock_entity_job_class, job_service, mock_co
     with patch("store.common.database.SessionLocal") as mock_session:
         db = mock_session.return_value
         
+        mock_entity = MagicMock()
+        mock_entity.id = 1
+        mock_entity.file_path = "img.jpg"
+        
+        job_service.storage_service.get_absolute_path.return_value = Path("/path/to/img.jpg")
+        
         job_id = await job_service.submit_dino_embedding(
-            entity_id=1,
-            file_path="/path/to/img.jpg",
+            entity=mock_entity,
             on_complete_callback=lambda x: None
         )
         

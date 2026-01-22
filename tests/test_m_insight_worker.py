@@ -17,9 +17,8 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from store.common import database
-from store.m_insight.models import EntitySyncState, ImageIntelligence
-from store.m_insight.worker import mInsight
+from store.common import database, EntitySyncState, ImageIntelligence
+from store.m_insight.media_insight import MediaInsight
 
 if TYPE_CHECKING:
     from fastapi.testclient import TestClient
@@ -32,14 +31,14 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def m_insight_processor_mock(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, str]]:
-    """Mock mInsight.process() to track calls instead of printing.
+    """Mock MInsightProcessor.process() to track calls instead of printing.
     
     Returns:
         List of (image_id, md5) tuples for each process() call
     """
     calls: list[tuple[int, str]] = []
     
-    original_process = mInsight.process
+    original_process = MediaInsight.process
     
     async def mock_process(self: Any, data: Any) -> bool:
         """Mock process that tracks calls and delegates to original for qualification."""
@@ -49,7 +48,7 @@ def m_insight_processor_mock(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int,
             calls.append((data.id, data.md5))
         return result
     
-    monkeypatch.setattr(mInsight, "process", mock_process)
+    monkeypatch.setattr(MediaInsight, "process", mock_process)
     
     return calls
 
@@ -59,8 +58,8 @@ def m_insight_worker(
     clean_data_dir: Path,
     integration_config: Any,
     test_engine: Engine,
-) -> mInsight:
-    """Create mInsight worker instance for testing.
+) -> MediaInsight:
+    """Create MInsightProcessor worker instance for testing.
     
     Note: Does not start the worker - tests control when to run reconciliation.
     Uses the test database engine instead of creating its own.
@@ -85,7 +84,7 @@ def m_insight_worker(
     database.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     
     # Create worker
-    worker = mInsight(config=config)
+    worker = MediaInsight(config=config)
     
     yield worker
 
@@ -123,7 +122,7 @@ def get_intelligence_for_image(session: Session, image_id: int) -> ImageIntellig
 async def test_empty_sync_state_queues_all_images(
     client: TestClient,
     test_images_unique: list[Path],
-    m_insight_worker: mInsight,
+    m_insight_worker: MediaInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
@@ -166,7 +165,7 @@ async def test_empty_sync_state_queues_all_images(
 async def test_existing_sync_state_only_newer_versions(
     client: TestClient,
     test_images_unique: list[Path],
-    m_insight_worker: mInsight,
+    m_insight_worker: MediaInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
@@ -222,7 +221,7 @@ async def test_existing_sync_state_only_newer_versions(
 async def test_multiple_md5_changes_single_queue(
     client: TestClient,
     sample_images: list[Path],
-    m_insight_worker: mInsight,
+    m_insight_worker: MediaInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
@@ -267,7 +266,7 @@ async def test_multiple_md5_changes_single_queue(
 async def test_process_called_once_per_image(
     client: TestClient,
     sample_images: list[Path],
-    m_insight_worker: mInsight,
+    m_insight_worker: MediaInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
@@ -306,7 +305,7 @@ async def test_process_called_once_per_image(
 async def test_no_duplicate_processing(
     client: TestClient,
     sample_image: Path,
-    m_insight_worker: mInsight,
+    m_insight_worker: MediaInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
@@ -347,7 +346,7 @@ async def test_no_duplicate_processing(
 async def test_delete_image_removes_intelligence(
     client: TestClient,
     sample_image: Path,
-    m_insight_worker: mInsight,
+    m_insight_worker: MediaInsight,
     test_db_session: Session,
 ) -> None:
     """Test that deleting image cascades to intelligence row."""
@@ -383,7 +382,7 @@ async def test_delete_image_removes_intelligence(
 async def test_restart_does_not_reinsert_deleted(
     client: TestClient,
     sample_image: Path,
-    m_insight_worker: mInsight,
+    m_insight_worker: MediaInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:
@@ -409,7 +408,7 @@ async def test_restart_does_not_reinsert_deleted(
     m_insight_processor_mock.clear()
     
     # Simulate restart: create new worker and reconcile
-    new_worker = mInsight(config=m_insight_worker.config)
+    new_worker = MediaInsight(config=m_insight_worker.config)
     
     processed_count = await new_worker.run_once()
     
@@ -427,7 +426,7 @@ async def test_restart_does_not_reinsert_deleted(
 
 async def test_non_image_entities_ignored(
     client: TestClient,
-    m_insight_worker: mInsight,
+    m_insight_worker: MediaInsight,
     m_insight_processor_mock: list[tuple[int, str]],
     test_db_session: Session,
 ) -> None:

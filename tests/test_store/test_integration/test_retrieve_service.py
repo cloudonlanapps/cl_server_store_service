@@ -1,10 +1,17 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from store.common import versioning  # Must be first
-from store.common.models import Entity, ServiceConfig
-from store.m_insight.models import ImageIntelligence, EntitySyncState
-from store.m_insight.intelligence.models import Face, KnownPerson, FaceMatch, EntityJob
-from store.m_insight.intelligence.retrieve_service import IntelligenceRetrieveService
+from store.common import (
+    Entity,
+    EntityJob,
+    EntitySyncState,
+    Face,
+    FaceMatch,
+    ImageIntelligence,
+    KnownPerson,
+    ServiceConfig,
+    versioning,
+)
+from store.m_insight.retrieval_service import IntelligenceRetrieveService
 from store.store.config import StoreConfig
 from pathlib import Path
 import json
@@ -27,9 +34,9 @@ def mock_config(integration_config):
 
 @pytest.fixture
 def retrieve_service(mock_db, mock_config):
-    with patch("store.m_insight.intelligence.retrieve_service.get_qdrant_store"), \
-         patch("store.m_insight.intelligence.retrieve_service.get_face_store"), \
-         patch("store.m_insight.intelligence.retrieve_service.get_dino_store"):
+    with patch("store.m_insight.retrieval_service.get_clip_store"), \
+         patch("store.m_insight.retrieval_service.get_face_store"), \
+         patch("store.m_insight.retrieval_service.get_dino_store"):
         return IntelligenceRetrieveService(mock_db, mock_config)
 
 @pytest.fixture
@@ -164,10 +171,10 @@ def test_search_similar_faces_by_id(retrieve_service, mock_db):
 @pytest.mark.asyncio
 async def test_search_similar_images_with_details(client, mock_db):
     """Test find_similar_images route with include_details=True."""
-    from store.common import models as common_models
-    from store.m_insight.intelligence.schemas import SimilarImageResult
+    from store import common as common_models
+    from store.m_insight.schemas import SimilarImageResult
     # Use patch to mock IntelligenceRetrieveService and EntityService in the routes module
-    with patch("store.m_insight.intelligence.routes.IntelligenceRetrieveService") as mock_service_class, \
+    with patch("store.m_insight.routes.IntelligenceRetrieveService") as mock_service_class, \
          patch("store.store.service.EntityService") as mock_entity_service_class:
         
         # Ensure entity check passes
@@ -215,7 +222,7 @@ async def test_get_face_matches_404(client, mock_db):
 @pytest.mark.asyncio
 async def test_get_known_person_404(client):
     """Test get_known_person route returns 404 when person missing."""
-    with patch("store.m_insight.intelligence.routes.IntelligenceRetrieveService") as mock_service_class:
+    with patch("store.m_insight.routes.IntelligenceRetrieveService") as mock_service_class:
         mock_service = mock_service_class.return_value
         mock_service.get_known_person.return_value = None
         response = client.get("/intelligence/known-persons/999")
@@ -239,7 +246,7 @@ async def test_find_similar_images_404(client, mock_db):
 async def test_find_similar_images_no_results(client, mock_db):
     """Test find_similar_images route returns 404 when no results found."""
     mock_db.query.return_value.filter.return_value.first.return_value = MagicMock(id=1)
-    with patch("store.m_insight.intelligence.routes.IntelligenceRetrieveService") as mock_service_class:
+    with patch("store.m_insight.routes.IntelligenceRetrieveService") as mock_service_class:
         mock_service = mock_service_class.return_value
         mock_service.search_similar_images.return_value = []
         response = client.get("/intelligence/entities/1/similar")
@@ -250,7 +257,7 @@ async def test_find_similar_images_no_results(client, mock_db):
 async def test_find_similar_faces_no_results(client, mock_db):
     """Test find_similar_faces route returns 404 when no results found."""
     mock_db.query.return_value.filter.return_value.first.return_value = MagicMock(id=1)
-    with patch("store.m_insight.intelligence.routes.IntelligenceRetrieveService") as mock_service_class:
+    with patch("store.m_insight.routes.IntelligenceRetrieveService") as mock_service_class:
         mock_service = mock_service_class.return_value
         mock_service.search_similar_faces_by_id.return_value = []
         response = client.get("/intelligence/faces/1/similar")
@@ -260,7 +267,7 @@ async def test_find_similar_faces_no_results(client, mock_db):
 @pytest.mark.asyncio
 async def test_update_person_name_404(client):
     """Test update_person_name route returns 404 when person missing."""
-    with patch("store.m_insight.intelligence.routes.IntelligenceRetrieveService") as mock_service_class:
+    with patch("store.m_insight.routes.IntelligenceRetrieveService") as mock_service_class:
         mock_service = mock_service_class.return_value
         mock_service.update_known_person_name.return_value = None
         response = client.patch("/intelligence/known-persons/999", json={"name": "New"})

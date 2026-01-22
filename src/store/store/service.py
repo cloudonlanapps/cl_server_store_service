@@ -11,7 +11,7 @@ from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .entity_storage import EntityStorageService
+from ..common.storage import StorageService
 from .media_metadata import MediaMetadataExtractor
 from ..common.models import Entity
 from ..common.schemas import (
@@ -21,7 +21,7 @@ from ..common.schemas import (
     BodyUpdateEntity,
     Item,
 )
-from ..m_insight.models import ImageIntelligence
+from ..common.models import ImageIntelligence
 
 
 class DuplicateFileError(Exception):
@@ -43,7 +43,7 @@ class EntityService:
         self.db: Session = db
         self.config: StoreConfig = config
         # Use media_storage_dir from config for entity files (organized by date)
-        self.file_storage: EntityStorageService = EntityStorageService(
+        self.file_storage: StorageService = StorageService(
             base_dir=str(config.media_storage_dir)
         )
         # Initialize metadata extractor

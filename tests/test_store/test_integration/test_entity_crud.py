@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from store.common.models import Entity
 from store.common.schemas import Item, PaginatedResponse
-from store.m_insight.models import ImageIntelligence
+from store.common.models import ImageIntelligence
 
 
 class TestEntityCRUD:

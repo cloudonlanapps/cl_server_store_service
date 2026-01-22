@@ -1,24 +1,14 @@
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional
-
 from ..common.utils import ensure_cl_server_dir
-from ..common.schemas import QdrantCollectionsConfig
+from ..common.config import BaseConfig, QdrantCollectionsConfig
 
 
-@dataclass
-class MInsightConfig:
+class MInsightConfig(BaseConfig):
     """mInsight process configuration."""
 
     # Process identity
     id: str
     
-    # Paths
-    cl_server_dir: Path
-    media_storage_dir: Path
-    public_key_path: Path
-    auth_disabled: bool = False
     store_port: int = 8011
     
     # ML Service URLs (Worker only)
@@ -31,13 +21,7 @@ class MInsightConfig:
     face_vector_size: int = 512
     face_embedding_threshold: float = 0.7
     
-    # Qdrant configuration
-    qdrant_url: str = "http://localhost:6333"
-    qdrant_collections: QdrantCollectionsConfig = field(default_factory=QdrantCollectionsConfig)
-    
-    # MQTT configuration
-    mqtt_broker: str = "localhost"
-    mqtt_port: int = 1883
+    # MQTT configuration (Override default to add topic)
     mqtt_topic: str = "m_insight/wakeup"
 
     @classmethod
@@ -46,11 +30,22 @@ class MInsightConfig:
         cl_dir = ensure_cl_server_dir(create_if_missing=True)
         
         return cls(
-            id=args.id,
+            # BaseConfig fields
             cl_server_dir=cl_dir,
             media_storage_dir=cl_dir / "media",
             public_key_path=cl_dir / "keys" / "public_key.pem",
             auth_disabled=args.no_auth,
+            qdrant_url=args.qdrant_url,
+            qdrant_collections=QdrantCollectionsConfig(
+                clip_embedding_collection_name=args.qdrant_collection,
+                dino_embedding_collection_name=args.dino_collection,
+                face_embedding_collection_name=args.face_collection,
+            ),
+            mqtt_broker=args.mqtt_broker,
+            mqtt_port=args.mqtt_port,
+
+            # MInsightConfig fields
+            id=args.id,
             store_port=args.store_port,
             
             # ML Services
@@ -59,15 +54,5 @@ class MInsightConfig:
             compute_username=args.compute_username,
             compute_password=args.compute_password,
             
-            # Qdrant
-            qdrant_url=args.qdrant_url,
-            qdrant_collections=QdrantCollectionsConfig(
-                clip_embedding_collection_name=args.qdrant_collection,
-                dino_embedding_collection_name=args.dino_collection,
-                face_embedding_collection_name=args.face_collection,
-            ),
-
-            mqtt_broker=args.mqtt_broker,
-            mqtt_port=args.mqtt_port,
             mqtt_topic=args.mqtt_topic or f"store/{args.store_port}/items",
         )
