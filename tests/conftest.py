@@ -6,6 +6,7 @@ from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+import random
 
 import pytest
 from cryptography.hazmat.backends import default_backend
@@ -262,6 +263,7 @@ def test_engine() -> Generator[Engine, None, None]:
 
     from store.common.models import Base
     from store.m_insight.models import EntitySyncState, ImageIntelligence  # Import m_insight models
+    from store.m_insight.intelligence.models import Face, EntityJob, KnownPerson, FaceMatch  # Import intelligence models
 
     configure_mappers()
     Base.metadata.create_all(bind=engine)
@@ -403,7 +405,7 @@ def client(
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         auth_disabled=False,
-        server_port=8001,
+        server_port=random.randint(20000, 30000),
         mqtt_broker=integration_config.mqtt_server,
         mqtt_port=integration_config.mqtt_port,
     )
@@ -414,8 +416,25 @@ def client(
 
     # Enhanced cleanup
     app.dependency_overrides.clear()
-    if hasattr(app, 'state') and hasattr(app.state, 'config'):
+    
+    # Clean up app state
+    if hasattr(app.state, 'broadcaster'):
+        if hasattr(app.state.broadcaster, 'disconnect'):
+            app.state.broadcaster.disconnect()
+        delattr(app.state, 'broadcaster')
+        
+    if hasattr(app.state, 'monitor'):
+        delattr(app.state, 'monitor')
+    if hasattr(app.state, 'config'):
         delattr(app.state, 'config')
+    
+    # Ensure the global singleton in cl_ml_tools is also reset
+    try:
+        from cl_ml_tools.utils.mqtt import shutdown_broadcaster
+        shutdown_broadcaster()
+    except ImportError:
+        pass
+
 
 
 @pytest.fixture(scope="function")

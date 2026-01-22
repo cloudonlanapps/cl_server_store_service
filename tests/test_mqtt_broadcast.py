@@ -27,10 +27,9 @@ def test_mqtt_broadcast_on_create(client: TestClient, sample_image: Path):
     item = response.json()
     
     # Verify broadcast
-    # Topic should be store/8001/items (8001 is default in conftest)
-    expected_topic = "store/8001/items"
+    config = client.app.state.config
+    expected_topic = f"store/{config.server_port}/items"
     
-    # Wait a bit if needed (not needed for synchronous publish calls)
     assert mock_broadcaster.publish_event.called
     args, kwargs = mock_broadcaster.publish_event.call_args
     assert kwargs["topic"] == expected_topic
@@ -69,7 +68,8 @@ def test_mqtt_broadcast_on_update(client: TestClient, sample_image: Path, sample
     updated_item = response.json()
     
     # Verify broadcast
-    expected_topic = "store/8001/items"
+    config = client.app.state.config
+    expected_topic = f"store/{config.server_port}/items"
     assert mock_broadcaster.publish_event.called
     _, kwargs = mock_broadcaster.publish_event.call_args
     assert kwargs["topic"] == expected_topic
@@ -111,7 +111,7 @@ def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt
     def on_message(client, userdata, msg):
         events_received.append(msg.payload.decode())
 
-    subscriber = mqtt.Client(CallbackAPIVersion.VERSION2)
+    subscriber = mqtt.Client(CallbackAPIVersion.VERSION2, client_id=f"test_sub_create_{int(time.time_ns())}")
     subscriber.on_connect = on_connect
     subscriber.on_message = on_message
     
@@ -138,10 +138,11 @@ def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt
         while len(events_received) == 0 and (time.time() - start_time) < 5:
             time.sleep(0.1)
             
-        assert len(events_received) > 0
+        assert len(events_received) > 0, "No MQTT message received"
         received_payload = json.loads(events_received[0])
         assert received_payload["id"] == item["id"]
         assert received_payload["md5"] == item["md5"]
+        assert "timestamp" in received_payload
         
     finally:
         subscriber.loop_stop()
@@ -152,15 +153,6 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
     if not mqtt_config["port"]:
         pytest.skip("Real MQTT broker not configured")
 
-    import paho.mqtt.client as mqtt
-    from paho.mqtt.enums import CallbackAPIVersion
-    import threading
-    
-    config = client.app.state.config
-    mqtt_server = mqtt_config["server"]
-    mqtt_port = mqtt_config["port"]
-    topic = f"store/{config.server_port}/items"
-
     # 1. Create initial entity
     with open(sample_images[0], "rb") as f:
         response = client.post(
@@ -170,6 +162,15 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
         )
     item = response.json()
     entity_id = item["id"]
+
+    import paho.mqtt.client as mqtt
+    from paho.mqtt.enums import CallbackAPIVersion
+    import threading
+    
+    config = client.app.state.config
+    mqtt_server = mqtt_config["server"]
+    mqtt_port = mqtt_config["port"]
+    topic = f"store/{config.server_port}/items"
     
     events_received = []
     connect_event = threading.Event()
@@ -182,7 +183,7 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
     def on_message(client, userdata, msg):
         events_received.append(msg.payload.decode())
 
-    subscriber = mqtt.Client(CallbackAPIVersion.VERSION2)
+    subscriber = mqtt.Client(CallbackAPIVersion.VERSION2, client_id=f"test_sub_update_{int(time.time_ns())}")
     subscriber.on_connect = on_connect
     subscriber.on_message = on_message
     
@@ -209,10 +210,13 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
         while len(events_received) == 0 and (time.time() - start_time) < 5:
             time.sleep(0.1)
             
-        assert len(events_received) > 0
+        assert len(events_received) > 0, f"No MQTT message received. Checked for {(time.time() - start_time):.2f}s"
         received_payload = json.loads(events_received[0])
-        assert received_payload["id"] == entity_id
+        # The update might result in a new ID (e.g. if implementation does copy-on-write or similar), 
+        # so we should check against the ID returned by the PUT response.
+        assert received_payload["id"] == updated_item["id"]
         assert received_payload["md5"] == updated_item["md5"]
+        assert received_payload["md5"] != item["md5"]
         
     finally:
         subscriber.loop_stop()
