@@ -61,6 +61,7 @@ class Args(Namespace):
     mqtt_port: int | None
     mqtt_topic: str
     store_port: int
+    no_auth: bool
 
     def __init__(
         self,
@@ -70,6 +71,7 @@ class Args(Namespace):
         mqtt_port: int = 1883,
         mqtt_topic: str | None = None,
         store_port: int = 8001,
+        no_auth: bool = False,
     ) -> None:
         super().__init__()
         self.id = id
@@ -78,6 +80,7 @@ class Args(Namespace):
         self.mqtt_port = mqtt_port
         self.mqtt_topic = mqtt_topic
         self.store_port = store_port
+        self.no_auth = no_auth
 
 
 
@@ -181,6 +184,10 @@ async def run_loop(config) -> None:
                 task.cancel()
     finally:
         logger.info(f"mInsight process {config.id} shutting down...")
+
+        # Shutdown IntelligenceProcessingService singletons
+        from .m_insight.processing_service import IntelligenceProcessingService
+        await IntelligenceProcessingService.shutdown()
         
         # Cancel background tasks
         if mqtt_task:
@@ -278,9 +285,19 @@ def main() -> int:
         help="Qdrant collection for CLIP embeddings",
     )
     parser.add_argument(
+        "--dino-collection",
+        default="dino_embeddings",
+        help="Qdrant collection for DINOv2 embeddings",
+    )
+    parser.add_argument(
         "--face-collection",
         default="face_embeddings",
         help="Qdrant collection for face embeddings",
+    )
+    parser.add_argument(
+        "--no-auth",
+        action="store_true",
+        help="Disable authentication for compute service",
     )
 
     args = parser.parse_args(namespace=Args())

@@ -108,7 +108,7 @@ class ServiceConfig(Base):
 
 if TYPE_CHECKING:
     from ..m_insight.models import ImageIntelligence
-    from ..m_insight.intelligence.models import Face, EntityJob, KnownPerson, FaceMatch
+    from ..m_insight.models import EntityJob, Face, FaceMatch, KnownPerson
 
 # Runtime import happens when these modules are imported elsewhere
 # (e.g., via alembic or when the full application starts)

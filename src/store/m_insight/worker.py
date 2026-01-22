@@ -11,7 +11,6 @@ from store.common import database
 from ..common.models import Entity
 from .models import EntitySyncState, EntityVersionData, ImageIntelligence
 from .config import MInsightConfig
-from .intelligence.service import IntelligenceProcessingService
 
 if TYPE_CHECKING:
     from .broadcaster import MInsightBroadcaster
@@ -160,34 +159,19 @@ class mInsight:
             # Trigger async jobs (face detection & CLIP embedding)
             # Create a mock StoreConfig from MInsightConfig
             from store.store.config import StoreConfig
-            from .intelligence.logic.pysdk_config import PySDKRuntimeConfig
             
             store_config = StoreConfig(
                 cl_server_dir=self.config.cl_server_dir,
                 media_storage_dir=self.config.media_storage_dir,
                 public_key_path=self.config.public_key_path,
                 auth_disabled=self.config.auth_disabled,
-                server_port=self.config.server_port,
+                server_port=self.config.store_port,
                 mqtt_broker=self.config.mqtt_broker,
                 mqtt_port=self.config.mqtt_port,
             )
             
-            pysdk_config = PySDKRuntimeConfig(
-                auth_service_url=self.config.auth_service_url,
-                compute_service_url=self.config.compute_service_url,
-                compute_username=self.config.compute_username,
-                compute_password=self.config.compute_password,
-                qdrant_url=self.config.qdrant_url,
-                qdrant_collection_name=self.config.qdrant_collection_name,
-                face_store_collection_name=self.config.face_store_collection_name,
-                face_vector_size=self.config.face_vector_size,
-                face_embedding_threshold=self.config.face_embedding_threshold,
-                mqtt_broker=self.config.mqtt_broker,
-                mqtt_port=self.config.mqtt_port,
-            )
-            
-            from .intelligence.service import IntelligenceProcessingService
-            intelligence_service = IntelligenceProcessingService(session, store_config, pysdk_config)
+            from .processing_service import IntelligenceProcessingService
+            intelligence_service = IntelligenceProcessingService(session, store_config, self.config)
             await intelligence_service.trigger_async_jobs(entity_version)
             
             logger.info(f"Image intelligence jobs triggered for {entity_id}")

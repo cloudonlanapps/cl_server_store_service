@@ -11,9 +11,9 @@ from pydantic import ValidationError
 
 from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput
 
-from ..models import Face, FaceMatch, KnownPerson
+from .models import Face, FaceMatch, KnownPerson
 from store.common.models import Entity
-from .qdrant_image_store import StoreItem
+from .vector_stores import StoreItem
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient
@@ -21,40 +21,41 @@ if TYPE_CHECKING:
 
     from store.store.config import StoreConfig
     from .job_service import JobSubmissionService
-    from .qdrant_image_store import QdrantImageStore, SearchPreferences
-    from .pysdk_config import PySDKRuntimeConfig
+    from .vector_stores import QdrantImageStore, SearchPreferences
+    from .config import MInsightConfig
 
 
 class JobCallbackHandler:
     """Handler for job completion callbacks."""
 
     compute_client: ComputeClient
-    qdrant_store: QdrantImageStore
+    clip_store: QdrantImageStore
     dino_store: QdrantImageStore
 
     def __init__(
         self,
         compute_client: ComputeClient,
-        qdrant_store: QdrantImageStore,
+        clip_store: QdrantImageStore,
         dino_store: QdrantImageStore,
         config: StoreConfig,
-        pysdk_config: PySDKRuntimeConfig,
+        minsight_config: MInsightConfig,
         job_submission_service: JobSubmissionService | None = None,
     ) -> None:
         """Initialize callback handler.
 
         Args:
             compute_client: ComputeClient for file downloads
-            qdrant_store: QdrantImageStore for CLIP embedding storage
+            clip_store: QdrantImageStore for CLIP embedding storage
             dino_store: QdrantImageStore for DINOv2 embedding storage
             config: Store configuration
+            minsight_config: MInsight configuration
             job_submission_service: Service for submitting jobs (optional for initialization)
         """
         self.compute_client = compute_client
-        self.qdrant_store = qdrant_store
+        self.clip_store = clip_store
         self.dino_store = dino_store
         self.config = config
-        self.pysdk_config = pysdk_config
+        self.minsight_config = minsight_config
         self.job_submission_service: JobSubmissionService | None = (
             job_submission_service
         )
@@ -303,6 +304,10 @@ class JobCallbackHandler:
                                 image_id=image_id,
                                 job=job,
                             )
+                            if self.job_submission_service:
+                                self.job_submission_service.update_job_status(
+                                    job.job_id, job.status, job.error_message
+                                )
 
                         _ = await self.job_submission_service.submit_face_embedding(
                             face_id=face_id,
@@ -315,9 +320,9 @@ class JobCallbackHandler:
                             f"Failed to submit face_embedding job for face {face_id}: {e}"
                         )
 
-            # Cleanup: Delete successful job record
-            if self.job_submission_service:
-                self.job_submission_service.delete_job_record(job.job_id)
+            # Cleanup: Delete successful job record (DISABLED to allow client polling)
+            # if self.job_submission_service:
+            #     self.job_submission_service.delete_job_record(job.job_id)
 
         except Exception as e:
             logger.error(
@@ -396,7 +401,7 @@ class JobCallbackHandler:
                     tmp_path.unlink()
 
             # Store in Qdrant with image_id as point_id
-            _ = self.qdrant_store.add_vector(
+            _ = self.clip_store.add_vector(
                 StoreItem(
                     id=image_id,
                     embedding=embedding,
@@ -408,9 +413,9 @@ class JobCallbackHandler:
                 f"Successfully stored CLIP embedding for image {image_id} in Qdrant"
             )
 
-            # Cleanup: Delete successful job record
-            if self.job_submission_service:
-                self.job_submission_service.delete_job_record(job.job_id)
+            # Cleanup: Delete successful job record (DISABLED to allow client polling)
+            # if self.job_submission_service:
+            #     self.job_submission_service.delete_job_record(job.job_id)
 
         except Exception as e:
             logger.error(
@@ -497,9 +502,9 @@ class JobCallbackHandler:
                 f"Successfully stored DINO embedding for image {image_id} in Qdrant"
             )
 
-            # Cleanup: Delete successful job record
-            if self.job_submission_service:
-                self.job_submission_service.delete_job_record(job.job_id)
+            # Cleanup: Delete successful job record (DISABLED to allow client polling)
+            # if self.job_submission_service:
+            #     self.job_submission_service.delete_job_record(job.job_id)
 
         except Exception as e:
             logger.error(
@@ -581,17 +586,22 @@ class JobCallbackHandler:
                     tmp_path.unlink()
 
             # Get face store
-            from .face_store_singleton import get_face_store
+            from .vector_stores import get_face_store
 
-            face_store = get_face_store(self.pysdk_config)
+            face_store = get_face_store(
+                url=self.config.qdrant_url,
+                collection_name=self.config.qdrant_collections.face_embedding_collection_name,
+                vector_size=self.minsight_config.face_vector_size,
+            )
 
             # Search face store for similar faces (get multiple matches for analysis)
-            from .qdrant_image_store import SearchPreferences
+            from .vector_stores import SearchPreferences
+
             similar_faces = face_store.search(
                 query_vector=embedding,
                 limit=10,  # Get up to 10 matches
                 search_options=SearchPreferences(
-                    score_threshold=self.pysdk_config.face_embedding_threshold
+                    score_threshold=self.minsight_config.face_embedding_threshold
                 ),
             )
 
@@ -622,15 +632,17 @@ class JobCallbackHandler:
                                     + f"(match: {match.id}, score: {match.score:.3f})"
                                 )
                                 break
-                    
+
                     if face.known_person_id or not similar_faces:
                         break
-                    
+
                     if retry < max_retries - 1:
-                        logger.debug(f"Matches found for face {face_id} but no known_person_id assigned yet. Retrying {retry+1}/{max_retries}...")
+                        logger.debug(
+                            f"Matches found for face {face_id} but no known_person_id assigned yet. Retrying {retry+1}/{max_retries}..."
+                        )
                         await asyncio.sleep(1.0)
-                        db.refresh(face) # Ensure we have latest data
-            
+                        db.refresh(face)  # Ensure we have latest data
+
             # Record ALL matches in FaceMatch table
             if similar_faces:
                 for match in similar_faces:
@@ -687,9 +699,9 @@ class JobCallbackHandler:
             db.commit()
             logger.info(f"Successfully processed face embedding for face {face_id}")
 
-            # Cleanup: Delete successful job record
-            if self.job_submission_service:
-                self.job_submission_service.delete_job_record(job.job_id)
+            # Cleanup: Delete successful job record (DISABLED to allow client polling)
+            # if self.job_submission_service:
+            #     self.job_submission_service.delete_job_record(job.job_id)
 
         except Exception as e:
             logger.error(

@@ -25,6 +25,9 @@ class Args(Namespace):
     no_migrate: bool
     mqtt_server: str
     mqtt_port: Optional[int]
+    qdrant_url: str
+    qdrant_collection: str
+    face_collection: str
 
     def __init__(
         self,
@@ -37,6 +40,9 @@ class Args(Namespace):
         no_migrate: bool = False,
         mqtt_server: str = "localhost",
         mqtt_port: Optional[int] = None,
+        qdrant_url: str = "http://localhost:6333",
+        qdrant_collection: str = "clip_embeddings",
+        face_collection: str = "face_embeddings",
     ) -> None:
         super().__init__()
         self.host = host
@@ -48,6 +54,9 @@ class Args(Namespace):
         self.no_migrate = no_migrate
         self.mqtt_server = mqtt_server
         self.mqtt_port = mqtt_port
+        self.qdrant_url = qdrant_url
+        self.qdrant_collection = qdrant_collection
+        self.face_collection = face_collection
 
 
 def create_app(config: StoreConfig) -> "FastAPI":
@@ -82,6 +91,15 @@ def main() -> int:
     )
     _ = parser.add_argument(
         "--reload", action="store_true", help="Enable uvicorn reload (dev)"
+    )
+    _ = parser.add_argument(
+        "--qdrant-url", default="http://localhost:6333", help="Qdrant service URL"
+    )
+    _ = parser.add_argument(
+        "--qdrant-collection", default="clip_embeddings", help="Qdrant collection for CLIP embeddings"
+    )
+    _ = parser.add_argument(
+        "--face-collection", default="face_embeddings", help="Qdrant collection for face embeddings"
     )
 
     # PySDK Configuration arguments (REMOVED)

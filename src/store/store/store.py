@@ -12,7 +12,7 @@ from sqlalchemy.orm import configure_mappers
 from cl_ml_tools import get_broadcaster
 from .routes import router
 from .monitor import MInsightMonitor
-from store.m_insight.intelligence.routes import router as intelligence_router
+from store.m_insight.routes import router as intelligence_router
 
 # Configure mappers after all models are imported (required for versioning)
 configure_mappers()

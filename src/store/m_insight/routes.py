@@ -1,15 +1,19 @@
 from __future__ import annotations
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request
 from sqlalchemy.orm import Session
-from .retrieve_service import IntelligenceRetrieveService
-from store.common.database import get_db
+
+from store.common import models, schemas
 from store.common.auth import UserPayload, require_permission
-from store.common import schemas, models
-from . import schemas as intel_schemas
-from . import models as intel_models
+from store.common.database import get_db
 from store.store.config import StoreConfig
 
+from . import models as intel_models
+from . import schemas as intel_schemas
+from .retrieval_service import IntelligenceRetrieveService
+
 router = APIRouter(tags=["intelligence"])
+
 
 @router.get(
     "/entities/{entity_id}/faces",
@@ -36,6 +40,7 @@ async def get_entity_faces(
 
     return service.get_entity_faces(entity_id)
 
+
 @router.get(
     "/faces/{face_id}/embedding",
     tags=["face-detection"],
@@ -52,28 +57,22 @@ async def download_face_embedding(
     """Download face embedding from Qdrant vector store."""
     _ = user
     import io
+
     import numpy as np
     from fastapi.responses import Response
+
     from .models import Face
-    
+
     # Get face store and retrieve embedding
     config: StoreConfig = request.app.state.config
-    from .logic.face_store_singleton import get_face_store
-    from .logic.pysdk_config import PySDKRuntimeConfig
-    
-    # Create lightweight config for Qdrant access
-    pysdk_config = PySDKRuntimeConfig(
-        qdrant_url=config.qdrant_url,
-        face_store_collection_name=config.face_store_collection_name,
-    )
-
-    # Check if face exists in database
-    face = db.query(Face).filter(Face.id == face_id).first()
-    if not face:
-        raise HTTPException(status_code=404, detail="Face not found")
+    from .vector_stores import get_face_store
 
     # Get face store and retrieve embedding
-    face_store = get_face_store(pysdk_config)
+    face_store = get_face_store(
+        url=config.qdrant_url,
+        collection_name=config.qdrant_collections.face_embedding_collection_name,
+        vector_size=getattr(config, "face_vector_size", 512),
+    )
 
     # Retrieve from Qdrant using face_id as point_id
     point = face_store.get_vector(id=face_id)
@@ -92,6 +91,7 @@ async def download_face_embedding(
         headers={"Content-Disposition": f"attachment; filename=face_{face_id}_embedding.npy"},
     )
 
+
 @router.get(
     "/entities/{entity_id}/embedding",
     tags=["entity", "clip-embedding"],
@@ -108,8 +108,10 @@ async def download_entity_embedding(
     """Download entity CLIP embedding from Qdrant vector store."""
     _ = user
     import io
+
     import numpy as np
     from fastapi.responses import Response
+
     from store.common.models import Entity
 
     # Check if entity exists in database
@@ -119,15 +121,12 @@ async def download_entity_embedding(
 
     # Get Qdrant store and retrieve embedding
     config: StoreConfig = request.app.state.config
-    from .logic.qdrant_singleton import get_qdrant_store
-    from .logic.pysdk_config import PySDKRuntimeConfig
-    
-    # Create lightweight config for Qdrant access
-    pysdk_config = PySDKRuntimeConfig(
-        qdrant_url=config.qdrant_url,
-        qdrant_collection_name=config.qdrant_collection_name,
+    from .vector_stores import get_clip_store
+
+    qdrant_store = get_clip_store(
+        url=config.qdrant_url,
+        collection_name=config.qdrant_collections.clip_embedding_collection_name,
     )
-    qdrant_store = get_qdrant_store(pysdk_config)
 
     # Retrieve from Qdrant using entity_id as point_id
     point = qdrant_store.get_vector(id=entity_id)
@@ -147,6 +146,7 @@ async def download_entity_embedding(
             "Content-Disposition": f"attachment; filename=entity_{entity_id}_clip_embedding.npy"
         },
     )
+
 
 @router.get(
     "/entities/{entity_id}/jobs",
@@ -172,6 +172,7 @@ async def get_entity_jobs(
         raise HTTPException(status_code=404, detail="Entity not found")
 
     return service.get_entity_jobs(entity_id)
+
 
 @router.get(
     "/entities/{entity_id}/similar",
@@ -211,6 +212,7 @@ async def find_similar_images(
     # Optionally include entity details
     if include_details:
         from store.store.service import EntityService
+
         entity_service = EntityService(db, config)
         for result in results:
             result.entity = entity_service.get_entity_by_id(result.image_id)
@@ -219,6 +221,7 @@ async def find_similar_images(
         results=results,
         query_image_id=entity_id,
     )
+
 
 @router.get(
     "/faces/{face_id}/similar",
@@ -259,6 +262,7 @@ async def find_similar_faces(
         query_face_id=face_id,
     )
 
+
 @router.get(
     "/faces/{face_id}/matches",
     tags=["face-recognition"],
@@ -284,6 +288,7 @@ async def get_face_matches(
 
     return service.get_face_matches(face_id)
 
+
 @router.get(
     "/known-persons",
     tags=["face-recognition"],
@@ -301,6 +306,7 @@ async def get_all_known_persons(
     config: StoreConfig = request.app.state.config
     service = IntelligenceRetrieveService(db, config)
     return service.get_all_known_persons()
+
 
 @router.get(
     "/known-persons/{person_id}",
@@ -326,6 +332,7 @@ async def get_known_person(
 
     return person
 
+
 @router.get(
     "/known-persons/{person_id}/faces",
     tags=["face-recognition"],
@@ -345,11 +352,16 @@ async def get_person_faces(
     service = IntelligenceRetrieveService(db, config)
 
     # Check if person exists
-    person = db.query(intel_models.KnownPerson).filter(intel_models.KnownPerson.id == person_id).first()
+    person = (
+        db.query(intel_models.KnownPerson)
+        .filter(intel_models.KnownPerson.id == person_id)
+        .first()
+    )
     if not person:
         raise HTTPException(status_code=404, detail="Known person not found")
 
     return service.get_known_person_faces(person_id)
+
 
 @router.patch(
     "/known-persons/{person_id}",

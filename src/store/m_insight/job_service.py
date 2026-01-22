@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from store.m_insight.intelligence.models import EntityJob
+from .models import EntityJob
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient
@@ -80,9 +80,7 @@ class JobSubmissionService:
             )
             return job_response.job_id
         except Exception as e:
-            logger.error(
-                f"Failed to submit face_detection job for entity {entity_id}: {e}"
-            )
+            logger.error(f"Failed to submit face_detection job for entity {entity_id}: {e}")
             db.rollback()
             return None
         finally:
@@ -131,9 +129,7 @@ class JobSubmissionService:
             )
             return job_response.job_id
         except Exception as e:
-            logger.error(
-                f"Failed to submit clip_embedding job for entity {entity_id}: {e}"
-            )
+            logger.error(f"Failed to submit clip_embedding job for entity {entity_id}: {e}")
             db.rollback()
             return None
         finally:
@@ -182,9 +178,7 @@ class JobSubmissionService:
             )
             return job_response.job_id
         except Exception as e:
-            logger.error(
-                f"Failed to submit dino_embedding job for entity {entity_id}: {e}"
-            )
+            logger.error(f"Failed to submit dino_embedding job for entity {entity_id}: {e}")
             db.rollback()
             return None
         finally:

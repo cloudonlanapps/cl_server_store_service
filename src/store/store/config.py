@@ -1,9 +1,10 @@
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 from ..common.utils import ensure_cl_server_dir
+from ..common.schemas import QdrantCollectionsConfig
 
 
 @dataclass
@@ -22,8 +23,7 @@ class StoreConfig:
     
     # Qdrant configuration (required for Store REST API Search)
     qdrant_url: str = "http://localhost:6333"
-    qdrant_collection_name: str = "image_embeddings"
-    face_store_collection_name: str = "face_embeddings"
+    qdrant_collections: QdrantCollectionsConfig = field(default_factory=QdrantCollectionsConfig)
 
 
 
@@ -38,9 +38,11 @@ class StoreConfig:
             public_key_path=cl_dir / "keys" / "public_key.pem",
             auth_disabled=args.no_auth,
             server_port=args.port,
-            mqtt_broker=getattr(args, "mqtt_server", "localhost"),
-            mqtt_port=getattr(args, "mqtt_port", None),
-            qdrant_url=getattr(args, "qdrant_url", "http://localhost:6333"),
-            qdrant_collection_name=getattr(args, "qdrant_collection", "image_embeddings"),
-            face_store_collection_name=getattr(args, "face_collection", "face_embeddings"),
+            mqtt_broker=args.mqtt_server,
+            mqtt_port=args.mqtt_port,
+            qdrant_url=args.qdrant_url,
+            qdrant_collections=QdrantCollectionsConfig(
+                clip_embedding_collection_name=args.qdrant_collection,
+                face_embedding_collection_name=args.face_collection,
+            ),
         )

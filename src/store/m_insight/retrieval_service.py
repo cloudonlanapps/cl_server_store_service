@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 import logging
-from sqlalchemy.orm import Session
+
 from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
+from sqlalchemy.orm import Session
+
 from store.store.config import StoreConfig
-from .logic.qdrant_singleton import get_qdrant_store
-from .logic.face_store_singleton import get_face_store
-from .logic.dino_store_singleton import get_dino_store
-from .logic.qdrant_image_store import SearchPreferences
-from .models import Face, EntityJob, KnownPerson, FaceMatch
+
 from . import schemas
+from .models import EntityJob, Face, FaceMatch, KnownPerson
+from .vector_stores import get_clip_store, get_dino_store, get_face_store
+from .qdrant_image_store import SearchPreferences
 
 logger = logging.getLogger(__name__)
 
+
 class IntelligenceRetrieveService:
     """Service layer for intelligence/ML retrieval operations (DB and Qdrant).
-    
+
     This service depends only on the database and StoreConfig (which contains Qdrant settings),
     avoiding the need for ML Compute/Auth credentials in the Store process.
     """
@@ -24,23 +26,21 @@ class IntelligenceRetrieveService:
         """Initialize the intelligence retrieval service."""
         self.db = db
         self.config = config
-        
+
         # Initialize stores from StoreConfig
-        # These factories now use config.qdrant_url etc. if provided
-        from .logic.pysdk_config import PySDKRuntimeConfig
-        
-        # Create a lightweight PySDK config for Qdrant access only
-        pysdk_config = PySDKRuntimeConfig(
-            qdrant_url=config.qdrant_url,
-            qdrant_collection_name=config.qdrant_collection_name,
-            face_store_collection_name=config.face_store_collection_name,
-            mqtt_broker=config.mqtt_broker,
-            mqtt_port=config.mqtt_port if config.mqtt_port else 1883
+        self.qdrant_store = get_clip_store(
+            url=config.qdrant_url,
+            collection_name=config.qdrant_collections.clip_embedding_collection_name,
         )
-        
-        self.qdrant_store = get_qdrant_store(pysdk_config)
-        self.face_store = get_face_store(pysdk_config)
-        self.dino_store = get_dino_store(pysdk_config)
+        self.face_store = get_face_store(
+            url=config.qdrant_url,
+            collection_name=config.qdrant_collections.face_embedding_collection_name,
+            vector_size=getattr(config, "face_vector_size", 512),
+        )
+        self.dino_store = get_dino_store(
+            url=config.qdrant_url,
+            collection_name=config.qdrant_collections.dino_embedding_collection_name,
+        )
 
     def get_entity_faces(self, entity_id: int) -> list[schemas.FaceResponse]:
         """Get all faces detected in an entity."""
@@ -154,7 +154,7 @@ class IntelligenceRetrieveService:
             query_vector=item.embedding,
             limit=limit + 1,  # +1 to account for the query image itself
             search_options=SearchPreferences(
-                score_threshold=threshold if threshold is not None else 0.7 # Default DINO threshold
+                score_threshold=threshold if threshold is not None else 0.7  # Default DINO threshold
             ),
         )
 
@@ -251,7 +251,9 @@ class IntelligenceRetrieveService:
 
         return results
 
-    def update_known_person_name(self, person_id: int, name: str) -> schemas.KnownPersonResponse | None:
+    def update_known_person_name(
+        self, person_id: int, name: str
+    ) -> schemas.KnownPersonResponse | None:
         """Update known person name."""
         person = self.db.query(KnownPerson).filter(KnownPerson.id == person_id).first()
         if not person:
@@ -268,6 +270,7 @@ class IntelligenceRetrieveService:
     def _now_timestamp(self) -> int:
         """Return current UTC timestamp in milliseconds."""
         from datetime import UTC, datetime
+
         return int(datetime.now(UTC).timestamp() * 1000)
 
     def search_similar_faces_by_id(
