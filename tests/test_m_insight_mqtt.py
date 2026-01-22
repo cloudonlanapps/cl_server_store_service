@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 @pytest.fixture
 def test_subscriber(integration_config):
     """Create an MQTT subscriber for verification."""
-    client = mqtt.Client(protocol=mqtt.MQTTv5)
+    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv5)
     messages = []
     
     

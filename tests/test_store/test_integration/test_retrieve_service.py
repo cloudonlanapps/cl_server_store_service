@@ -182,8 +182,9 @@ async def test_search_similar_images_with_details(client, mock_db):
         mock_result = SimilarImageResult(image_id=2, score=0.9, entity=None)
         mock_service.search_similar_images.return_value = [mock_result]
         
+        from store.common.schemas import Item
         mock_entity_service = mock_entity_service_class.return_value
-        mock_entity_service.get_entity_by_id.return_value = {"id": 2, "label": "Detail"}
+        mock_entity_service.get_entity_by_id.return_value = Item(id=2, label="Detail", is_collection=False)
         
         response = client.get("/intelligence/entities/1/similar?include_details=true")
         assert response.status_code == 200
