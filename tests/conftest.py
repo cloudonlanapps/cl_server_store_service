@@ -38,8 +38,11 @@ class IntegrationConfig(BaseModel):
     # Kept for backward compat in test calls, but values might be empty strings
     username: str
     password: str
-    mqtt_server: str = "localhost"
+    mqtt_server: str = "127.0.0.1"
     mqtt_port: int | None = None
+    auth_url: str = "http://127.0.0.1:8010"
+    compute_url: str = "http://127.0.0.1:8012"
+    qdrant_url: str = "http://127.0.0.1:6333"
 
 
 # ============================================================================
@@ -73,6 +76,24 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         type=int,
         default=None,
         help="MQTT port for integration tests"
+    )
+    parser.addoption(
+        "--auth-url",
+        action="store",
+        default="http://localhost:8010",
+        help="Auth service URL for integration tests"
+    )
+    parser.addoption(
+        "--compute-url",
+        action="store",
+        default="http://localhost:8012",
+        help="Compute service URL for integration tests"
+    )
+    parser.addoption(
+        "--qdrant-url",
+        action="store",
+        default="http://localhost:6333",
+        help="Qdrant service URL for integration tests"
     )
 
 
@@ -111,13 +132,91 @@ def integration_config(request: pytest.FixtureRequest) -> IntegrationConfig:
     password = request.config.getoption("--password")
     mqtt_server = request.config.getoption("--mqtt-server")
     mqtt_port = request.config.getoption("--mqtt-port")
+    auth_url = request.config.getoption("--auth-url")
+    compute_url = request.config.getoption("--compute-url")
+    qdrant_url = request.config.getoption("--qdrant-url")
 
     return IntegrationConfig(
         username=str(username) if username else "admin",
         password=str(password) if password else "admin",
         mqtt_server=str(mqtt_server),
         mqtt_port=mqtt_port,
+        auth_url=str(auth_url),
+        compute_url=str(compute_url),
+        qdrant_url=str(qdrant_url),
     )
+
+
+@pytest.fixture(scope="session")
+def qdrant_service(integration_config: IntegrationConfig) -> Any:
+    """Verify Qdrant is running and accessible."""
+    from qdrant_client import QdrantClient
+    client = QdrantClient(url=integration_config.qdrant_url)
+    try:
+        # Check connectivity
+        client.get_collections()
+    except Exception as e:
+        pytest.skip(f"Qdrant service not available at {integration_config.qdrant_url}: {e}")
+    return client
+
+
+@pytest.fixture(scope="session")
+def compute_service(integration_config: IntegrationConfig) -> str:
+    """Verify Compute service is running."""
+    import httpx
+    # Using /capabilities as health check for compute
+    url = f"{integration_config.compute_url}/capabilities"
+    try:
+        resp = httpx.get(url, timeout=5)
+        if resp.status_code != 200:
+            pytest.skip(f"Compute service health check failed with status {resp.status_code}")
+    except Exception as e:
+        pytest.skip(f"Compute service not available at {integration_config.compute_url}: {e}")
+    return integration_config.compute_url
+
+
+@pytest.fixture(scope="session")
+def auth_service(integration_config: IntegrationConfig) -> str:
+    """Verify Auth service is running."""
+    import httpx
+    # Using / as health check for auth
+    url = f"{integration_config.auth_url}/"
+    try:
+        resp = httpx.get(url, timeout=5)
+        if resp.status_code != 200:
+            pytest.skip(f"Auth service health check failed with status {resp.status_code}")
+    except Exception as e:
+        pytest.skip(f"Auth service not available at {integration_config.auth_url}: {e}")
+    return integration_config.auth_url
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def initialize_pysdk(
+    integration_config: IntegrationConfig,
+    qdrant_service: Any,
+    compute_service: str,
+    auth_service: str,
+):
+    """Initialize PySDK compute client singleton for intelligence services."""
+    from store.m_insight.intelligence.logic.pysdk_config import PySDKRuntimeConfig
+    from store.m_insight.intelligence.logic.compute_singleton import (
+        async_get_compute_client,
+        shutdown_compute_client,
+    )
+
+    pysdk_config = PySDKRuntimeConfig(
+        auth_service_url=integration_config.auth_url,
+        compute_service_url=integration_config.compute_url,
+        compute_username=integration_config.username,
+        compute_password=integration_config.password,
+        qdrant_url=integration_config.qdrant_url,
+        mqtt_broker=integration_config.mqtt_server,
+        mqtt_port=integration_config.mqtt_port or 1883,
+    )
+
+    await async_get_compute_client(pysdk_config)
+    yield
+    await shutdown_compute_client()
 
 
 # ============================================================================

@@ -12,16 +12,17 @@ from pydantic import ValidationError
 from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput
 
 from ..models import Face, FaceMatch, KnownPerson
-from ...common.models import Entity
+from store.common.models import Entity
 from .qdrant_image_store import StoreItem
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient
     from cl_client.models import JobResponse
 
-    from ...store.config import StoreConfig
+    from store.store.config import StoreConfig
     from .job_service import JobSubmissionService
-    from .qdrant_image_store import QdrantImageStore
+    from .qdrant_image_store import QdrantImageStore, SearchPreferences
+    from .pysdk_config import PySDKRuntimeConfig
 
 
 class JobCallbackHandler:
@@ -37,6 +38,7 @@ class JobCallbackHandler:
         qdrant_store: QdrantImageStore,
         dino_store: QdrantImageStore,
         config: StoreConfig,
+        pysdk_config: PySDKRuntimeConfig,
         job_submission_service: JobSubmissionService | None = None,
     ) -> None:
         """Initialize callback handler.
@@ -52,6 +54,7 @@ class JobCallbackHandler:
         self.qdrant_store = qdrant_store
         self.dino_store = dino_store
         self.config = config
+        self.pysdk_config = pysdk_config
         self.job_submission_service: JobSubmissionService | None = (
             job_submission_service
         )
@@ -160,7 +163,7 @@ class JobCallbackHandler:
             image_id: Image (Entity) ID
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
-        from ...common.database import SessionLocal
+        from store.common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -518,7 +521,7 @@ class JobCallbackHandler:
             image_id: Original image Entity ID (for reference/logging)
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
-        from ...common.database import SessionLocal
+        from store.common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -577,24 +580,18 @@ class JobCallbackHandler:
                 if tmp_path.exists():
                     tmp_path.unlink()
 
-            # Get pysdk_config for threshold
-            if not self.config.pysdk_config:
-                logger.error(
-                    "PySDK config not available, cannot process face embedding"
-                )
-                return
-
             # Get face store
             from .face_store_singleton import get_face_store
 
-            face_store = get_face_store(self.config.pysdk_config)
+            face_store = get_face_store(self.pysdk_config)
 
             # Search face store for similar faces (get multiple matches for analysis)
+            from .qdrant_image_store import SearchPreferences
             similar_faces = face_store.search(
                 query_vector=embedding,
                 limit=10,  # Get up to 10 matches
                 search_options=SearchPreferences(
-                    score_threshold=self.config.pysdk_config.face_embedding_threshold
+                    score_threshold=self.pysdk_config.face_embedding_threshold
                 ),
             )
 

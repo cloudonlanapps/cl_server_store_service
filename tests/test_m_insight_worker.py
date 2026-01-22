@@ -41,10 +41,10 @@ def m_insight_processor_mock(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int,
     
     original_process = mInsight.process
     
-    def mock_process(self: Any, data: Any) -> bool:
+    async def mock_process(self: Any, data: Any) -> bool:
         """Mock process that tracks calls and delegates to original for qualification."""
         # Call original to get qualification result
-        result = original_process(self, data)
+        result = await original_process(self, data)
         if result:
             calls.append((data.id, data.md5))
         return result
@@ -75,8 +75,6 @@ def m_insight_worker(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        auth_disabled=False,
-        server_port=8001,
         mqtt_broker=integration_config.mqtt_server,
         mqtt_port=integration_config.mqtt_port,
         mqtt_topic="test/m_insight",
@@ -122,7 +120,7 @@ def get_intelligence_for_image(session: Session, image_id: int) -> ImageIntellig
 
 
 
-def test_empty_sync_state_queues_all_images(
+async def test_empty_sync_state_queues_all_images(
     client: TestClient,
     test_images_unique: list[Path],
     m_insight_worker: mInsight,
@@ -150,7 +148,7 @@ def test_empty_sync_state_queues_all_images(
     assert initial_version == 0
     
     # Run reconciliation
-    processed_count = m_insight_worker.run_once()
+    processed_count = await m_insight_worker.run_once()
     
     # Verify all 3 images were processed
     assert processed_count == 3
@@ -165,7 +163,7 @@ def test_empty_sync_state_queues_all_images(
 
 
 
-def test_existing_sync_state_only_newer_versions(
+async def test_existing_sync_state_only_newer_versions(
     client: TestClient,
     test_images_unique: list[Path],
     m_insight_worker: mInsight,
@@ -183,7 +181,7 @@ def test_existing_sync_state_only_newer_versions(
     first_id = response.json()["id"]
     
     # Run first reconciliation
-    m_insight_worker.run_once()
+    await m_insight_worker.run_once()
     assert len(m_insight_processor_mock) == 1
     first_version = get_sync_state(test_db_session)
     
@@ -200,7 +198,7 @@ def test_existing_sync_state_only_newer_versions(
     second_id = response.json()["id"]
     
     # Run second reconciliation
-    processed_count = m_insight_worker.run_once()
+    processed_count = await m_insight_worker.run_once()
     
     # Verify only new image was processed
     assert processed_count == 1
@@ -221,7 +219,7 @@ def test_existing_sync_state_only_newer_versions(
 
 
 
-def test_multiple_md5_changes_single_queue(
+async def test_multiple_md5_changes_single_queue(
     client: TestClient,
     sample_images: list[Path],
     m_insight_worker: mInsight,
@@ -251,7 +249,7 @@ def test_multiple_md5_changes_single_queue(
     final_md5 = response.json()["md5"]
     
     # Run reconciliation
-    processed_count = m_insight_worker.run_once()
+    processed_count = await m_insight_worker.run_once()
     
     # Verify single processing with latest md5
     assert processed_count == 1
@@ -266,7 +264,7 @@ def test_multiple_md5_changes_single_queue(
 
 
 
-def test_process_called_once_per_image(
+async def test_process_called_once_per_image(
     client: TestClient,
     sample_images: list[Path],
     m_insight_worker: mInsight,
@@ -292,7 +290,7 @@ def test_process_called_once_per_image(
         )
     
     # Run reconciliation
-    m_insight_worker.run_once()
+    await m_insight_worker.run_once()
     
     # Verify exactly one process() call
     assert len(m_insight_processor_mock) == 1
@@ -305,7 +303,7 @@ def test_process_called_once_per_image(
 
 
 
-def test_no_duplicate_processing(
+async def test_no_duplicate_processing(
     client: TestClient,
     sample_image: Path,
     m_insight_worker: mInsight,
@@ -323,14 +321,14 @@ def test_no_duplicate_processing(
     image_id = response.json()["id"]
     
     # First reconciliation
-    m_insight_worker.run_once()
+    await m_insight_worker.run_once()
     assert len(m_insight_processor_mock) == 1
     
     # Clear mock
     m_insight_processor_mock.clear()
     
     # Second reconciliation (no new changes)
-    processed_count = m_insight_worker.run_once()
+    processed_count = await m_insight_worker.run_once()
     
     # Verify no reprocessing
     assert processed_count == 0
@@ -346,7 +344,7 @@ def test_no_duplicate_processing(
 
 
 
-def test_delete_image_removes_intelligence(
+async def test_delete_image_removes_intelligence(
     client: TestClient,
     sample_image: Path,
     m_insight_worker: mInsight,
@@ -362,7 +360,7 @@ def test_delete_image_removes_intelligence(
     assert response.status_code == 201
     image_id = response.json()["id"]
     
-    m_insight_worker.run_once()
+    await m_insight_worker.run_once()
     
     # Verify intelligence row exists
     assert get_intelligence_for_image(test_db_session, image_id) is not None
@@ -382,7 +380,7 @@ def test_delete_image_removes_intelligence(
 
 
 
-def test_restart_does_not_reinsert_deleted(
+async def test_restart_does_not_reinsert_deleted(
     client: TestClient,
     sample_image: Path,
     m_insight_worker: mInsight,
@@ -399,7 +397,7 @@ def test_restart_does_not_reinsert_deleted(
     assert response.status_code == 201
     image_id = response.json()["id"]
     
-    m_insight_worker.run_once()
+    await m_insight_worker.run_once()
     
     # Soft-delete then hard-delete
     from store.store.service import EntityService
@@ -413,7 +411,7 @@ def test_restart_does_not_reinsert_deleted(
     # Simulate restart: create new worker and reconcile
     new_worker = mInsight(config=m_insight_worker.config)
     
-    processed_count = new_worker.run_once()
+    processed_count = await new_worker.run_once()
     
     # Verify deleted image not reprocessed
     assert processed_count == 0
@@ -427,7 +425,7 @@ def test_restart_does_not_reinsert_deleted(
 
 
 
-def test_non_image_entities_ignored(
+async def test_non_image_entities_ignored(
     client: TestClient,
     m_insight_worker: mInsight,
     m_insight_processor_mock: list[tuple[int, str]],
@@ -443,7 +441,7 @@ def test_non_image_entities_ignored(
     collection_id = response.json()["id"]
     
     # Run reconciliation
-    processed_count = m_insight_worker.run_once()
+    processed_count = await m_insight_worker.run_once()
     
     # Verify no processing
     assert processed_count == 0

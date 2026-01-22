@@ -17,14 +17,21 @@ class MInsightConfig:
     cl_server_dir: Path
     media_storage_dir: Path
     public_key_path: Path
+    store_port: int = 8001
     
-    # Auth
-    auth_disabled: bool
-    server_port: int
+    # ML Service URLs (Worker only)
+    auth_service_url: str = "http://localhost:8010"
+    compute_service_url: str = "http://localhost:8012"
+    compute_username: str = "admin"
+    compute_password: str = "admin"
+    
+    # Worker processing settings
+    face_vector_size: int = 512
+    face_embedding_threshold: float = 0.7
     
     # MQTT configuration
-    mqtt_broker: str
-    mqtt_port: Optional[int] = None
+    mqtt_broker: str = "localhost"
+    mqtt_port: int = 1883
     mqtt_topic: str = "m_insight/wakeup"
 
     @classmethod
@@ -37,8 +44,14 @@ class MInsightConfig:
             cl_server_dir=cl_dir,
             media_storage_dir=cl_dir / "media",
             public_key_path=cl_dir / "keys" / "public_key.pem",
-            auth_disabled=False,
-            server_port=args.store_port,
+            store_port=args.store_port,
+            
+            # ML Services
+            auth_service_url=getattr(args, "auth_url", "http://localhost:8010"),
+            compute_service_url=getattr(args, "compute_url", "http://localhost:8012"),
+            compute_username=getattr(args, "compute_username", "admin"),
+            compute_password=getattr(args, "compute_password", "admin"),
+            
             mqtt_broker=args.mqtt_broker,
             mqtt_port=args.mqtt_port,
             mqtt_topic=args.mqtt_topic or f"store/{args.store_port}/items",

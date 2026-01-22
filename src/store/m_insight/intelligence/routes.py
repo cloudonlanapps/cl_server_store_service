@@ -1,11 +1,13 @@
 from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request
 from sqlalchemy.orm import Session
-from .service import MInsightEmbeddingService
-from ..common.database import get_db
-from ..common.auth import UserPayload, require_permission
-from ..common import schemas, models
-from ..store.config import StoreConfig
+from .retrieve_service import IntelligenceRetrieveService
+from store.common.database import get_db
+from store.common.auth import UserPayload, require_permission
+from store.common import schemas, models
+from . import schemas as intel_schemas
+from . import models as intel_models
+from store.store.config import StoreConfig
 
 router = APIRouter(tags=["intelligence"])
 
@@ -21,14 +23,13 @@ async def get_entity_faces(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
-) -> list[schemas.FaceResponse]:
+) -> list[intel_schemas.FaceResponse]:
     """Get all faces detected in an entity."""
     _ = user
     config: StoreConfig = request.app.state.config
-    service = MInsightEmbeddingService(db, config)
+    service = IntelligenceRetrieveService(db, config)
 
     # Check if entity exists
-    # We might need EntityService for this, or just check models.Entity directly
     entity = db.query(models.Entity).filter(models.Entity.id == entity_id).first()
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -46,15 +47,25 @@ async def download_face_embedding(
     face_id: int = Path(..., title="Face Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ):
     """Download face embedding from Qdrant vector store."""
     _ = user
     import io
     import numpy as np
     from fastapi.responses import Response
-    from .logic.compute_singleton import get_pysdk_config
+    from .models import Face
+    
+    # Get face store and retrieve embedding
+    config: StoreConfig = request.app.state.config
     from .logic.face_store_singleton import get_face_store
-    from ..common.models import Face
+    from .logic.pysdk_config import PySDKRuntimeConfig
+    
+    # Create lightweight config for Qdrant access
+    pysdk_config = PySDKRuntimeConfig(
+        qdrant_url=config.qdrant_url,
+        face_store_collection_name=config.face_store_collection_name,
+    )
 
     # Check if face exists in database
     face = db.query(Face).filter(Face.id == face_id).first()
@@ -62,7 +73,6 @@ async def download_face_embedding(
         raise HTTPException(status_code=404, detail="Face not found")
 
     # Get face store and retrieve embedding
-    pysdk_config = get_pysdk_config()
     face_store = get_face_store(pysdk_config)
 
     # Retrieve from Qdrant using face_id as point_id
@@ -93,13 +103,14 @@ async def download_entity_embedding(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ):
     """Download entity CLIP embedding from Qdrant vector store."""
     _ = user
     import io
     import numpy as np
     from fastapi.responses import Response
-    from ..common.models import Entity
+    from store.common.models import Entity
 
     # Check if entity exists in database
     entity = db.query(Entity).filter(Entity.id == entity_id).first()
@@ -107,8 +118,16 @@ async def download_entity_embedding(
         raise HTTPException(status_code=404, detail="Entity not found")
 
     # Get Qdrant store and retrieve embedding
+    config: StoreConfig = request.app.state.config
     from .logic.qdrant_singleton import get_qdrant_store
-    qdrant_store = get_qdrant_store()
+    from .logic.pysdk_config import PySDKRuntimeConfig
+    
+    # Create lightweight config for Qdrant access
+    pysdk_config = PySDKRuntimeConfig(
+        qdrant_url=config.qdrant_url,
+        qdrant_collection_name=config.qdrant_collection_name,
+    )
+    qdrant_store = get_qdrant_store(pysdk_config)
 
     # Retrieve from Qdrant using entity_id as point_id
     point = qdrant_store.get_vector(id=entity_id)
@@ -141,11 +160,11 @@ async def get_entity_jobs(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
-) -> list[schemas.EntityJobResponse]:
+) -> list[intel_schemas.EntityJobResponse]:
     """Get all jobs for an entity."""
     _ = user
     config: StoreConfig = request.app.state.config
-    service = MInsightEmbeddingService(db, config)
+    service = IntelligenceRetrieveService(db, config)
 
     # Check if entity exists
     entity = db.query(models.Entity).filter(models.Entity.id == entity_id).first()
@@ -169,11 +188,11 @@ async def find_similar_images(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
-) -> schemas.SimilarImagesResponse:
+) -> intel_schemas.SimilarImagesResponse:
     """Find similar images using CLIP embeddings."""
     _ = user
     config: StoreConfig = request.app.state.config
-    service = MInsightEmbeddingService(db, config)
+    service = IntelligenceRetrieveService(db, config)
 
     # Check if entity exists
     entity = db.query(models.Entity).filter(models.Entity.id == entity_id).first()
@@ -191,14 +210,12 @@ async def find_similar_images(
 
     # Optionally include entity details
     if include_details:
-        # We might need EntityService for this, but for now we can just use the DB
-        # or import EntityService here to avoid circular dependencies if it's moved
-        from ..store.service import EntityService
+        from store.store.service import EntityService
         entity_service = EntityService(db, config)
         for result in results:
             result.entity = entity_service.get_entity_by_id(result.image_id)
 
-    return schemas.SimilarImagesResponse(
+    return intel_schemas.SimilarImagesResponse(
         results=results,
         query_image_id=entity_id,
     )
@@ -217,14 +234,14 @@ async def find_similar_faces(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
-) -> schemas.SimilarFacesResponse:
+) -> intel_schemas.SimilarFacesResponse:
     """Find similar faces using face embeddings."""
     _ = user
     config: StoreConfig = request.app.state.config
-    service = MInsightEmbeddingService(db, config)
+    service = IntelligenceRetrieveService(db, config)
 
     # Check if face exists
-    face = db.query(models.Face).filter(models.Face.id == face_id).first()
+    face = db.query(intel_models.Face).filter(intel_models.Face.id == face_id).first()
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
 
@@ -237,7 +254,7 @@ async def find_similar_faces(
             detail="No similar faces found. Face may not have an embedding yet.",
         )
 
-    return schemas.SimilarFacesResponse(
+    return intel_schemas.SimilarFacesResponse(
         results=results,
         query_face_id=face_id,
     )
@@ -254,14 +271,14 @@ async def get_face_matches(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
-) -> list[schemas.FaceMatchResult]:
+) -> list[intel_schemas.FaceMatchResult]:
     """Get all match records for a face."""
     _ = user
     config: StoreConfig = request.app.state.config
-    service = MInsightEmbeddingService(db, config)
+    service = IntelligenceRetrieveService(db, config)
 
     # Check if face exists
-    face = db.query(models.Face).filter(models.Face.id == face_id).first()
+    face = db.query(intel_models.Face).filter(intel_models.Face.id == face_id).first()
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
 
@@ -278,11 +295,11 @@ async def get_all_known_persons(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
-) -> list[schemas.KnownPersonResponse]:
+) -> list[intel_schemas.KnownPersonResponse]:
     """Get all known persons."""
     _ = user
     config: StoreConfig = request.app.state.config
-    service = MInsightEmbeddingService(db, config)
+    service = IntelligenceRetrieveService(db, config)
     return service.get_all_known_persons()
 
 @router.get(
@@ -297,11 +314,11 @@ async def get_known_person(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
-) -> schemas.KnownPersonResponse:
+) -> intel_schemas.KnownPersonResponse:
     """Get known person details."""
     _ = user
     config: StoreConfig = request.app.state.config
-    service = MInsightEmbeddingService(db, config)
+    service = IntelligenceRetrieveService(db, config)
 
     person = service.get_known_person(person_id)
     if not person:
@@ -321,14 +338,14 @@ async def get_person_faces(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
-) -> list[schemas.FaceResponse]:
+) -> list[intel_schemas.FaceResponse]:
     """Get all faces for a known person."""
     _ = user
     config: StoreConfig = request.app.state.config
-    service = MInsightEmbeddingService(db, config)
+    service = IntelligenceRetrieveService(db, config)
 
     # Check if person exists
-    person = db.query(models.KnownPerson).filter(models.KnownPerson.id == person_id).first()
+    person = db.query(intel_models.KnownPerson).filter(intel_models.KnownPerson.id == person_id).first()
     if not person:
         raise HTTPException(status_code=404, detail="Known person not found")
 
@@ -343,15 +360,15 @@ async def get_person_faces(
 )
 async def update_person_name(
     person_id: int = Path(..., title="Person Id"),
-    body: schemas.UpdatePersonNameRequest = Body(...),
+    body: intel_schemas.UpdatePersonNameRequest = Body(...),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
-) -> schemas.KnownPersonResponse:
+) -> intel_schemas.KnownPersonResponse:
     """Update person name."""
     _ = user
     config: StoreConfig = request.app.state.config
-    service = MInsightEmbeddingService(db, config)
+    service = IntelligenceRetrieveService(db, config)
 
     result = service.update_known_person_name(person_id, body.name)
     if not result:

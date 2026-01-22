@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
 
-from ...common.schemas import Item
+from store.common.schemas import Item
 
 
 # Face detection and job schemas

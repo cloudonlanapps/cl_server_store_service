@@ -19,6 +19,13 @@ class StoreConfig:
     server_port: int
     mqtt_broker: str = "localhost"
     mqtt_port: Optional[int] = None
+    
+    # Qdrant configuration (required for Store REST API Search)
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_collection_name: str = "image_embeddings"
+    face_store_collection_name: str = "face_embeddings"
+
+
 
     @classmethod
     def from_cli_args(cls, args) -> "StoreConfig":
@@ -33,4 +40,7 @@ class StoreConfig:
             server_port=args.port,
             mqtt_broker=getattr(args, "mqtt_server", "localhost"),
             mqtt_port=getattr(args, "mqtt_port", None),
+            qdrant_url=getattr(args, "qdrant_url", "http://localhost:6333"),
+            qdrant_collection_name=getattr(args, "qdrant_collection", "image_embeddings"),
+            face_store_collection_name=getattr(args, "face_collection", "face_embeddings"),
         )

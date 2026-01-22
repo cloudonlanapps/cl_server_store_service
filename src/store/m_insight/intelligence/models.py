@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, override
 from sqlalchemy import BigInteger, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from ...common.models import Base, Entity
+from store.common.models import Base, Entity
 
 
 class Face(Base):

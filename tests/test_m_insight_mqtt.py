@@ -42,8 +42,6 @@ def test_m_insight_worker(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        auth_disabled=False,
-        server_port=8002, # Use different port to avoid conflicts
         mqtt_broker=integration_config.mqtt_server,
         mqtt_port=integration_config.mqtt_port,
         mqtt_topic="test/m_insight_mqtt",
@@ -61,7 +59,7 @@ def test_m_insight_worker(
     yield worker
 
 
-def test_m_insight_lifecycle_events(
+async def test_m_insight_lifecycle_events(
     integration_config,
     test_subscriber,
     test_m_insight_worker,
@@ -101,7 +99,7 @@ def test_m_insight_lifecycle_events(
     test_db_session.commit()
     
     # Run reconciliation
-    processed = worker.run_once()
+    processed = await worker.run_once()
     assert processed == 1, "Should have processed 1 item"
     
     # Wait for messages

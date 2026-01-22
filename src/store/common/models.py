@@ -103,12 +103,12 @@ class ServiceConfig(Base):
 
 
 # Import intelligence models to ensure they are registered with Base for Alembic
-# Import these AFTER Entity and other core models
-from ..m_insight.models import ImageIntelligence  # noqa: F401
-from ..m_insight.intelligence.models import Face, EntityJob, KnownPerson, FaceMatch  # noqa: F401
+# These are imported at runtime after all models are defined
+# The relationship() uses string references, so circular imports work for ORM
 
 if TYPE_CHECKING:
     from ..m_insight.models import ImageIntelligence
     from ..m_insight.intelligence.models import Face, EntityJob, KnownPerson, FaceMatch
 
-
+# Runtime import happens when these modules are imported elsewhere
+# (e.g., via alembic or when the full application starts)

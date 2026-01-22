@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ...common.models import EntityJob
+from store.m_insight.intelligence.models import EntityJob
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient
@@ -53,7 +53,7 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from ...common.database import SessionLocal
+        from store.common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -65,7 +65,7 @@ class JobSubmissionService:
 
             now = self._now_timestamp()
             entity_job = EntityJob(
-                entity_id=entity_id,
+                image_id=entity_id,
                 job_id=job_response.job_id,
                 task_type="face_detection",
                 status="queued",
@@ -104,7 +104,7 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from ...common.database import SessionLocal
+        from store.common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -116,7 +116,7 @@ class JobSubmissionService:
 
             now = self._now_timestamp()
             entity_job = EntityJob(
-                entity_id=entity_id,
+                image_id=entity_id,
                 job_id=job_response.job_id,
                 task_type="clip_embedding",
                 status="queued",
@@ -155,7 +155,7 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from ...common.database import SessionLocal
+        from store.common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -208,7 +208,7 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from ...common.database import SessionLocal
+        from store.common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -221,7 +221,7 @@ class JobSubmissionService:
             now = self._now_timestamp()
             # Track face_embedding jobs under the parent entity
             entity_job = EntityJob(
-                entity_id=entity_id,  # Use parent entity_id, not face_id
+                image_id=entity_id,  # Use parent image_id, not face_id
                 job_id=job_response.job_id,
                 task_type="face_embedding",
                 status="queued",
@@ -249,7 +249,7 @@ class JobSubmissionService:
         Args:
             job_id: Job ID to delete
         """
-        from ...common.database import SessionLocal
+        from store.common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -274,7 +274,7 @@ class JobSubmissionService:
             status: New status (queued, in_progress, completed, failed)
             error_message: Optional error message if status is failed
         """
-        from ...common.database import SessionLocal
+        from store.common.database import SessionLocal
 
         db = SessionLocal()
         try:

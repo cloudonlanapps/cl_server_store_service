@@ -67,7 +67,7 @@ class Args(Namespace):
         id: str = "m-insight-default",
         log_level: str = "INFO",
         mqtt_broker: str = "localhost",
-        mqtt_port: int | None = None,
+        mqtt_port: int = 1883,
         mqtt_topic: str | None = None,
         store_port: int = 8001,
     ) -> None:
@@ -104,13 +104,6 @@ async def mqtt_listener_task(config, processor) -> None:
     
     try:
         from cl_ml_tools import get_broadcaster
-        
-        # Note: We are creating a separate broadcaster/client for listening here 
-        # or we could reuse the one from MInsightBroadcaster if we exposed the client.
-        # cl_ml_tools.get_broadcaster returns a singleton-ish if params match? 
-        # Actually get_broadcaster returns a new instance usually.
-        # For simplicity, let's keep this listener separate or we can refactor.
-        # Given the existing code uses get_broadcaster, let's stick to it.
         
         broadcaster = get_broadcaster(
             broadcast_type="mqtt",
@@ -238,8 +231,8 @@ def main() -> int:
         "--mqtt-port",
         "-p",
         type=int,
-        default=None,
-        help="MQTT broker port (default: None, MQTT disabled)",
+        default=1883,
+        help="MQTT broker port (default: 1883)",
     )
     parser.add_argument(
         "--mqtt-topic",
@@ -253,6 +246,42 @@ def main() -> int:
         default=8001,
         help="Port of the store service (default: 8001)",
     )
+    # ML Service URLs
+    parser.add_argument(
+        "--auth-url",
+        default="http://localhost:8010",
+        help="Auth service URL",
+    )
+    parser.add_argument(
+        "--compute-url",
+        default="http://localhost:8012",
+        help="Compute service URL",
+    )
+    parser.add_argument(
+        "--compute-username",
+        default="admin",
+        help="Compute service username",
+    )
+    parser.add_argument(
+        "--compute-password",
+        default="admin",
+        help="Compute service password",
+    )
+    parser.add_argument(
+        "--qdrant-url",
+        default="http://localhost:6333",
+        help="Qdrant service URL",
+    )
+    parser.add_argument(
+        "--qdrant-collection",
+        default="image_embeddings",
+        help="Qdrant collection for CLIP embeddings",
+    )
+    parser.add_argument(
+        "--face-collection",
+        default="face_embeddings",
+        help="Qdrant collection for face embeddings",
+    )
 
     args = parser.parse_args(namespace=Args())
 
@@ -261,12 +290,12 @@ def main() -> int:
     config = MInsightConfig.from_cli_args(args)
     
     # Initialize Database (Worker needs access to DB)
-    from .common import versioning, database
+    from .common import database
     database.init_db(config)
 
     # Print startup info
     print(f"Starting m_insight process: {config.id}")
-    print(f"MQTT broker: {config.mqtt_broker}:{config.mqtt_port or 'disabled'}")
+    print(f"MQTT broker: {config.mqtt_broker}:{config.mqtt_port}")
     print(f"MQTT topic: {config.mqtt_topic}")
     print(f"Log level: {args.log_level}")
     print(f"Database: {config.cl_server_dir}/store.db")

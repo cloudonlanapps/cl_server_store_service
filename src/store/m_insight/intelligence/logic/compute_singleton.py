@@ -9,7 +9,6 @@ from .pysdk_config import PySDKRuntimeConfig
 
 _compute_client: ComputeClient | None = None
 _session_manager: SessionManager | None = None
-_pysdk_config: PySDKRuntimeConfig | None = None
 
 
 def get_compute_client() -> ComputeClient:
@@ -34,23 +33,7 @@ def get_compute_client() -> ComputeClient:
     return _compute_client
 
 
-def get_pysdk_config() -> PySDKRuntimeConfig:
-    """Get the stored PySDKRuntimeConfig.
 
-    Returns:
-        PySDKRuntimeConfig instance
-
-    Raises:
-        RuntimeError: If called before initialization
-    """
-    global _pysdk_config
-
-    if _pysdk_config is None:
-        raise RuntimeError(
-            "PySDKRuntimeConfig not initialized. Call async_get_compute_client(config) first."
-        )
-
-    return _pysdk_config
 
 
 async def async_get_compute_client(config: PySDKRuntimeConfig) -> ComputeClient:

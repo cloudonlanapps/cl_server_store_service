@@ -28,6 +28,7 @@ dependencies = [
     "sqlalchemy>=2.0.45",
     "sqlalchemy-continuum>=1.4.2",
     "uvicorn>=0.40.0",
+    "qdrant-client>=1.16.2",
 ]
 
 

@@ -11,6 +11,7 @@ from sqlalchemy.orm import configure_mappers
 from cl_ml_tools import get_broadcaster
 from .routes import router
 from .monitor import MInsightMonitor
+from store.m_insight.intelligence.routes import router as intelligence_router
 
 # Configure mappers after all models are imported (required for versioning)
 configure_mappers()
@@ -71,6 +72,7 @@ app = FastAPI(
 )
 
 app.include_router(router)
+app.include_router(intelligence_router, prefix="/intelligence")
 
 
 @app.exception_handler(HTTPException)
