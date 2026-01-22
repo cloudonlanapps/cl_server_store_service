@@ -42,6 +42,7 @@ def test_m_insight_worker(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
+        store_port=integration_config.store_port,
         mqtt_broker=integration_config.mqtt_server,
         mqtt_port=integration_config.mqtt_port,
         mqtt_topic="test/m_insight_mqtt",
@@ -69,7 +70,7 @@ async def test_m_insight_lifecycle_events(
     subscriber, messages = test_subscriber
     worker = test_m_insight_worker
     
-    topic_base = f"mInsight/{worker.config.server_port}"
+    topic_base = f"mInsight/{worker.config.store_port}"
     subscriber.subscribe(f"{topic_base}/#")
     
     # Initialize broadcaster
@@ -138,13 +139,12 @@ def test_m_insight_heartbeat_status(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        auth_disabled=False,
-        server_port=8003,
+        store_port=integration_config.store_port,
         mqtt_broker=integration_config.mqtt_server,
         mqtt_port=port,
     )
     
-    topic_base = f"mInsight/{config.server_port}"
+    topic_base = f"mInsight/{config.store_port}"
     subscriber.subscribe(f"{topic_base}/status")
     time.sleep(0.5)
     

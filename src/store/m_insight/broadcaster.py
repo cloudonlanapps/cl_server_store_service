@@ -13,7 +13,7 @@ class MInsightBroadcaster:
     def __init__(self, config: MInsightConfig):
         self.config = config
         self.broadcaster = None
-        self.port = config.server_port
+        self.port = config.store_port
         self.topic_base = f"mInsight/{self.port}"
 
     def init(self):

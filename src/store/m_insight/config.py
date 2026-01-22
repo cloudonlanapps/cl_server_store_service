@@ -17,7 +17,7 @@ class MInsightConfig:
     cl_server_dir: Path
     media_storage_dir: Path
     public_key_path: Path
-    store_port: int = 8001
+    store_port: int = 8011
     
     # ML Service URLs (Worker only)
     auth_service_url: str = "http://localhost:8010"

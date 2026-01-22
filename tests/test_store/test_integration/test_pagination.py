@@ -22,7 +22,7 @@ class TestPagination:
             with open(image, "rb") as f:
                 response = client.post(
                     "/entities/",
-                    files={"image": (image.name, f, "image/jpeg")},
+                    files={"image": (f"image_{i}.jpg", f, "image/jpeg")},
                     data={
                         "is_collection": "false",
                         "label": f"Entity {i+1}"
@@ -59,7 +59,7 @@ class TestPagination:
             with open(image, "rb") as f:
                 _ = client.post(
                     "/entities/",
-                    files={"image": (image.name, f, "image/jpeg")},
+                    files={"image": (f"image_page2_{i}.jpg", f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Entity {i+1}"}
                 )
 
@@ -93,7 +93,7 @@ class TestPagination:
             with open(image, "rb") as f:
                 _ = client.post(
                     "/entities/",
-                    files={"image": (image.name, f, "image/jpeg")},
+                    files={"image": (f"image_custom_{i}.jpg", f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Entity {i+1}"}
                 )
 

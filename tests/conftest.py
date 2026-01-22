@@ -41,6 +41,7 @@ class IntegrationConfig(BaseModel):
     mqtt_server: str = "127.0.0.1"
     mqtt_port: int | None = None
     auth_url: str = "http://127.0.0.1:8010"
+    store_port: int = 8011
     compute_url: str = "http://127.0.0.1:8012"
     qdrant_url: str = "http://127.0.0.1:6333"
 
@@ -90,6 +91,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Compute service URL for integration tests"
     )
     parser.addoption(
+        "--store-port",
+        action="store",
+        type=int,
+        default=8011,
+        help="Store service port for integration tests"
+    )
+    parser.addoption(
         "--qdrant-url",
         action="store",
         default="http://localhost:6333",
@@ -133,6 +141,7 @@ def integration_config(request: pytest.FixtureRequest) -> IntegrationConfig:
     mqtt_server = request.config.getoption("--mqtt-server")
     mqtt_port = request.config.getoption("--mqtt-port")
     auth_url = request.config.getoption("--auth-url")
+    store_port = request.config.getoption("--store-port")
     compute_url = request.config.getoption("--compute-url")
     qdrant_url = request.config.getoption("--qdrant-url")
 

@@ -16,7 +16,7 @@ class StoreConfig:
     public_key_path: Path
     auth_disabled: bool
     
-    server_port: int
+    server_port: int = 8011
     mqtt_broker: str = "localhost"
     mqtt_port: Optional[int] = None
     

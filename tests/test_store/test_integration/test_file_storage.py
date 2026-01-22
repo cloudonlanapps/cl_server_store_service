@@ -3,6 +3,8 @@ Tests for file storage organization and management.
 """
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+from store.store.entity_storage import EntityStorageService
 
 
 class TestFileStorage:
@@ -142,3 +144,44 @@ class TestFileStorage:
         get_response = client.get(f"/entities/{entity_id}")
         assert get_response.status_code == 200
         assert get_response.json()["md5"] == md5_2
+
+    def test_delete_file_nonexistent(self, file_storage_service):
+        """Test deleting a file that doesn't exist."""
+        assert file_storage_service.delete_file("nonexistent.jpg") is False
+
+    def test_delete_file_exception(self, file_storage_service):
+        """Test exception handling in delete_file."""
+        with patch("pathlib.Path.unlink", side_effect=Exception("Unlink failed")):
+            # Create a real file first so it gets past the exists() check
+            p = file_storage_service.base_dir / "error.jpg"
+            p.write_bytes(b"test")
+            assert file_storage_service.delete_file("error.jpg") is False
+
+    def test_cleanup_empty_dirs(self, file_storage_service):
+        """Test recursive cleanup of empty directories."""
+        # Create nested structure: base/a/b/c/file.txt
+        rel_path = Path("a/b/c/file.txt")
+        abs_path = file_storage_service.base_dir / rel_path
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_text("content")
+        
+        # Delete file and trigger cleanup
+        assert file_storage_service.delete_file(str(rel_path)) is True
+        
+        # Verify directories a/b/c are gone
+        assert not (file_storage_service.base_dir / "a").exists()
+        # Verify base dir still exists
+        assert file_storage_service.base_dir.exists()
+
+    def test_get_storage_path_no_extension(self, file_storage_service):
+        """Test suffix extraction from original filename when metadata lacks extension."""
+        metadata = {"md5": "noext"}
+        path = file_storage_service.get_storage_path(metadata, "image.png")
+        assert path.suffix == ".png"
+        assert path.name == "noext.png"
+
+    def test_get_storage_path_with_extension_prefix(self, file_storage_service):
+        """Test extension handling when it already starts with dot."""
+        metadata = {"md5": "withdot", "extension": ".jpg"}
+        path = file_storage_service.get_storage_path(metadata, "ignored.png")
+        assert path.name == "withdot.jpg"

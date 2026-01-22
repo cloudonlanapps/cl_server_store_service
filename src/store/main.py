@@ -50,6 +50,18 @@ class Args(Namespace):
         self.mqtt_port = mqtt_port
 
 
+def create_app(config: StoreConfig) -> "FastAPI":
+    """Create and configure the FastAPI application instance."""
+    from .store.store import app
+    app.state.config = config
+    
+    # Initialize Database (could be moved out, but here for convenience)
+    from .common import database
+    database.init_db(config)
+    
+    return app
+
+
 def main() -> int:
     parser = ArgumentParser(prog="store")
     _ = parser.add_argument(
@@ -81,12 +93,8 @@ def main() -> int:
     # Create Configurations
     config = StoreConfig.from_cli_args(args)
 
-    # Initialize Database
-    database.init_db(config)
-    
-    # Import app and set configs
-    from .store.store import app
-    app.state.config = config
+    # Initialize and configure app
+    app = create_app(config)
     
     # Validate required tools before starting server
     try:
