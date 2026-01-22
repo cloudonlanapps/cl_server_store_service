@@ -9,16 +9,18 @@ from sqlalchemy_continuum import make_versioned
 from alembic import context
 
 # Add parent directory to path to import Base and get_db_url
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 # Initialize versioning before importing models
 make_versioned(user_cls=None)
 
 # Configure mappers after models are imported
-from src.store.common.models import Base
+from store.common.models import Base
+from store.m_insight.models import ImageIntelligence
+from store.m_insight.intelligence.models import Face, EntityJob, KnownPerson, FaceMatch
 configure_mappers()
 
-from src.store.common.utils import get_db_url
+from store.common.utils import get_db_url
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
