@@ -172,7 +172,8 @@ async def test_callback_job_not_found(callback_handler):
     # Correctly reset and set return_value on the AsyncMock
     callback_handler.compute_client.get_job = AsyncMock(return_value=None)
     
-    with patch("store.m_insight.intelligence.logic.job_callbacks.logger") as mock_logger:
+    with patch("store.common.database.SessionLocal"), \
+         patch("store.m_insight.intelligence.logic.job_callbacks.logger") as mock_logger:
         await callback_handler.handle_face_detection_complete(image_id=1, job=job)
         assert mock_logger.warning.called
         assert "not completed when fetching" in mock_logger.warning.call_args[0][0]
@@ -207,7 +208,19 @@ async def test_callback_entity_date_fallback(callback_handler):
         job_id="job_date", 
         status="completed", 
         task_type="face_detection", 
-        task_output={"faces": [{"bbox": {"x1":0, "y1":0, "x2":1, "y2":1}, "file_path": "f.png", "landmarks": {"right_eye": [0,0], "left_eye": [0,0], "nose_tip": [0,0], "mouth_right": [0,0], "mouth_left": [0,0]}}]},
+        task_output={
+            "faces": [{
+                "bbox": {"x1":0, "y1":0, "x2":1, "y2":1},
+                "file_path": "f.png",
+                "landmarks": {
+                    "right_eye": [0,0], "left_eye": [0,0], "nose_tip": [0,0], "mouth_right": [0,0], "mouth_left": [0,0]
+                },
+                "confidence": 0.99
+            }],
+            "num_faces": 1,
+            "image_width": 100,
+            "image_height": 100
+        },
         created_at=0
     )
     callback_handler.compute_client.get_job = AsyncMock(return_value=full_job)
