@@ -1,6 +1,5 @@
-
 from __future__ import annotations
-from typing import TYPE_CHECKING
+
 from collections.abc import Callable, Generator
 
 from sqlalchemy import Engine, create_engine, event
@@ -11,9 +10,6 @@ from sqlalchemy.orm import Session, sessionmaker
 # Using absolute import to avoid circular dependency with __init__.py
 from . import versioning  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from .utils import get_db_url
-
-if TYPE_CHECKING:
-    from ..store.config import StoreConfig
 
 # Global session factory
 SessionLocal: sessionmaker[Session] | None = None
@@ -28,7 +24,7 @@ def enable_wal_mode(
 
     This function should be registered as an event listener on SQLite engines.
     WAL mode enables concurrent reads and single writer, critical for multi-process access.
-    
+
     Note: WAL mode is skipped for in-memory databases as they don't support it,
     but foreign keys are still enabled for all SQLite databases.
     """
@@ -41,8 +37,8 @@ def enable_wal_mode(
         db_list = cursor.fetchall()
         # db_list format: [(seq, name, file), ...]
         # For in-memory: file is '' (empty string)
-        is_memory = any(row[2] == '' for row in db_list)
-        
+        is_memory = any(row[2] == "" for row in db_list)  # pyright: ignore[reportAny]
+
         if not is_memory:
             # Only set WAL mode for file-based databases
             cursor.execute("PRAGMA journal_mode=WAL")
@@ -52,7 +48,7 @@ def enable_wal_mode(
             cursor.execute("PRAGMA mmap_size=30000000000")
             cursor.execute("PRAGMA wal_autocheckpoint=1000")
             cursor.execute("PRAGMA busy_timeout=10000")
-        
+
         # Always enable foreign keys for all SQLite databases (memory or file-based)
         cursor.execute("PRAGMA foreign_keys=ON")
     finally:
@@ -83,24 +79,29 @@ def create_db_engine(
         # Check if this is an in-memory database
         # These URLs typically contain ':memory:' or are empty
         if ":memory:" in db_url or db_url.strip() == "sqlite://":
-             # In-memory SQLite uses StaticPool by default, 
-             # which doesn't support pool_size or max_overflow
-             pass
+            # In-memory SQLite uses StaticPool by default,
+            # which doesn't support pool_size or max_overflow
+            pass
         else:
             # For file-based SQLite, we want a real pool to support high concurrency
             # especially for WAL mode and batch tests.
             from sqlalchemy.pool import QueuePool
-            kwargs.update({
-                "poolclass": QueuePool,
-                "pool_size": 20,
-                "max_overflow": 40,
-            })
+
+            kwargs.update(
+                {
+                    "poolclass": QueuePool,
+                    "pool_size": 20,
+                    "max_overflow": 40,
+                }
+            )
     else:
         # For other databases (Postgres, MySQL, etc.), use standard pooling
-        kwargs.update({
-            "pool_size": 20,
-            "max_overflow": 40,
-        })
+        kwargs.update(
+            {
+                "pool_size": 20,
+                "max_overflow": 40,
+            }
+        )
 
     engine = create_engine(db_url, **kwargs)  # type: ignore[arg-type]
 
@@ -128,7 +129,7 @@ def create_session_factory(engine: Engine) -> sessionmaker[Session]:
     )
 
 
-def init_db(config: StoreConfig) -> None:
+def init_db() -> None:
     """Initialize database connection."""
     global SessionLocal, engine
     engine = create_db_engine(get_db_url(), echo=False)

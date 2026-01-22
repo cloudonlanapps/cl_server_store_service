@@ -3,16 +3,17 @@ from __future__ import annotations
 
 import sys
 from argparse import ArgumentParser, Namespace
-from typing import Optional
 
 import uvicorn
-
-from .common import versioning  # CRITICAL: Import versioning before database or models
-from .common import database
-from .store.media_metadata import validate_tools
-from .store.config import StoreConfig
-
+from fastapi import FastAPI
 from loguru import logger
+
+from .common import (
+    database,
+    versioning,  # CRITICAL: Import versioning before database or models  # noqa: F401  # pyright: ignore[reportUnusedImport]
+)
+from .store.config import StoreConfig
+from .store.media_metadata import validate_tools
 
 
 class Args(Namespace):
@@ -24,9 +25,10 @@ class Args(Namespace):
     no_auth: bool
     no_migrate: bool
     mqtt_server: str
-    mqtt_port: Optional[int]
+    mqtt_port: int | None
     qdrant_url: str
-    qdrant_collection: str
+    clip_collection: str
+    dino_collection: str
     face_collection: str
 
     def __init__(
@@ -39,9 +41,10 @@ class Args(Namespace):
         no_auth: bool = False,
         no_migrate: bool = False,
         mqtt_server: str = "localhost",
-        mqtt_port: Optional[int] = None,
+        mqtt_port: int | None = None,
         qdrant_url: str = "http://localhost:6333",
         qdrant_collection: str = "clip_embeddings",
+        dino_collection: str = "dino_embeddings",
         face_collection: str = "face_embeddings",
     ) -> None:
         super().__init__()
@@ -55,61 +58,59 @@ class Args(Namespace):
         self.mqtt_server = mqtt_server
         self.mqtt_port = mqtt_port
         self.qdrant_url = qdrant_url
-        self.qdrant_collection = qdrant_collection
+        self.clip_collection = qdrant_collection
         self.face_collection = face_collection
+        self.dino_collection = dino_collection
 
 
-def create_app(config: StoreConfig) -> "FastAPI":
+def create_app(config: StoreConfig) -> FastAPI:
     """Create and configure the FastAPI application instance."""
     from .store.store import app
+
     app.state.config = config
-    
+
     # Initialize Database (could be moved out, but here for convenience)
-    from .common import database
-    database.init_db(config)
-    
+    # Do we need this? from .common import database
+
+    database.init_db()
+
     return app
 
 
 def main() -> int:
     parser = ArgumentParser(prog="store")
-    _ = parser.add_argument(
-        "--no-auth", action="store_true", help="Disable authentication"
-    )
-    _ = parser.add_argument(
-        "--no-migrate", action="store_true", help="Skip running DB migrations"
-    )
-    _ = parser.add_argument(
-        "--port", "-p", type=int, default=8001
-    )
+    _ = parser.add_argument("--no-auth", action="store_true", help="Disable authentication")
+    _ = parser.add_argument("--no-migrate", action="store_true", help="Skip running DB migrations")
+    _ = parser.add_argument("--port", "-p", type=int, default=8001)
     _ = parser.add_argument("--host", default="0.0.0.0")
+    _ = parser.add_argument("--mqtt-server", default="localhost", help="MQTT broker host")
     _ = parser.add_argument(
-        "--mqtt-server", default="localhost", help="MQTT broker host"
+        "--mqtt-port",
+        type=int,
+        default=None,
+        help="MQTT broker port. Enabling this will enable MQTT broadcasting.",
     )
-    _ = parser.add_argument(
-        "--mqtt-port", type=int, default=None, help="MQTT broker port. Enabling this will enable MQTT broadcasting."
-    )
-    _ = parser.add_argument(
-        "--reload", action="store_true", help="Enable uvicorn reload (dev)"
-    )
+    _ = parser.add_argument("--reload", action="store_true", help="Enable uvicorn reload (dev)")
     _ = parser.add_argument(
         "--qdrant-url", default="http://localhost:6333", help="Qdrant service URL"
     )
     _ = parser.add_argument(
-        "--qdrant-collection", default="clip_embeddings", help="Qdrant collection for CLIP embeddings"
+        "--qdrant-collection",
+        default="clip_embeddings",
+        help="Qdrant collection for CLIP embeddings",
     )
     _ = parser.add_argument(
         "--face-collection", default="face_embeddings", help="Qdrant collection for face embeddings"
     )
 
     args = parser.parse_args(namespace=Args())
-    
+
     # Create Configurations
     config = StoreConfig.from_cli_args(args)
 
     # Initialize and configure app
     app = create_app(config)
-    
+
     # Validate required tools before starting server
     try:
         validate_tools()
@@ -121,23 +122,23 @@ def main() -> int:
     # Start server (blocks)
     try:
         if args.reload:
-             # For reload, we accept we can't easily pass object. 
-             # We might need to rely on env vars we set above (CL_SERVER_DIR) 
-             # and let the app strictly re-initialize?
-             # But we just removed Config dependency.
-             # So 'store.store:app' needs to initialize config itself?
-             # This suggests 'store.store' module level code needs to parse args or find config.
-             # That's messy.
-             # Better: Just disable reload support for now or warn about it?
-             # Or use factory "store.main:create_app" ?
-             # But 'main.py' is the entry point script...
-             
-             # Let's stick to: pass app object. If user wants reload, they can use uvicorn CLI directly?
-             # Or we sacrifice reload for now in this refactoring to get cleaner architecture.
-             # User didn't strictly ask to preserve reload, but "Refactor".
-             # Passing app object is the standard way to inject config.
-             
-             uvicorn.run(
+            # For reload, we accept we can't easily pass object.
+            # We might need to rely on env vars we set above (CL_SERVER_DIR)
+            # and let the app strictly re-initialize?
+            # But we just removed Config dependency.
+            # So 'store.store:app' needs to initialize config itself?
+            # This suggests 'store.store' module level code needs to parse args or find config.
+            # That's messy.
+            # Better: Just disable reload support for now or warn about it?
+            # Or use factory "store.main:create_app" ?
+            # But 'main.py' is the entry point script...
+
+            # Let's stick to: pass app object. If user wants reload, they can use uvicorn CLI directly?
+            # Or we sacrifice reload for now in this refactoring to get cleaner architecture.
+            # User didn't strictly ask to preserve reload, but "Refactor".
+            # Passing app object is the standard way to inject config.
+
+            uvicorn.run(
                 app,
                 host=args.host,
                 port=args.port,
@@ -150,7 +151,7 @@ def main() -> int:
                 port=args.port,
                 log_level=args.log_level,
             )
-            
+
     except Exception as exc:
         print(f"Error starting service: {exc}", file=sys.stderr)
         return 1

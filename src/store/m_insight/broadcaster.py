@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
+from cl_ml_tools import BroadcasterBase
+
 if TYPE_CHECKING:
     from .config import MInsightConfig
 
@@ -11,10 +13,10 @@ class MInsightBroadcaster:
     """Manages MQTT broadcasting for mInsight process."""
 
     def __init__(self, config: MInsightConfig):
-        self.config = config
-        self.broadcaster = None
-        self.port = config.store_port
-        self.topic_base = f"mInsight/{self.port}"
+        self.config: MInsightConfig = config
+        self.broadcaster: BroadcasterBase | None = None
+        self.port: int = config.store_port
+        self.topic_base: str = f"mInsight/{self.port}"
 
     def init(self):
         """Initialize broadcaster."""
@@ -22,6 +24,7 @@ class MInsightBroadcaster:
             return
 
         from cl_ml_tools import get_broadcaster
+
         self.broadcaster = get_broadcaster(
             broadcast_type="mqtt",
             broker=self.config.mqtt_broker,
@@ -34,10 +37,13 @@ class MInsightBroadcaster:
             status_topic = f"{self.topic_base}/status"
             # LWT payload
             lwt_payload = self._create_status_payload("offline").model_dump_json()
-            _ = self.broadcaster.set_will(topic=status_topic, payload=lwt_payload, qos=1, retain=True)
+            _ = self.broadcaster.set_will(
+                topic=status_topic, payload=lwt_payload, qos=1, retain=True
+            )
 
     def _create_status_payload(self, status: str):
         from .schemas import MInsightStatusPayload
+
         return MInsightStatusPayload(status=status, timestamp=int(time.time() * 1000))
 
     def publish_start(self, version_start: int, version_end: int):
@@ -47,11 +53,9 @@ class MInsightBroadcaster:
 
         topic = f"{self.topic_base}/started"
         payload = MInsightStartPayload(
-            version_start=version_start,
-            version_end=version_end,
-            timestamp=int(time.time() * 1000)
+            version_start=version_start, version_end=version_end, timestamp=int(time.time() * 1000)
         )
-        self.broadcaster.publish_event(topic=topic, payload=payload.model_dump_json())
+        _ = self.broadcaster.publish_event(topic=topic, payload=payload.model_dump_json())
 
     def publish_end(self, processed_count: int):
         if not self.broadcaster:
@@ -60,14 +64,13 @@ class MInsightBroadcaster:
 
         topic = f"{self.topic_base}/ended"
         payload = MInsightStopPayload(
-            processed_count=processed_count,
-            timestamp=int(time.time() * 1000)
+            processed_count=processed_count, timestamp=int(time.time() * 1000)
         )
-        self.broadcaster.publish_event(topic=topic, payload=payload.model_dump_json())
+        _ = self.broadcaster.publish_event(topic=topic, payload=payload.model_dump_json())
 
     def publish_status(self, status: str):
         if not self.broadcaster:
             return
         topic = f"{self.topic_base}/status"
         payload = self._create_status_payload(status)
-        self.broadcaster.publish_retained(topic=topic, payload=payload.model_dump_json(), qos=1)
+        _ = self.broadcaster.publish_retained(topic=topic, payload=payload.model_dump_json(), qos=1)

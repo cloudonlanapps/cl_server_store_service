@@ -1,9 +1,6 @@
 from pathlib import Path
-from typing import Optional
 
 from pydantic import BaseModel, Field
-
-from .utils import ensure_cl_server_dir
 
 
 class QdrantCollectionsConfig(BaseModel):
@@ -27,14 +24,14 @@ class BaseConfig(BaseModel):
     cl_server_dir: Path
     media_storage_dir: Path
     public_key_path: Path
-    
+
     # Auth
     auth_disabled: bool = False
-    
+
     # Qdrant configuration
     qdrant_url: str = "http://localhost:6333"
     qdrant_collections: QdrantCollectionsConfig = Field(default_factory=QdrantCollectionsConfig)
-    
+
     # MQTT configuration
     mqtt_broker: str = "localhost"
-    mqtt_port: Optional[int] = None
+    mqtt_port: int | None = None

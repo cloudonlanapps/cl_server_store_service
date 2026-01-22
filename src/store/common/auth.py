@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import os
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -10,10 +9,8 @@ from jose import ExpiredSignatureError, JWTError, jwt
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
+from .config import BaseConfig
 from .database import get_db
-
-if TYPE_CHECKING:
-    from ..store.config import StoreConfig
 
 # ─────────────────────────────────────
 # Permissions
@@ -70,7 +67,7 @@ _public_key_cache: str | None = None
 _max_load_attempts: int = 30  # ~30 seconds
 
 
-async def get_public_key(config: StoreConfig) -> str:
+async def get_public_key(config: BaseConfig) -> str:
     """Load and cache the public key with retry during startup."""
 
     global _public_key_cache
@@ -116,7 +113,7 @@ async def get_current_user(
     """Validate the JWT and return the user payload."""
 
     # Get config from app state
-    config: StoreConfig = request.app.state.config
+    config: BaseConfig = request.app.state.config  # pyright: ignore[reportAny]
 
     if config.auth_disabled:
         return None
@@ -170,7 +167,7 @@ def require_permission(permission: Permission):
         current_user: UserPayload | None = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> UserPayload | None:
-        config: StoreConfig = request.app.state.config
+        config: BaseConfig = request.app.state.config  # pyright: ignore[reportAny]
 
         if config.auth_disabled:
             return current_user
@@ -206,7 +203,7 @@ async def require_admin(
     request: Request,
     current_user: UserPayload | None = Depends(get_current_user),
 ) -> UserPayload | None:
-    config: StoreConfig = request.app.state.config
+    config: BaseConfig = request.app.state.config  # pyright: ignore[reportAny]
 
     if config.auth_disabled:
         return current_user

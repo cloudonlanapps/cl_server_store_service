@@ -14,6 +14,12 @@ from .vector_stores import SearchPreferences, get_clip_store, get_dino_store, ge
 logger = logging.getLogger(__name__)
 
 
+class ResourceNotFoundError(Exception):
+    """Raised when a requested resource is not found."""
+    pass
+
+
+
 class IntelligenceRetrieveService:
     """Service layer for intelligence/ML retrieval operations (DB and Qdrant).
 
@@ -41,8 +47,24 @@ class IntelligenceRetrieveService:
             collection_name=config.qdrant_collections.dino_embedding_collection_name,
         )
 
+    def _get_entity_or_raise(self, entity_id: int) -> None:
+        """Check if entity exists, raise exception if not."""
+        from store.common.models import Entity
+        exists = self.db.query(Entity.id).filter(Entity.id == entity_id).scalar()
+        if not exists:
+            raise ResourceNotFoundError("Entity not found")
+
+    def _get_face_or_raise(self, face_id: int) -> None:
+        """Check if face exists, raise exception if not."""
+        from store.common.models import Face
+        exists = self.db.query(Face.id).filter(Face.id == face_id).scalar()
+        if not exists:
+            raise ResourceNotFoundError("Face not found")
+
+
     def get_entity_faces(self, entity_id: int) -> list[schemas.FaceResponse]:
         """Get all faces detected in an entity."""
+        self._get_entity_or_raise(entity_id)
         faces = self.db.query(Face).filter(Face.image_id == entity_id).all()
 
         results: list[schemas.FaceResponse] = []
@@ -63,6 +85,7 @@ class IntelligenceRetrieveService:
 
     def get_entity_jobs(self, entity_id: int) -> list[schemas.EntityJobResponse]:
         """Get all jobs for an entity."""
+        self._get_entity_or_raise(entity_id)
         jobs = self.db.query(EntityJob).filter(EntityJob.image_id == entity_id).all()
 
         results: list[schemas.EntityJobResponse] = []
@@ -87,6 +110,8 @@ class IntelligenceRetrieveService:
         self, entity_id: int, limit: int = 5, score_threshold: float = 0.85
     ) -> list[schemas.SimilarImageResult]:
         """Search for similar images using CLIP embeddings."""
+        self._get_entity_or_raise(entity_id)
+        
         # Get the query embedding from Qdrant
         query_point = self.qdrant_store.get_vector(entity_id)
         if not query_point:
@@ -140,6 +165,8 @@ class IntelligenceRetrieveService:
         self, entity_id: int, limit: int = 10, threshold: float | None = None
     ) -> schemas.SimilarImagesDinoResponse:
         """Search for similar images using DINOv2 embeddings."""
+        self._get_entity_or_raise(entity_id)
+        
         # Get embedding for query image
         item = self.dino_store.get_vector(entity_id)
         if not item:
@@ -197,6 +224,11 @@ class IntelligenceRetrieveService:
 
     def get_known_person_faces(self, person_id: int) -> list[schemas.FaceResponse]:
         """Get all faces for a known person."""
+        # Check if person exists
+        person_exists = self.db.query(KnownPerson.id).filter(KnownPerson.id == person_id).scalar()
+        if not person_exists:
+            raise ResourceNotFoundError("Known person not found")
+
         faces = self.db.query(Face).filter(Face.known_person_id == person_id).all()
 
         results: list[schemas.FaceResponse] = []
@@ -218,6 +250,7 @@ class IntelligenceRetrieveService:
 
     def get_face_matches(self, face_id: int) -> list[schemas.FaceMatchResult]:
         """Get all match records for a face."""
+        self._get_face_or_raise(face_id)
         matches = self.db.query(FaceMatch).filter(FaceMatch.face_id == face_id).all()
 
         results: list[schemas.FaceMatchResult] = []
@@ -276,6 +309,8 @@ class IntelligenceRetrieveService:
         self, face_id: int, limit: int = 5, threshold: float = 0.7
     ) -> list[schemas.SimilarFacesResult]:
         """Search for similar faces using face store."""
+        self._get_face_or_raise(face_id)
+
         # Get the query embedding from face store
         query_points = self.face_store.get_vector(face_id)
         if not query_points:
@@ -323,3 +358,82 @@ class IntelligenceRetrieveService:
                 )
 
         return filtered_results[:limit]
+
+
+    def get_face_embedding_buffer(self, face_id: int):
+        """Get face embedding as a numpy buffer.
+        
+        Args:
+            face_id: ID of the face
+            
+        Returns:
+            BytesIO buffer containing the .npy array
+            
+        Raises:
+            ResourceNotFoundError: If face or embedding not found
+        """
+        import io
+        import numpy as np
+
+        self._get_face_or_raise(face_id)
+        
+        point = self.face_store.get_vector(id=face_id)
+        if not point:
+            raise ResourceNotFoundError("Face embedding not found in vector store")
+
+        buffer = io.BytesIO()
+        np.save(buffer, point.embedding)
+        buffer.seek(0)
+        return buffer
+
+    def get_clip_embedding_buffer(self, entity_id: int):
+        """Get CLIP embedding as a numpy buffer.
+        
+        Args:
+            entity_id: ID of the entity
+            
+        Returns:
+            BytesIO buffer containing the .npy array
+            
+        Raises:
+            ResourceNotFoundError: If entity or embedding not found
+        """
+        import io
+        import numpy as np
+
+        self._get_entity_or_raise(entity_id)
+        
+        point = self.qdrant_store.get_vector(id=entity_id)
+        if not point:
+            raise ResourceNotFoundError("Entity embedding not found in vector store")
+
+        buffer = io.BytesIO()
+        np.save(buffer, point.embedding)
+        buffer.seek(0)
+        return buffer
+
+    def get_dino_embedding_buffer(self, entity_id: int):
+        """Get DINO embedding as a numpy buffer.
+        
+        Args:
+            entity_id: ID of the entity
+            
+        Returns:
+            BytesIO buffer containing the .npy array
+            
+        Raises:
+            ResourceNotFoundError: If entity or embedding not found
+        """
+        import io
+        import numpy as np
+
+        self._get_entity_or_raise(entity_id)
+        
+        point = self.dino_store.get_vector(id=entity_id)
+        if not point:
+            raise ResourceNotFoundError("Entity embedding not found in vector store")
+
+        buffer = io.BytesIO()
+        np.save(buffer, point.embedding)
+        buffer.seek(0)
+        return buffer

@@ -1,19 +1,19 @@
+from store.main import Args
 
-from ..common.utils import ensure_cl_server_dir
 from ..common.config import BaseConfig, QdrantCollectionsConfig
+from ..common.utils import ensure_cl_server_dir
 
 
 class StoreConfig(BaseConfig):
     """Store service configuration."""
-    
+
     server_port: int = 8011
 
-
     @classmethod
-    def from_cli_args(cls, args) -> "StoreConfig":
+    def from_cli_args(cls, args: Args) -> "StoreConfig":
         """Create config from CLI arguments and environment."""
-        cl_dir =  ensure_cl_server_dir(create_if_missing=True)
-        
+        cl_dir = ensure_cl_server_dir(create_if_missing=True)
+
         return cls(
             cl_server_dir=cl_dir,
             media_storage_dir=cl_dir / "media",
@@ -26,6 +26,5 @@ class StoreConfig(BaseConfig):
             ),
             mqtt_broker=args.mqtt_server,
             mqtt_port=args.mqtt_port,
-            
             server_port=args.port,
         )

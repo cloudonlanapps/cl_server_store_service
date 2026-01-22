@@ -51,13 +51,19 @@ class TestIntelligenceRoutes:
         """Test downloading embedding for a non-existent face returns 404."""
         response = client.get("/intelligence/faces/999999/embedding")
         assert response.status_code == 404
-        assert response.json()["detail"] == "Face embedding not found in vector store"
+        assert response.json()["detail"] == "Face or embedding not found in vector store"
 
     def test_download_entity_embedding_not_found(self, client: TestClient):
         """Test downloading embedding for a non-existent entity returns 404."""
-        response = client.get("/intelligence/entities/999999/embedding")
+        response = client.get("/intelligence/entities/999999/clip_embedding")
         assert response.status_code == 404
-        assert response.json()["detail"] == "Entity not found"
+        assert response.json()["detail"] == "Entity or embedding not found in vector store"
+
+    def test_download_entity_dino_embedding_not_found(self, client: TestClient):
+        """Test downloading DINO embedding for a non-existent entity returns 404."""
+        response = client.get("/intelligence/entities/999999/dino_embedding")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Entity or embedding not found in vector store"
 
     def test_find_similar_images_not_found(self, client: TestClient):
         """Test finding similar images for a non-existent entity returns 404."""

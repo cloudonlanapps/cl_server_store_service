@@ -51,7 +51,6 @@ class Item(BaseModel):
     extension: str | None = Field(None, title="Extension", json_schema_extra={"read_only": True})
     md5: str | None = Field(None, title="Md5", json_schema_extra={"read_only": True})
     file_path: str | None = Field(None, title="File Path", json_schema_extra={"read_only": True})
-    is_deleted: bool | None = Field(None, title="Is Deleted")
     is_indirectly_deleted: bool | None = Field(
         None,
         title="Is Indirectly Deleted",
@@ -97,6 +96,3 @@ class UpdateReadAuthConfig(BaseModel):
     """Request schema for updating read authentication configuration."""
 
     enabled: bool = Field(..., description="Whether to enable read authentication")
-
-
-

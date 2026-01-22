@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 
 from store.common import models, schemas
@@ -10,7 +10,8 @@ from store.store.config import StoreConfig
 
 # from . import models as intel_models
 from . import schemas as intel_schemas
-from .retrieval_service import IntelligenceRetrieveService
+from .dependencies import get_config, get_intelligence_service
+from .retrieval_service import IntelligenceRetrieveService, ResourceNotFoundError
 
 router = APIRouter(tags=["intelligence"])
 
@@ -26,19 +27,15 @@ async def get_entity_faces(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> list[intel_schemas.FaceResponse]:
     """Get all faces detected in an entity."""
     _ = user
-    config: StoreConfig = request.app.state.config
-    service = IntelligenceRetrieveService(db, config)
 
-    # Check if entity exists
-    entity = db.query(models.Entity).filter(models.Entity.id == entity_id).first()
-    if not entity:
+    try:
+        return service.get_entity_faces(entity_id)
+    except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Entity not found")
-
-    return service.get_entity_faces(entity_id)
 
 
 @router.get(
@@ -52,38 +49,16 @@ async def download_face_embedding(
     face_id: int = Path(..., title="Face Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ):
     """Download face embedding from Qdrant vector store."""
     _ = user
-    import io
-
-    import numpy as np
     from fastapi.responses import Response
 
-    from store.common.models import Face
-
-    # Get face store and retrieve embedding
-    config: StoreConfig = request.app.state.config
-    from .vector_stores import get_face_store
-
-    # Get face store and retrieve embedding
-    face_store = get_face_store(
-        url=config.qdrant_url,
-        collection_name=config.qdrant_collections.face_embedding_collection_name,
-        vector_size=getattr(config, "face_vector_size", 512),
-    )
-
-    # Retrieve from Qdrant using face_id as point_id
-    point = face_store.get_vector(id=face_id)
-
-    if not point:
-        raise HTTPException(status_code=404, detail="Face embedding not found in vector store")
-
-    # Serialize to .npy format in memory
-    buffer = io.BytesIO()
-    np.save(buffer, point.embedding)
-    _ = buffer.seek(0)
+    try:
+        buffer = service.get_face_embedding_buffer(face_id)
+    except ResourceNotFoundError:
+        raise HTTPException(status_code=404, detail="Face or embedding not found in vector store")
 
     return Response(
         content=buffer.getvalue(),
@@ -93,57 +68,63 @@ async def download_face_embedding(
 
 
 @router.get(
-    "/entities/{entity_id}/embedding",
+    "/entities/{entity_id}/clip_embedding",
     tags=["entity", "clip-embedding"],
     summary="Download Entity CLIP Embedding",
     description="Downloads the CLIP image embedding vector from Qdrant as a .npy file.",
-    operation_id="download_entity_embedding",
+    operation_id="download_entity_clip_embedding",
 )
-async def download_entity_embedding(
+async def download_entity_clip_embedding(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ):
     """Download entity CLIP embedding from Qdrant vector store."""
     _ = user
-    import io
-
-    import numpy as np
     from fastapi.responses import Response
 
-    from store.common.models import Entity
-
-    # Check if entity exists in database
-    entity = db.query(Entity).filter(Entity.id == entity_id).first()
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
-
-    # Get Qdrant store and retrieve embedding
-    config: StoreConfig = request.app.state.config
-    from .vector_stores import get_clip_store
-
-    qdrant_store = get_clip_store(
-        url=config.qdrant_url,
-        collection_name=config.qdrant_collections.clip_embedding_collection_name,
-    )
-
-    # Retrieve from Qdrant using entity_id as point_id
-    point = qdrant_store.get_vector(id=entity_id)
-
-    if not point:
-        raise HTTPException(status_code=404, detail="Entity embedding not found in vector store")
-
-    # Serialize to .npy format in memory
-    buffer = io.BytesIO()
-    np.save(buffer, point.embedding)
-    _ = buffer.seek(0)
+    try:
+        buffer = service.get_clip_embedding_buffer(entity_id)
+    except ResourceNotFoundError:
+        raise HTTPException(status_code=404, detail="Entity or embedding not found in vector store")
 
     return Response(
         content=buffer.getvalue(),
         media_type="application/octet-stream",
         headers={
             "Content-Disposition": f"attachment; filename=entity_{entity_id}_clip_embedding.npy"
+        },
+    )
+
+
+@router.get(
+    "/entities/{entity_id}/dino_embedding",
+    tags=["entity", "dino-embedding"],
+    summary="Download Entity DINO Embedding",
+    description="Downloads the DINO image embedding vector from Qdrant as a .npy file.",
+    operation_id="download_entity_dino_embedding",
+)
+async def download_entity_dino_embedding(
+    entity_id: int = Path(..., title="Entity Id"),
+    db: Session = Depends(get_db),
+    user: UserPayload | None = Depends(require_permission("media_store_read")),
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
+):
+    """Download entity DINO embedding from Qdrant vector store."""
+    _ = user
+    from fastapi.responses import Response
+
+    try:
+        buffer = service.get_dino_embedding_buffer(entity_id)
+    except ResourceNotFoundError:
+        raise HTTPException(status_code=404, detail="Entity or embedding not found in vector store")
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f"attachment; filename=entity_{entity_id}_dino_embedding.npy"
         },
     )
 
@@ -159,19 +140,15 @@ async def get_entity_jobs(
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> list[intel_schemas.EntityJobResponse]:
     """Get all jobs for an entity."""
     _ = user
-    config: StoreConfig = request.app.state.config
-    service = IntelligenceRetrieveService(db, config)
 
-    # Check if entity exists
-    entity = db.query(models.Entity).filter(models.Entity.id == entity_id).first()
-    if not entity:
+    try:
+        return service.get_entity_jobs(entity_id)
+    except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Entity not found")
-
-    return service.get_entity_jobs(entity_id)
 
 
 @router.get(
@@ -188,20 +165,16 @@ async def find_similar_images(
     include_details: bool = Query(False, description="Include entity details in results"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
+    config: StoreConfig = Depends(get_config),
 ) -> intel_schemas.SimilarImagesResponse:
     """Find similar images using CLIP embeddings."""
     _ = user
-    config: StoreConfig = request.app.state.config
-    service = IntelligenceRetrieveService(db, config)
 
-    # Check if entity exists
-    entity = db.query(models.Entity).filter(models.Entity.id == entity_id).first()
-    if not entity:
+    try:
+        results = service.search_similar_images(entity_id, limit, score_threshold)
+    except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Entity not found")
-
-    # Search for similar images
-    results = service.search_similar_images(entity_id, limit, score_threshold)
 
     if not results:
         raise HTTPException(
@@ -236,20 +209,15 @@ async def find_similar_faces(
     threshold: float = Query(0.7, ge=0.0, le=1.0, description="Minimum similarity score"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> intel_schemas.SimilarFacesResponse:
     """Find similar faces using face embeddings."""
     _ = user
-    config: StoreConfig = request.app.state.config
-    service = IntelligenceRetrieveService(db, config)
 
-    # Check if face exists
-    face = db.query(models.Face).filter(models.Face.id == face_id).first()
-    if not face:
+    try:
+        results = service.search_similar_faces_by_id(face_id, limit, threshold)
+    except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Face not found")
-
-    # Search for similar faces
-    results = service.search_similar_faces_by_id(face_id, limit, threshold)
 
     if not results:
         raise HTTPException(
@@ -274,19 +242,15 @@ async def get_face_matches(
     face_id: int = Path(..., title="Face Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> list[intel_schemas.FaceMatchResult]:
     """Get all match records for a face."""
     _ = user
-    config: StoreConfig = request.app.state.config
-    service = IntelligenceRetrieveService(db, config)
 
-    # Check if face exists
-    face = db.query(models.Face).filter(models.Face.id == face_id).first()
-    if not face:
+    try:
+        return service.get_face_matches(face_id)
+    except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Face not found")
-
-    return service.get_face_matches(face_id)
 
 
 @router.get(
@@ -299,12 +263,10 @@ async def get_face_matches(
 async def get_all_known_persons(
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> list[intel_schemas.KnownPersonResponse]:
     """Get all known persons."""
     _ = user
-    config: StoreConfig = request.app.state.config
-    service = IntelligenceRetrieveService(db, config)
     return service.get_all_known_persons()
 
 
@@ -319,12 +281,10 @@ async def get_known_person(
     person_id: int = Path(..., title="Person Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> intel_schemas.KnownPersonResponse:
     """Get known person details."""
     _ = user
-    config: StoreConfig = request.app.state.config
-    service = IntelligenceRetrieveService(db, config)
 
     person = service.get_known_person(person_id)
     if not person:
@@ -344,23 +304,15 @@ async def get_person_faces(
     person_id: int = Path(..., title="Person Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> list[intel_schemas.FaceResponse]:
     """Get all faces for a known person."""
     _ = user
-    config: StoreConfig = request.app.state.config
-    service = IntelligenceRetrieveService(db, config)
 
-    # Check if person exists
-    person = (
-        db.query(models.KnownPerson)
-        .filter(models.KnownPerson.id == person_id)
-        .first()
-    )
-    if not person:
+    try:
+        return service.get_known_person_faces(person_id)
+    except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Known person not found")
-
-    return service.get_known_person_faces(person_id)
 
 
 @router.patch(
@@ -375,12 +327,10 @@ async def update_person_name(
     body: intel_schemas.UpdatePersonNameRequest = Body(...),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
+    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> intel_schemas.KnownPersonResponse:
     """Update person name."""
     _ = user
-    config: StoreConfig = request.app.state.config
-    service = IntelligenceRetrieveService(db, config)
 
     result = service.update_known_person_name(person_id, body.name)
     if not result:
