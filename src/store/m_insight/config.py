@@ -12,7 +12,7 @@ class MInsightConfig(BaseConfig):
     id: str = "m-insight-default"
     log_level: str = "INFO"
     store_port: int = 8001
-    
+
     # CLI-only fields for argparse to populate
     auth_url: str | None = None
     compute_url: str | None = None

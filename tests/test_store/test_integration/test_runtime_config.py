@@ -4,8 +4,8 @@ Tests for runtime configuration API and JWT user ID.
 
 import pytest
 
-from store.store.config_service import ConfigService
 from store.common.models import ServiceConfig
+from store.store.config_service import ConfigService
 
 
 @pytest.fixture(scope="function")

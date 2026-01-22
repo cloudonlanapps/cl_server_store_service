@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sys
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser
 
 import uvicorn
 from fastapi import FastAPI
@@ -14,9 +14,6 @@ from .common import (
 )
 from .store.config import StoreConfig
 from .store.media_metadata import validate_tools
-
-
-
 
 
 def create_app(config: StoreConfig) -> FastAPI:

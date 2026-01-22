@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Dict
+from typing import Any
 
 from cl_ml_tools import get_broadcaster
 from loguru import logger
@@ -14,7 +14,7 @@ class MInsightMonitor:
     def __init__(self, config: Any):
         self.config = config
         self.broadcaster = None
-        self.statuses: Dict[int, Dict[str, Any]] = {}  # port -> status dict
+        self.statuses: dict[int, dict[str, Any]] = {}  # port -> status dict
 
     def start(self):
         """Start monitoring."""
@@ -33,7 +33,7 @@ class MInsightMonitor:
             if hasattr(self.broadcaster, "client"):
                 client = self.broadcaster.client
                 client.on_message = self._on_message
-                
+
                 # Subscribe to topics
                 # mInsight/<port>/started -> reconciling
                 # mInsight/<port>/ended -> completed/idle
@@ -41,13 +41,13 @@ class MInsightMonitor:
                 client.subscribe("mInsight/+/started")
                 client.subscribe("mInsight/+/ended")
                 client.subscribe("mInsight/+/status")
-                
+
                 # Start background loop if not already started by cl_ml_tools
                 # Note: cl_ml_tools might start it, but calling loop_start again is generally safe/idempotent in Paho
                 # if checking internal state, but safer to just let it be if it works.
                 # However, to be sure we receive messages in this process:
                 client.loop_start()
-                
+
                 logger.info("MInsightMonitor started listening on MQTT")
         except Exception as e:
             logger.error(f"Failed to start MInsightMonitor: {e}")
@@ -90,7 +90,7 @@ class MInsightMonitor:
                     "last_update": 0,
                     "port": port
                 }
-            
+
             # Update generic metadata
             current_time = int(time.time() * 1000)
             self.statuses[port]["last_update"] = current_time
@@ -108,7 +108,7 @@ class MInsightMonitor:
         except Exception as e:
             logger.error(f"Error processing monitor message: {e}")
 
-    def get_status(self, port: int | None = None) -> Dict[str, Any] | Dict[int, Dict[str, Any]]:
+    def get_status(self, port: int | None = None) -> dict[str, Any] | dict[int, dict[str, Any]]:
         """
         Get status for a specific port or all known ports.
         

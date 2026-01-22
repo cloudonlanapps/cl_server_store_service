@@ -4,7 +4,6 @@ These tests use the standard integration test client from conftest.py.
 They verify that the dependency injection works correctly with real services.
 """
 
-import pytest
 
 from store.common.schemas import Item
 

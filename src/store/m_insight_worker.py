@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import signal
 import sys
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser
 from types import FrameType
 
 from loguru import logger
@@ -75,33 +75,33 @@ async def mqtt_listener_task(config, processor) -> None:
     if not config.mqtt_port:
         logger.info("MQTT disabled, skipping listener")
         return
-    
+
     try:
         from cl_ml_tools import get_broadcaster
-        
+
         broadcaster = get_broadcaster(
             broadcast_type="mqtt",
             broker=config.mqtt_server,
             port=config.mqtt_port,
         )
-        
+
         # Subscribe to wake-up topic
         def on_message(_client: object, _userdata: object, _message: object) -> None:
             """MQTT message callback - trigger reconciliation."""
             logger.debug(f"Received MQTT wake-up on {config.mqtt_topic}")
             # Signal the main loop to run reconciliation
             reconciliation_trigger.set()
-        
+
         # Type ignore: broadcaster.client is dynamically typed from cl_ml_tools
         _ = broadcaster.client.subscribe(config.mqtt_topic)  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue, reportUnknownMemberType]
         broadcaster.client.on_message = on_message  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
-        
+
         logger.info(f"MQTT listener started on topic: {config.mqtt_topic}")
-        
+
         # Keep listener alive
         while not shutdown_event.is_set():
             await asyncio.sleep(1.0)
-            
+
     except Exception as e:
         logger.error(f"MQTT listener error: {e}", exc_info=True)
 
@@ -113,16 +113,16 @@ async def run_loop(config) -> None:
         config: MInsightConfig instance
     """
     from .m_insight.media_insight import MediaInsight
-    
+
     # Initialize Broadcaster
     broadcaster = MInsightBroadcaster(config)
     broadcaster.init()
-    
+
     # Create processor with broadcaster
     processor = MediaInsight(config=config, broadcaster=broadcaster)
-    
+
     logger.info(f"mInsight process {config.id} starting...")
-    
+
     # Start background tasks
     mqtt_task = None
     hb_task = None
@@ -135,21 +135,21 @@ async def run_loop(config) -> None:
         while not shutdown_event.is_set():
             # Run reconciliation
             _ = await processor.run_once()
-            
+
             # Wait for next trigger or shutdown
             # We use a combined wait to handle both MQTT triggers and exit
             trigger_task = asyncio.create_task(reconciliation_trigger.wait())
             shutdown_task = asyncio.create_task(shutdown_event.wait())
-            
+
             done, pending = await asyncio.wait(
                 [trigger_task, shutdown_task],
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            
+
             # Reset trigger if it was the one that completed
             if trigger_task in done:
                 reconciliation_trigger.clear()
-            
+
             # Cleanup pending trigger/shutdown tasks
             for task in pending:
                 task.cancel()
@@ -159,7 +159,7 @@ async def run_loop(config) -> None:
         # Shutdown IntelligenceProcessingService singletons
         # Shutdown MInsightProcessor resources
         await processor.shutdown()
-        
+
         # Cancel background tasks
         if mqtt_task:
             mqtt_task.cancel()
@@ -167,14 +167,14 @@ async def run_loop(config) -> None:
                 await mqtt_task
             except asyncio.CancelledError:
                 pass
-                
+
         if hb_task:
             hb_task.cancel()
             try:
                 await hb_task
             except asyncio.CancelledError:
                 pass
-        
+
         # Final status
         broadcaster.publish_status("offline")
 
@@ -272,11 +272,11 @@ def main() -> int:
     )
     # Initialize Config
     from .m_insight.config import MInsightConfig
-    
+
     config = MInsightConfig()
     _ = parser.parse_args(namespace=config)
     config.finalize()
-    
+
     # Initialize Database (Worker needs access to DB)
     from .common import database
     database.init_db(config)

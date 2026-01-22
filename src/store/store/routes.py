@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import asyncio
+import json
+import time
 
 from fastapi import (
     APIRouter,
-    Body,
     Depends,
     File,
     Form,
@@ -15,18 +15,16 @@ from fastapi import (
     UploadFile,
     status,
 )
-import json
-import time
-from pydantic import BaseModel
 from loguru import logger
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import config_service as cfg_service
-from ..common import models, schemas
+from ..common import schemas
 from ..common.auth import UserPayload, require_admin, require_permission
-from ..common.database import SessionLocal, get_db
-from .service import EntityService
+from ..common.database import get_db
+from . import config_service as cfg_service
 from .config import StoreConfig
+from .service import EntityService
 
 router = APIRouter()
 
@@ -150,7 +148,7 @@ async def create_entity(
             logger.info(f"Broadcasted creation event for item {item.id} on {topic}")
 
         # Trigger async jobs for images (NON-BLOCKING)
-    
+
         return item
     except ValueError as e:
         # Validation errors or invalid file format
@@ -260,7 +258,7 @@ async def put_entity(
         result = service.update_entity(entity_id, body, file_bytes, filename, user_id)
         if not result:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
-        
+
         item, is_duplicate = result
 
         # Broadcast MQTT event only if file was actually updated (not a duplicate)
@@ -370,12 +368,12 @@ async def delete_entity(
     _ = user
     config: StoreConfig = request.app.state.config
     service = EntityService(db, config)
-    
+
     # Delete entity (will raise ValueError if not soft-deleted first)
     deleted = service.delete_entity(entity_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
-    
+
     # No return statement - FastAPI will return 204 automatically
 
 
@@ -521,7 +519,7 @@ async def get_m_insight_status(request: Request) -> dict:
         return request.app.state.monitor.get_status()
     # Logic to return default/offline status if monitor is not present (e.g. during tests)
     # The monitor is initialized in lifespan, but if mqtt_port is None, it might be running but disconnected?
-    # Actually monitor.start() checks mqtt_port. 
+    # Actually monitor.start() checks mqtt_port.
     # If monitor is present but empty, it returns {}.
     return {}
 

@@ -1,9 +1,11 @@
-import pytest
-import json
-from unittest.mock import MagicMock, patch
-from store.store.monitor import MInsightMonitor
-from store.store.config import StoreConfig
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from store.store.config import StoreConfig
+from store.store.monitor import MInsightMonitor
+
 
 @pytest.fixture
 def mock_store_config(integration_config):
@@ -32,10 +34,10 @@ def test_monitor_start_enabled(mock_get_broadcaster, mock_store_config):
     mock_client = MagicMock()
     mock_mqtt_broadcaster.client = mock_client
     mock_get_broadcaster.return_value = mock_mqtt_broadcaster
-    
+
     monitor = MInsightMonitor(mock_store_config)
     monitor.start()
-    
+
     assert monitor.broadcaster == mock_mqtt_broadcaster
     mock_client.subscribe.assert_called()
     mock_client.loop_start.assert_called_once()
@@ -52,7 +54,7 @@ def test_monitor_start_failure(mock_get_broadcaster, mock_store_config):
 def test_monitor_on_message_variants(mock_store_config):
     """Test _on_message with various payloads and topics."""
     monitor = MInsightMonitor(mock_store_config)
-    
+
     # helper for mock message
     def create_msg(topic, payload):
         msg = MagicMock()
@@ -93,13 +95,13 @@ def test_monitor_get_status(mock_store_config):
     """Test get_status logic."""
     monitor = MInsightMonitor(mock_store_config)
     monitor.statuses[8011] = {"status": "ok", "port": 8011}
-    
+
     # Generic specific port
     assert monitor.get_status(8011)["status"] == "ok"
-    
+
     # Unknown port
     assert monitor.get_status(9999)["status"] == "unknown"
-    
+
     # All ports
     assert 8011 in monitor.get_status()
 
@@ -110,7 +112,7 @@ def test_monitor_stop(mock_store_config):
     mock_client = MagicMock()
     mock_mqtt.client = mock_client
     monitor.broadcaster = mock_mqtt
-    
+
     monitor.stop()
     mock_client.loop_stop.assert_called_once()
     mock_client.disconnect.assert_called_once()
@@ -124,6 +126,6 @@ def test_monitor_stop_exception(mock_get_broadcaster, mock_store_config):
     mock_client.loop_stop.side_effect = Exception("Fail")
     mock_mqtt.client = mock_client
     monitor.broadcaster = mock_mqtt
-    
+
     # Should not raise
     monitor.stop()

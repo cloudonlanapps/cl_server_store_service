@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Union
 
-from store.common import EntityJob, Entity, Face
-from store.common.storage import StorageService
-from .schemas import EntityVersionData
 from cl_client import ComputeClient
 from cl_client.models import OnJobResponseCallback
-
 from loguru import logger
+
+from store.common import Entity, EntityJob, Face
+from store.common.storage import StorageService
+
+from .schemas import EntityVersionData
 
 
 class JobSubmissionService:
@@ -42,7 +41,7 @@ class JobSubmissionService:
 
     async def submit_face_detection(
         self,
-        entity: Union[Entity, EntityVersionData],
+        entity: Entity | EntityVersionData,
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit face detection job.
@@ -59,18 +58,18 @@ class JobSubmissionService:
         try:
             # Resolve file path using StorageService
             # Both Entity and EntityVersionData should support get_file_path(storage_service)
-            # Note: Entity model currently has get_file_path? No, Face has it. 
+            # Note: Entity model currently has get_file_path? No, Face has it.
             # I need to ensure Entity has it or use logic here.
             # EntityVersionData has it (added in schemas.py).
             # Entity model (in models.py) DOES NOT have it yet?
             # Let's check if I added it. I added it to Face.
             # If entity is passed, I might need to manual resolve or add helper.
             # However, logic is consistent: storage_service.get_absolute_path(entity.file_path)
-            
+
             if not entity.file_path:
                  logger.warning(f"Entity {entity.id} has no file_path")
                  return None
-                 
+
             file_path = self.storage_service.get_absolute_path(entity.file_path)
 
             if not file_path.exists():
@@ -107,14 +106,14 @@ class JobSubmissionService:
                 return None
             finally:
                 db.close()
-                
+
         except Exception as e:
             logger.error(f"Failed to submit face_detection job for entity {entity.id}: {e}")
             return None
 
     async def submit_clip_embedding(
         self,
-        entity: Union[Entity, EntityVersionData],
+        entity: Entity | EntityVersionData,
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit CLIP embedding job.
@@ -127,7 +126,7 @@ class JobSubmissionService:
             Job ID if successful, None if failed
         """
         from store.common.database import SessionLocal
-        
+
         try:
             if not entity.file_path:
                  return None
@@ -169,7 +168,7 @@ class JobSubmissionService:
 
     async def submit_dino_embedding(
         self,
-        entity: Union[Entity, EntityVersionData],
+        entity: Entity | EntityVersionData,
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit DINOv2 embedding job.
@@ -225,7 +224,7 @@ class JobSubmissionService:
     async def submit_face_embedding(
         self,
         face: Face,
-        entity: Union[Entity, EntityVersionData],
+        entity: Entity | EntityVersionData,
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit face embedding job for a detected face.
@@ -319,7 +318,7 @@ class JobSubmissionService:
             entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
             if not entity_job:
                 # This logic changes slightly if we delete records on completion
-                # But currently we keep them? 
+                # But currently we keep them?
                 # If not found, just log warning
                 logger.warning(f"Job {job_id} not found in database")
                 return

@@ -3,7 +3,6 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 
-from store.common import models, schemas
 from store.common.auth import UserPayload, require_permission
 from store.common.database import get_db
 from store.store.config import StoreConfig

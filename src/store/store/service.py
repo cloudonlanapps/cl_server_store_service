@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -11,17 +10,15 @@ from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..common.storage import StorageService
-from .media_metadata import MediaMetadataExtractor
-from ..common.models import Entity
+from ..common.models import Entity, ImageIntelligence
 from ..common.schemas import (
     BodyCreateEntity,
     BodyPatchEntity,
     BodyUpdateEntity,
-    BodyUpdateEntity,
     Item,
 )
-from ..common.models import ImageIntelligence
+from ..common.storage import StorageService
+from .media_metadata import MediaMetadataExtractor
 
 
 class DuplicateFileError(Exception):
@@ -297,7 +294,7 @@ class EntityService:
             .filter(Entity.id == entity_id)
             .first()
         )
-        
+
         if result:
             entity, status = result
             return self._entity_to_item(entity, intelligence_status=status)
@@ -689,7 +686,7 @@ class EntityService:
         self.db.commit()
 
         return True
-    
+
     def soft_delete_entity(self, entity_id: int) -> Item | None:
         """
         Soft delete an entity (mark as deleted without removing).
@@ -721,7 +718,7 @@ class EntityService:
         """Delete all entities from the database."""
         # This is a dangerous operation, mostly for tests/demo
         from ..common.models import Entity
-        
+
         # 1. Delete all records from database
         _ = self.db.query(Entity).delete()
         _ = self.db.commit()

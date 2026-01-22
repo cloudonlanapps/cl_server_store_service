@@ -2,8 +2,8 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from store.common.database import get_db
-from store.store.config import StoreConfig
 from store.m_insight.retrieval_service import IntelligenceRetrieveService
+from store.store.config import StoreConfig
 
 
 def get_config(request: Request) -> StoreConfig:

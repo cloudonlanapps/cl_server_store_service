@@ -68,7 +68,7 @@ class TestAuthenticationLogic:
 
         request = self._create_mock_request(no_auth=False)
         permission_checker = require_permission("media_store_write")
-        
+
         result = asyncio.run(permission_checker(request, user))
         assert result == user
 
@@ -80,7 +80,7 @@ class TestAuthenticationLogic:
 
         request = self._create_mock_request(no_auth=False)
         permission_checker = require_permission("media_store_write")
-        
+
         result = asyncio.run(permission_checker(request, user))
         assert result == user
 
@@ -95,7 +95,7 @@ class TestAuthenticationLogic:
         )
 
         request = self._create_mock_request(no_auth=False)
-        
+
         with pytest.raises(HTTPException) as exc_info:
             permission_checker = require_permission("media_store_write")
             asyncio.run(permission_checker(request, user))
@@ -107,7 +107,7 @@ class TestAuthenticationLogic:
         from store.common.auth import require_permission
 
         request = self._create_mock_request(no_auth=False)
-        
+
         with pytest.raises(HTTPException) as exc_info:
             permission_checker = require_permission("media_store_write")
             asyncio.run(permission_checker(request, None))
@@ -210,7 +210,7 @@ class TestJWTValidation:
         """Valid JWT token should be decoded successfully."""
         # Note: auth_client fixture already sets up the correct public key path
         # matching key_pair, and creates StoreConfig accordingly.
-        
+
         token = jwt_token_generator.generate_token(
             sub="testuser",
             permissions=["media_store_read"],

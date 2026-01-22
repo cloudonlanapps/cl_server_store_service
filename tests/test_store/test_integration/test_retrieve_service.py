@@ -1,22 +1,19 @@
-import pytest
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
 from store.common import (
-    Entity,
     EntityJob,
-    EntitySyncState,
     Face,
-    FaceMatch,
-    ImageIntelligence,
     KnownPerson,
-    ServiceConfig,
-    versioning,
 )
 from store.m_insight.retrieval_service import IntelligenceRetrieveService
-from store.store.config import StoreConfig
-from pathlib import Path
-import json
-from fastapi.testclient import TestClient
 from store.main import create_app
+from store.store.config import StoreConfig
+
 
 @pytest.fixture
 def mock_db():
@@ -91,7 +88,7 @@ def test_search_similar_images(retrieve_service, mock_db):
     retrieve_service.qdrant_store.search.return_value = [
         MagicMock(id=2, score=0.9)
     ]
-    
+
     results = retrieve_service.search_similar_images(1)
     assert len(results) == 1
     assert results[0].image_id == 2
@@ -103,7 +100,7 @@ def test_search_similar_images_dino(retrieve_service, mock_db):
     retrieve_service.dino_store.search.return_value = [
         MagicMock(id=2, score=0.88)
     ]
-    
+
     response = retrieve_service.search_similar_images_dino(1)
     assert response.query_image_id == 1
     assert len(response.results) == 1
@@ -114,7 +111,7 @@ def test_get_known_person(retrieve_service, mock_db):
     mock_person = KnownPerson(id=5, name="John", created_at=1000, updated_at=1100)
     mock_db.query.return_value.filter.return_value.first.return_value = mock_person
     mock_db.query.return_value.filter.return_value.count.return_value = 2
-    
+
     person = retrieve_service.get_known_person(5)
     assert person.name == "John"
     assert person.face_count == 2
@@ -124,7 +121,7 @@ def test_get_all_known_persons(retrieve_service, mock_db):
     mock_person = KnownPerson(id=1, name="Alice", created_at=1000, updated_at=1100)
     mock_db.query.return_value.all.return_value = [mock_person]
     mock_db.query.return_value.filter.return_value.count.return_value = 1
-    
+
     persons = retrieve_service.get_all_known_persons()
     assert len(persons) == 1
     assert persons[0].name == "Alice"
@@ -133,7 +130,7 @@ def test_update_known_person_name(retrieve_service, mock_db):
     """Test name update."""
     person = KnownPerson(id=1, name="Old", created_at=1000, updated_at=1100)
     mock_db.query.return_value.filter.return_value.first.return_value = person
-    
+
     retrieve_service.update_known_person_name(1, "New")
     assert person.name == "New"
     mock_db.commit.assert_called_once()
@@ -157,12 +154,12 @@ def test_search_similar_faces_by_id(retrieve_service, mock_db):
     )
     # The service queries Face table for each result
     mock_db.query.return_value.filter.return_value.first.return_value = mock_face
-    
+
     retrieve_service.face_store.get_vector.return_value = MagicMock(embedding=[0.5, 0.6])
     retrieve_service.face_store.search.return_value = [
         MagicMock(id=2, score=0.88, payload={})
     ]
-    
+
     results = retrieve_service.search_similar_faces_by_id(1)
     assert len(results) == 1
     assert results[0].face_id == 2
@@ -172,33 +169,33 @@ def test_search_similar_faces_by_id(retrieve_service, mock_db):
 async def test_search_similar_images_with_details(client, mock_db):
     """Test find_similar_images route with include_details=True."""
     from store import common as common_models
-    from store.m_insight.schemas import SimilarImageResult
     from store.m_insight.dependencies import get_intelligence_service
-    
+    from store.m_insight.schemas import SimilarImageResult
+
     mock_service = MagicMock()
     client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
-    
+
     with patch("store.store.service.EntityService") as mock_entity_service_class:
         # Ensure entity check passes
         mock_entity = MagicMock(spec=common_models.Entity)
         mock_entity.id = 1
         mock_entity.is_collection = False
         mock_db.query.return_value.filter.return_value.first.return_value = mock_entity
-        
+
         # mock_service = mock_service_class.return_value
         # MUST use actual schema object or dict because Pydantic validation expects it
         mock_result = SimilarImageResult(image_id=2, score=0.9, entity=None)
         mock_service.search_similar_images.return_value = [mock_result]
-        
+
         from store.common.schemas import Item
         mock_entity_service = mock_entity_service_class.return_value
         mock_entity_service.get_entity_by_id.return_value = Item(id=2, label="Detail", is_collection=False)
-        
+
         response = client.get("/intelligence/entities/1/similar?include_details=true")
         assert response.status_code == 200
         data = response.json()
         assert data["results"][0]["entity"]["label"] == "Detail"
-    
+
     # Clean up overrides
     client.app.dependency_overrides.clear()
 
@@ -229,7 +226,7 @@ async def test_get_known_person_404(client):
     from store.m_insight.dependencies import get_intelligence_service
     mock_service = MagicMock()
     client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
-    
+
     mock_service.get_known_person.return_value = None
     response = client.get("/intelligence/known-persons/999")
     assert response.status_code == 404
@@ -255,7 +252,7 @@ async def test_find_similar_images_no_results(client, mock_db):
     from store.m_insight.dependencies import get_intelligence_service
     mock_service = MagicMock()
     client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
-    
+
     mock_db.query.return_value.filter.return_value.scalar.return_value = 1
     mock_service.search_similar_images.return_value = []
     response = client.get("/intelligence/entities/1/similar")
@@ -269,7 +266,7 @@ async def test_find_similar_faces_no_results(client, mock_db):
     from store.m_insight.dependencies import get_intelligence_service
     mock_service = MagicMock()
     client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
-    
+
     mock_db.query.return_value.filter.return_value.scalar.return_value = 1
     mock_service.search_similar_faces_by_id.return_value = []
     response = client.get("/intelligence/faces/1/similar")
@@ -283,7 +280,7 @@ async def test_update_person_name_404(client):
     from store.m_insight.dependencies import get_intelligence_service
     mock_service = MagicMock()
     client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
-    
+
     mock_service.update_known_person_name.return_value = None
     response = client.patch("/intelligence/known-persons/999", json={"name": "New"})
     assert response.status_code == 404

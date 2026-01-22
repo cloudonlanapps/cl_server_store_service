@@ -8,7 +8,6 @@ from datetime import datetime
 import pytest
 
 from store.common.schemas import Item
-
 from tests.test_media_files import get_test_media_files
 
 

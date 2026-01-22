@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
-from pydantic import BaseModel, Field, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from store.common.storage import StorageService
@@ -10,7 +11,6 @@ if TYPE_CHECKING:
 from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
 
 from store.common.schemas import Item
-
 
 
 # Processing and Entity schemas
@@ -27,25 +27,25 @@ class EntityVersionData(BaseModel):
     This represents all fields from an Entity version record,
     matching the Item schema for use in mInsight processing.
     """
-    
+
     # Primary key
     id: int
-    
+
     # Core fields
     is_collection: bool | None = None
     label: str | None = None
     description: str | None = None
     parent_id: int | None = None
-    
+
     # Timestamps
     added_date: int | None = None
     updated_date: int | None = None
     create_date: int | None = None
-    
+
     # User tracking
     added_by: str | None = None
     updated_by: str | None = None
-    
+
     # File metadata
     file_size: int | None = None
     height: int | None = None
@@ -56,13 +56,13 @@ class EntityVersionData(BaseModel):
     extension: str | None = None
     md5: str | None = None
     file_path: str | None = None
-    
+
     # Soft delete
     is_deleted: bool | None = None
-    
+
     # Version tracking (from SQLAlchemy-Continuum)
     transaction_id: int | None = None
-    
+
     model_config = ConfigDict(from_attributes=True)  # Allow creation from ORM objects
 
     def get_file_path(self, storage_service: StorageService) -> Path:
@@ -81,7 +81,7 @@ class EntityVersionData(BaseModel):
 
 class MInsightStartPayload(BaseModel):
     """Payload for mInsight/start topic."""
-    
+
     version_start: int
     version_end: int
     timestamp: int
@@ -89,14 +89,14 @@ class MInsightStartPayload(BaseModel):
 
 class MInsightStopPayload(BaseModel):
     """Payload for mInsight/stop topic."""
-    
+
     processed_count: int
     timestamp: int
 
 
 class MInsightStatusPayload(BaseModel):
     """Payload for mInsight status heartbeat."""
-    
+
     status: str
     timestamp: int
 

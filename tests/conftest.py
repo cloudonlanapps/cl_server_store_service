@@ -1,12 +1,11 @@
 
-import os
+import random
 import shutil
 import sys
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-import random
 
 import pytest
 from cryptography.hazmat.backends import default_backend
@@ -26,7 +25,6 @@ from tests.test_config import (
     TEST_DB_URL,
     get_all_test_images,
 )
-from tests.test_media_files import get_test_media_files
 
 # ============================================================================
 # PYDANTIC MODELS
@@ -35,7 +33,7 @@ from tests.test_media_files import get_test_media_files
 
 class IntegrationConfig(BaseModel):
     """Integration test configuration from CLI arguments."""
-    
+
     # Kept for backward compat in test calls, but values might be empty strings
     username: str
     password: str
@@ -109,7 +107,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 @pytest.fixture(autouse=True, scope="function")
 def cleanup_auth_cache():
     """Clean auth module cache before and after each test."""
-    import sys
     if "store.common.auth" in sys.modules:
         auth_module = sys.modules["store.common.auth"]
         if hasattr(auth_module, '_public_key_cache'):
@@ -225,12 +222,13 @@ def test_engine() -> Generator[Engine, None, None]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    
+
     # Register the same event listener used in production
     # It will detect this is in-memory and skip WAL mode but enable foreign keys
     from sqlalchemy import event
+
     from store.common.database import enable_wal_mode
-    
+
     event.listen(engine, "connect", enable_wal_mode)
 
     from sqlalchemy.orm import configure_mappers
@@ -317,11 +315,11 @@ def test_images_unique() -> list[Path]:
         test_media_dir / "test_green.png",
         test_media_dir / "test_blue.png",
     ]
-    
+
     for img in images:
         if not img.exists():
             pytest.skip(f"Test image not found: {img}. Run test setup to generate images.")
-    
+
     return images
 
 
@@ -338,7 +336,7 @@ def client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[TestClient, None, None]:
     """Create a test client with REAL external services for integration tests."""
-    
+
     monkeypatch.setenv("CL_SERVER_DIR", str(clean_data_dir))
 
     # Create session maker
@@ -370,9 +368,9 @@ def client(
     app.dependency_overrides[get_current_user] = override_auth
 
     # Create test client - FastAPI lifespan will connect to REAL services
-    
+
     from store.store.config import StoreConfig
-    
+
     store_config = StoreConfig(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
@@ -389,18 +387,18 @@ def client(
 
     # Enhanced cleanup
     app.dependency_overrides.clear()
-    
+
     # Clean up app state
     if hasattr(app.state, 'broadcaster'):
         if hasattr(app.state.broadcaster, 'disconnect'):
             app.state.broadcaster.disconnect()
         delattr(app.state, 'broadcaster')
-        
+
     if hasattr(app.state, 'monitor'):
         delattr(app.state, 'monitor')
     if hasattr(app.state, 'config'):
         delattr(app.state, 'config')
-    
+
     # Ensure the global singleton in cl_ml_tools is also reset
     try:
         from cl_ml_tools.utils.mqtt import shutdown_broadcaster
@@ -419,18 +417,18 @@ def auth_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[TestClient, None, None]:
     """Create a test client WITHOUT auth override for testing authentication."""
-    
+
     monkeypatch.setenv("CL_SERVER_DIR", str(clean_data_dir))
 
 
     # Set up JWT key pair
     _, public_key_path = key_pair
-    
+
     # Use clean_data_dir for key path
     expected_key_path = clean_data_dir / "keys" / "public_key.pem"
     expected_key_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(public_key_path, expected_key_path)
-    
+
     # Create session maker
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
@@ -453,7 +451,7 @@ def auth_client(
 
     # Create StoreConfig and set on app.state
     from store.store.config import StoreConfig
-    
+
     store_config = StoreConfig(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",

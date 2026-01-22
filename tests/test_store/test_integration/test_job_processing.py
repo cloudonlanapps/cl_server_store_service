@@ -1,18 +1,15 @@
-import pytest
-import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
-import numpy as np
-import tempfile
-from sqlalchemy.orm import Session
-from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from store.common import models, database
-from store.common import models as intelligence_models
-from store.common import models as minsight_models
-from store.m_insight import JobSubmissionService, JobCallbackHandler, MInsightConfig
+import numpy as np
+import pytest
 from cl_client.models import JobResponse
-from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput, DetectedFace, BBox, FaceLandmarks
+from sqlalchemy.orm import Session
+
+from store.common import database, models
+from store.common import models as intelligence_models
+from store.m_insight import JobCallbackHandler, JobSubmissionService, MInsightConfig
+
 
 @pytest.fixture(autouse=True)
 def override_session_local(test_engine):
@@ -53,10 +50,10 @@ class TestJobProcessing:
         mock_storage.get_absolute_path.return_value = Path("/path/to/test.jpg")
         service = JobSubmissionService(mock_compute, mock_storage)
         callback = AsyncMock()
-        
+
         with patch("pathlib.Path.exists", return_value=True):
             job_id = await service.submit_face_detection(entity, callback)
-        
+
         assert job_id == "job_123"
         # Verify DB record
         job_record = test_db_session.query(intelligence_models.EntityJob).filter_by(job_id="job_123").first()
@@ -74,7 +71,7 @@ class TestJobProcessing:
         entity = models.Entity(label="test.jpg", md5="md5_cc", is_collection=False, create_date=1000)
         test_db_session.add(entity)
         test_db_session.commit()
-        
+
         job_record = intelligence_models.EntityJob(
             image_id=entity.id,
             job_id="job_det_1",
@@ -88,7 +85,7 @@ class TestJobProcessing:
 
         # Mock ComputeClient
         mock_compute = AsyncMock()
-        
+
         # Mock task_output
         landmarks = {
             "right_eye": [0.1, 0.1],
@@ -98,21 +95,21 @@ class TestJobProcessing:
             "mouth_left": [0.2, 0.3]
         }
         bbox = {"x1": 0.05, "y1": 0.05, "x2": 0.25, "y2": 0.35}
-        
+
         detected_face = {
             "bbox": bbox,
             "confidence": 0.99,
             "landmarks": landmarks,
             "file_path": "faces/face_0.png"
         }
-        
+
         task_output = {
             "faces": [detected_face],
             "num_faces": 1,
             "image_width": 1000,
             "image_height": 1000
         }
-        
+
         mock_compute.get_job.return_value = MagicMock(
             status="completed",
             task_output=task_output
@@ -122,11 +119,11 @@ class TestJobProcessing:
         # Mock stores
         mock_qdrant = MagicMock()
         mock_dino = MagicMock()
-        
+
         # Mock job submission service for follow-up jobs
         mock_sub_service = MagicMock()
         mock_sub_service.submit_face_embedding = AsyncMock(return_value="job_emb_1")
-        
+
         # Ensure delete_job_record actually deletes from the test DB
         def mock_delete(job_id):
             test_db_session.query(intelligence_models.EntityJob).filter_by(job_id=job_id).delete()
@@ -162,10 +159,10 @@ class TestJobProcessing:
         assert face is not None
         assert face.confidence == 0.99
         assert "x1" in face.bbox
-        
+
         # Verify face embedding job was submitted
         mock_sub_service.submit_face_embedding.assert_called_once()
-        
+
         # Verify job record is present (status remains queued in this test as handler logic doesn't update it)
         job_record = test_db_session.query(intelligence_models.EntityJob).filter_by(job_id="job_det_1").first()
         assert job_record is not None
@@ -183,10 +180,10 @@ class TestJobProcessing:
         mock_compute = AsyncMock()
         # Mock .npy file download
         embedding_data = np.random.rand(512).astype(np.float32)
-        
+
         async def mock_download(job_id, file_path, dest):
             np.save(dest, embedding_data)
-        
+
         mock_compute.download_job_file = mock_download
         mock_compute.get_job.return_value = MagicMock(
             status="completed",
@@ -198,15 +195,15 @@ class TestJobProcessing:
         mock_config = MInsightConfig(
             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_server="lh", mqtt_port=123
         ) # Minimal mock
-        
+
         handler = JobCallbackHandler(
              compute_client=mock_compute,
-             clip_store=mock_qdrant, 
-             dino_store=mock_dino, 
+             clip_store=mock_qdrant,
+             dino_store=mock_dino,
              face_store=MagicMock(),
              config=mock_config
         )
-        # Note: handler expects config 4th arg. 
+        # Note: handler expects config 4th arg.
         # previous code: JobCallbackHandler(..., mock_store_config, mock_pysdk)
         # new code: JobCallbackHandler(..., mock_config) (signatures changed? no, just config)
         # Wait, constructor is (self, compute, clip, dino, face, config, job_sub)
@@ -215,13 +212,13 @@ class TestJobProcessing:
         # This means old signature was different.
         # Current signature (from view_file): (compute, clip, dino, face, config, job_sub)
         # The test line 189 passes 5 args + implicit self.
-        # It's missing 'face_store'. 
+        # It's missing 'face_store'.
         # I need to fix the call site to match new signature.
 
-        
+
         job_resp = JobResponse(job_id="job_clip_1", status="completed", task_type="clip_embedding", created_at=0)
         await handler.handle_clip_embedding_complete(entity.id, job_resp)
-        
+
         # Verify Qdrant storage
         mock_qdrant.add_vector.assert_called_once()
         call_args = mock_qdrant.add_vector.call_args[0][0]
@@ -237,7 +234,7 @@ class TestJobProcessing:
         entity = models.Entity(label="img.jpg", md5="m1", is_collection=False)
         test_db_session.add(entity)
         test_db_session.commit()
-        
+
         face = intelligence_models.Face(
             id=1001,
             image_id=entity.id,
@@ -269,15 +266,15 @@ class TestJobProcessing:
              id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_server="lh", mqtt_port=123,
              face_embedding_threshold=0.7
         )
-        
+
         handler = JobCallbackHandler(
-             compute_client=mock_compute, 
-             clip_store=mock_qdrant, 
-             dino_store=MagicMock(), 
-             face_store=mock_face_store, 
+             compute_client=mock_compute,
+             clip_store=mock_qdrant,
+             dino_store=MagicMock(),
+             face_store=mock_face_store,
              config=mock_config
         )
-        
+
         # with patch("store.m_insight.intelligence.logic.face_store_singleton.get_face_store", return_value=mock_face_store):
         job_resp = JobResponse(job_id="job_fe_1", status="completed", task_type="face_embedding", created_at=0)
         await handler.handle_face_embedding_complete(face.id, entity.id, job_resp)
@@ -285,10 +282,10 @@ class TestJobProcessing:
         # 3. Verify KnownPerson created and linked
         test_db_session.refresh(face)
         assert face.known_person_id is not None
-        
+
         person = test_db_session.query(intelligence_models.KnownPerson).filter_by(id=face.known_person_id).first()
         assert person is not None
-        
+
         # 4. Verify vector store update
         mock_face_store.add_vector.assert_called_once()
 
@@ -305,7 +302,7 @@ class TestJobProcessing:
         embedding_data = np.random.rand(384).astype(np.float32) # DINO is 384
         async def mock_download(job_id, file_path, dest):
             np.save(dest, embedding_data)
-        
+
         mock_compute.download_job_file = mock_download
         mock_compute.get_job.return_value = MagicMock(
             status="completed",
@@ -317,18 +314,18 @@ class TestJobProcessing:
         mock_config = MInsightConfig(
              id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_server="lh", mqtt_port=123
         )
-        
+
         handler = JobCallbackHandler(
              compute_client=mock_compute,
              clip_store=mock_qdrant,
              dino_store=mock_dino,
-             face_store=MagicMock(), 
+             face_store=MagicMock(),
              config=mock_config
         )
-        
+
         job_resp = JobResponse(job_id="job_dino_1", status="completed", task_type="dino_embedding", created_at=0)
         await handler.handle_dino_embedding_complete(entity.id, job_resp)
-        
+
         # Verify DINO store storage
         mock_dino.add_vector.assert_called_once()
 
@@ -339,7 +336,7 @@ class TestJobProcessing:
         entity = models.Entity(label="stat.jpg", md5="m_stat", is_collection=False)
         test_db_session.add(entity)
         test_db_session.commit()
-        
+
         job = intelligence_models.EntityJob(
             image_id=entity.id,
             job_id="job_stat_1",
@@ -353,7 +350,7 @@ class TestJobProcessing:
 
         service = JobSubmissionService(MagicMock(), MagicMock())
         service.update_job_status("job_stat_1", "completed")
-        
+
         test_db_session.refresh(job)
         assert job.status == "completed"
         assert job.completed_at is not None

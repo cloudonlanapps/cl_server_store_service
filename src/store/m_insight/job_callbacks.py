@@ -5,21 +5,21 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput
 from loguru import logger
 from numpy.typing import NDArray
 from pydantic import ValidationError
 
-from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput
+from store.common.models import Entity, Face, FaceMatch, ImageIntelligence, KnownPerson
 
-from store.common.models import Face, FaceMatch, Entity, KnownPerson, ImageIntelligence
-from .vector_stores import StoreItem, QdrantVectorStore
+from .vector_stores import QdrantVectorStore, StoreItem
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient
     from cl_client.models import JobResponse
 
-    from .job_service import JobSubmissionService
     from .config import MInsightConfig
+    from .job_service import JobSubmissionService
 
 
 class JobCallbackHandler:
@@ -169,9 +169,9 @@ class JobCallbackHandler:
 
             # Phase 1: Download face images and create Face records
             saved_faces: list[tuple[int, Path]] = []  # (face_id, face_path)
-            
-            # Using storage_service for path resolution would be ideal here if available, 
-            # but _get_face_storage_path logic is specific. 
+
+            # Using storage_service for path resolution would be ideal here if available,
+            # but _get_face_storage_path logic is specific.
             # Could move to common/models.py Face.get_file_path reverse logic?
             # For now keeping logic here as it implies creation logic.
 
@@ -273,57 +273,56 @@ class JobCallbackHandler:
                                 self.job_submission_service.update_job_status(
                                     job.job_id, job.status, job.error_message
                                 )
-                        
+
                         # Fetch the Face object to pass to submit_face_embedding
-                        # We need to re-query or use the ID. 
+                        # We need to re-query or use the ID.
                         # JobSubmissionService.submit_face_embedding now expects 'face' object and 'entity version data'?
-                        # Or maybe just IDs? 
+                        # Or maybe just IDs?
                         # Plan said: submit_face_embedding(face: Face, entity: EntityVersionData, ...)
-                        # But here we are inside a callback where we have IDs. 
+                        # But here we are inside a callback where we have IDs.
                         # We must query the objects to pass them, or update JobSubmissionService to take IDs?
                         # I will assume JobSubmissionService will be updated to take Objects (per plan), so I need to query them.
-                        
+
                         f_obj = db.query(Face).filter(Face.id == face_id).first()
-                        
+
                         # We need EntityVersionData for entity.
                         # We have 'entity' ORM object. Convert to EntityVersionData Pydantic model?
-                        # Or does JobSubmissionService take ORM objects? 
+                        # Or does JobSubmissionService take ORM objects?
                         # Plan said: "submit_face_embedding(face: Face, entity: EntityVersionData, ...)"
                         # Let's convert entity to EntityVersionData if possible.
-                        # EntityVersionData is for VERSIONED data. Here we have live Entity. 
+                        # EntityVersionData is for VERSIONED data. Here we have live Entity.
                         # It should be compatible if we look at fields.
-                        
-                        from .schemas import EntityVersionData as EVD
-                        # Construct minimal EVD or query version? 
+
+                        # Construct minimal EVD or query version?
                         # EntityVersionData expects transaction_id which Entity doesn't have directly (it has versions rel).
                         # Taking a shortcut: If JobSubmissionService only needs path, we can pass what is needed.
-                        # But plan dictates signature change. 
+                        # But plan dictates signature change.
                         # I will UPDATE JobSubmissionService to be flexible or take Entity/Face objects.
-                        
+
                         if f_obj:
                             # Create a temporary/partial EVD or we assume JobSubmissionService handles it.
                             # For now, I will update JobSubmissionService to take Face object and maybe Entity object or EVD.
-                            
+
                             # Actually, inside callback we might not have the version data handy easily without querying.
-                            # For simplicity, I will stick to IDs and path in this call if JobSubmissionService supports it, 
+                            # For simplicity, I will stick to IDs and path in this call if JobSubmissionService supports it,
                             # OR I'll query what I need.
-                            
-                            pass 
-                            
+
+                            pass
+
                             # WAIT. In the plan I said:
                             # submit_face_embedding(face: Face, entity: EntityVersionData, on_complete_callback)
-                            
-                            # Here in callback we have the Entity object. 
-                            # Does it matter if it is Entity or EntityVersionData? 
+
+                            # Here in callback we have the Entity object.
+                            # Does it matter if it is Entity or EntityVersionData?
                             # Primarily for get_file_path() I presume.
-                            
+
                             # Let's update JobSubmissionService to accept Face and Entity (or EVD).
                             # I'll pass the ORM objects if compatible or update JobSubmissionService to take Union.
-                            
+
                             # For now, I'll call it with arguments I have.
                             # submit_face_embedding method signature update is pending in next step.
                             # I will invoke it assuming I pass the objects.
-                            
+
                             job_id = await self.job_submission_service.submit_face_embedding(
                                 face=f_obj,
                                 entity=entity, # Passing ORM entity
@@ -331,7 +330,7 @@ class JobCallbackHandler:
                             )
                             if job_id:
                                 face_job_ids.append(job_id)
-                        
+
                     except Exception as e:
                         logger.error(
                             f"Failed to submit face_embedding job for face {face_id}: {e}"

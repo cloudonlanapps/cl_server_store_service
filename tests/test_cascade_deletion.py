@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -82,9 +81,9 @@ def test_hard_delete_collection_cascades_to_children(
     child_id = response.json()["id"]
 
     # Soft-delete collection first
-    from store.store.service import EntityService
     from store.store.config import StoreConfig
-    
+    from store.store.service import EntityService
+
     config = StoreConfig(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
@@ -149,9 +148,9 @@ def test_hard_delete_nested_collections_cascades_recursively(
     grandchild_id = response.json()["id"]
 
     # Soft-delete parent collection first
-    from store.store.service import EntityService
     from store.store.config import StoreConfig
-    
+    from store.store.service import EntityService
+
     config = StoreConfig(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",

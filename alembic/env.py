@@ -17,6 +17,7 @@ make_versioned(user_cls=None)
 # Configure mappers after models are imported
 # Configure mappers after models are imported
 from store.common.models import Base
+
 # Models are now consolidated in store.common.models, so importing Base (and the module) registers them.
 configure_mappers()
 

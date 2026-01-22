@@ -1,24 +1,26 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import Session, configure_mappers
 from sqlalchemy_continuum import version_class  # pyright: ignore[reportAttributeAccessIssue]
 
-from store.common import database, StorageService
+from store.common import StorageService, database
+
 from ..common.models import Entity, EntitySyncState, ImageIntelligence
-from .schemas import EntityVersionData
 from .config import MInsightConfig
 from .job_callbacks import JobCallbackHandler
 from .job_service import JobSubmissionService
+from .schemas import EntityVersionData
 from .vector_stores import get_clip_store, get_dino_store, get_face_store
 
 if TYPE_CHECKING:
-    from .broadcaster import MInsightBroadcaster
     from cl_client import ComputeClient, SessionManager
     from cl_client.models import JobResponse
+
+    from .broadcaster import MInsightBroadcaster
 
 
 class MediaInsight:
@@ -33,7 +35,7 @@ class MediaInsight:
         """
         self.config: MInsightConfig = config
         self.broadcaster = broadcaster
-        
+
         # Resources initialized in initialize()
         self.compute_client: ComputeClient | None = None
         self.compute_session: SessionManager | None = None
@@ -59,7 +61,7 @@ class MediaInsight:
 
         try:
             from cl_client import ServerConfig, SessionManager
-            
+
             # Initialize Storage Service
             self.storage_service = StorageService(str(self.config.media_storage_dir))
 
@@ -70,7 +72,7 @@ class MediaInsight:
                 mqtt_server=self.config.mqtt_server,
                 mqtt_port=self.config.mqtt_port,
             )
-            
+
             self.compute_session = SessionManager(server_config=server_config)
             await self.compute_session.login(
                 username=self.config.compute_username,
@@ -97,7 +99,7 @@ class MediaInsight:
 
             # Initialize Services
             self.job_service = JobSubmissionService(self.compute_client, self.storage_service)
-            
+
             self.callback_handler = JobCallbackHandler(
                 self.compute_client,
                 clip_store,
@@ -106,10 +108,10 @@ class MediaInsight:
                 config=self.config,
                 job_submission_service=self.job_service,
             )
-            
+
             self._initialized = True
             logger.info("MInsightProcessor services initialized")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize MInsightProcessor services: {e}")
             raise
@@ -213,7 +215,7 @@ class MediaInsight:
 
         # Derive absolute image path from relative file_path and config
         image_path = str(self.config.media_storage_dir / file_path)
-        
+
         version_val = transaction_id if transaction_id is not None else 0
 
         # Atomic write: Upsert intelligence record
@@ -244,7 +246,7 @@ class MediaInsight:
 
             # Trigger async jobs
             await self._trigger_async_jobs(entity_version, session)
-            
+
             logger.info(f"Image intelligence jobs triggered for {entity_id}")
 
         except Exception as e:
@@ -269,34 +271,34 @@ class MediaInsight:
 
         # Get absolute file path
         # EntityVersionData doesn't have get_file_path unless we added it?
-        # Yes, we added it in Step 309 context summary (view_file of schemas.py might trigger if I checked it). 
+        # Yes, we added it in Step 309 context summary (view_file of schemas.py might trigger if I checked it).
         # But here I need storage_service.
-        
+
         # Manually resolving path if needed, or using entity helper if available
         # logic from processing_service:
         # absolute_path = entity.get_file_path(self.storage_service)
-        
+
         # Let's verify EntityVersionData has get_file_path and it takes storage_service
         # Assuming it does based on prev edits.
-        
+
         try:
             if not self.storage_service: # Should be init by now
                 raise RuntimeError("Storage service not initialized")
-                
+
             absolute_path = entity.get_file_path(self.storage_service)
         except (AttributeError, ValueError):
              # Fallback if method missing or file_path missing
              absolute_path = self.config.media_storage_dir / entity.file_path if entity.file_path else None
-             
+
         if not absolute_path or not absolute_path.exists():
             logger.warning(f"File not found for entity {entity.id}: {absolute_path}")
             return
 
         # Define callbacks
         # We need to capture variables safely.
-        
+
         # We need 'self' to access callback_handler
-        
+
         async def face_detection_callback(job: JobResponse) -> None:
             if job.status == "completed" and self.callback_handler:
                 await self.callback_handler.handle_face_detection_complete(entity.id, job)
@@ -339,13 +341,13 @@ class MediaInsight:
             f"Submitted jobs for entity {entity.id}: "
             f"face_detection={face_job_id}, clip_embedding={clip_job_id}, dino_embedding={dino_job_id}"
         )
-        
+
         # Update ImageIntelligence with job IDs
-        # We need to perform a DB write. 
-        # The session passed to this method might be closed? 
+        # We need to perform a DB write.
+        # The session passed to this method might be closed?
         # In _enqueue_image: session.commit() is called, then _trigger is called, then finally closed.
         # So session is still usable for new transaction.
-        
+
         try:
             # Re-query using primary key (image_id)
             intelligence = session.query(ImageIntelligence).filter(ImageIntelligence.image_id == entity.id).first()
@@ -418,11 +420,11 @@ class MediaInsight:
 
     async def run_once(self) -> int:
         """Perform one reconciliation cycle of entity changes."""
-        
+
         # Ensure services are initialized
         if not self._initialized:
             await self.initialize()
-            
+
         # Atomic read: Get last processed version
         last_version = self._get_last_version()
         logger.info(f"Starting reconciliation from version {last_version}")

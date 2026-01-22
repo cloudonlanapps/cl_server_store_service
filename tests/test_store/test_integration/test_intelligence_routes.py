@@ -1,10 +1,13 @@
 from datetime import datetime
+
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
 from store.common import models
 from store.common import models as intelligence_models
 from store.common import models as minsight_models
-from sqlalchemy.orm import Session
+
 
 @pytest.mark.usefixtures("qdrant_service", "compute_service", "auth_service")
 class TestIntelligenceRoutes:
@@ -93,7 +96,7 @@ class TestIntelligenceRoutes:
         )
         test_db_session.add(entity)
         test_db_session.commit()
-        
+
         # Add intelligence record
         intel = minsight_models.ImageIntelligence(
             image_id=entity.id,
@@ -103,7 +106,7 @@ class TestIntelligenceRoutes:
             version=1
         )
         test_db_session.add(intel)
-        
+
         # Add face
         # Note: bbox is BBox model as JSON string
         face = intelligence_models.Face(
@@ -116,7 +119,7 @@ class TestIntelligenceRoutes:
         )
         test_db_session.add(face)
         test_db_session.commit()
-        
+
         response = client.get(f"/intelligence/entities/{entity.id}/faces")
         if response.status_code != 200:
             print(f"DEBUG 422: {response.json()}")
@@ -135,7 +138,7 @@ class TestIntelligenceRoutes:
         )
         test_db_session.add(entity)
         test_db_session.commit()
-        
+
         # Add intelligence job
         job = intelligence_models.EntityJob(
             image_id=entity.id,
@@ -147,7 +150,7 @@ class TestIntelligenceRoutes:
         )
         test_db_session.add(job)
         test_db_session.commit()
-        
+
         response = client.get(f"/intelligence/entities/{entity.id}/jobs")
         assert response.status_code == 200
         jobs = response.json()
@@ -166,18 +169,18 @@ class TestIntelligenceRoutes:
         )
         test_db_session.add(person)
         test_db_session.commit()
-        
+
         # 2. Get all persons
         response = client.get("/intelligence/known-persons")
         assert response.status_code == 200
         persons = response.json()
         assert any(p["id"] == person.id for p in persons)
-        
+
         # 3. Get specific person
         response = client.get(f"/intelligence/known-persons/{person.id}")
         assert response.status_code == 200
         assert response.json()["name"] == "John Doe"
-        
+
         # 4. Update person name
         response = client.patch(
             f"/intelligence/known-persons/{person.id}",
@@ -185,7 +188,7 @@ class TestIntelligenceRoutes:
         )
         assert response.status_code == 200
         assert response.json()["name"] == "Jane Doe"
-        
+
         # Verify in DB
         test_db_session.refresh(person)
         assert person.name == "Jane Doe"

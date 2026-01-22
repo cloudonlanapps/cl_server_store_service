@@ -82,7 +82,7 @@ def ensure_cl_server_dir(create_if_missing: bool = True) -> Path:
 
 def get_db_url() -> str:
     cl_server_dir = ensure_cl_server_dir(create_if_missing=True)
-    
+
     db_url = f"sqlite:///{cl_server_dir}/store.db"
     return db_url
 

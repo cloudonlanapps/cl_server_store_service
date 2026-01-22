@@ -1,18 +1,17 @@
 """CoLAN Store Server."""
 
-import os
 from contextlib import asynccontextmanager
-from uuid import uuid4
 
+from cl_ml_tools import get_broadcaster
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 from sqlalchemy.orm import configure_mappers
 
-from cl_ml_tools import get_broadcaster
-from .routes import router
-from .monitor import MInsightMonitor
 from store.m_insight.routes import router as intelligence_router
+
+from .monitor import MInsightMonitor
+from .routes import router
 
 # Configure mappers after all models are imported (required for versioning)
 configure_mappers()
@@ -26,7 +25,7 @@ async def lifespan(app: FastAPI):
     - Shutdown: cleanup resources
     """
     # -------- Startup --------
-    
+
     # Try to get config from app state (injected by main.py or tests)
     if hasattr(app.state, "config") and app.state.config:
         logger.info("Loaded core configuration from app.state.config")

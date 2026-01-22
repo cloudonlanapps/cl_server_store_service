@@ -7,9 +7,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from store.common.models import Entity
+from store.common.models import Entity, ImageIntelligence
 from store.common.schemas import Item, PaginatedResponse
-from store.common.models import ImageIntelligence
 
 
 class TestEntityCRUD:
@@ -67,7 +66,7 @@ class TestEntityCRUD:
             )
         item = Item.model_validate(resp.json())
         entity_id = item.id
-        
+
         # Manually create intelligence record
         intel = ImageIntelligence(
             image_id=entity_id,
@@ -78,12 +77,12 @@ class TestEntityCRUD:
         )
         test_db_session.add(intel)
         test_db_session.commit()
-        
+
         # Get entity
         get_response = client.get(f"/entities/{entity_id}")
         assert get_response.status_code == 200
         fetched_item = Item.model_validate(get_response.json())
-        
+
         # Verify status
         assert fetched_item.intelligence_status == "completed"
 
@@ -613,7 +612,7 @@ class TestEntityCRUD:
         entity = test_db_session.query(Entity).filter(Entity.id == entity_id).first()
         assert entity is not None
         assert entity.is_deleted is False
-        
+
         # Get initial version count
         initial_version_count = len(entity.versions.all())
 
@@ -626,11 +625,11 @@ class TestEntityCRUD:
         entity = test_db_session.query(Entity).filter(Entity.id == entity_id).first()
         assert entity is not None
         assert entity.is_deleted is True
-        
+
         # Verify a new version record was created
         final_version_count = len(entity.versions.all())
         assert final_version_count == initial_version_count + 1
-        
+
         # Verify the latest version has is_deleted=True
         latest_version = entity.versions.all()[-1]
         assert latest_version.is_deleted is True

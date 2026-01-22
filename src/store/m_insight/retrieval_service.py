@@ -5,10 +5,10 @@ import logging
 from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
 from sqlalchemy.orm import Session
 
+from store.common.models import EntityJob, Face, FaceMatch, KnownPerson
 from store.store.config import StoreConfig
 
 from . import schemas
-from store.common.models import EntityJob, Face, FaceMatch, KnownPerson
 from .vector_stores import SearchPreferences, get_clip_store, get_dino_store, get_face_store
 
 logger = logging.getLogger(__name__)
@@ -111,7 +111,7 @@ class IntelligenceRetrieveService:
     ) -> list[schemas.SimilarImageResult]:
         """Search for similar images using CLIP embeddings."""
         self._get_entity_or_raise(entity_id)
-        
+
         # Get the query embedding from Qdrant
         query_point = self.qdrant_store.get_vector(entity_id)
         if not query_point:
@@ -166,7 +166,7 @@ class IntelligenceRetrieveService:
     ) -> schemas.SimilarImagesDinoResponse:
         """Search for similar images using DINOv2 embeddings."""
         self._get_entity_or_raise(entity_id)
-        
+
         # Get embedding for query image
         item = self.dino_store.get_vector(entity_id)
         if not item:
@@ -373,10 +373,11 @@ class IntelligenceRetrieveService:
             ResourceNotFoundError: If face or embedding not found
         """
         import io
+
         import numpy as np
 
         self._get_face_or_raise(face_id)
-        
+
         point = self.face_store.get_vector(id=face_id)
         if not point:
             raise ResourceNotFoundError("Face embedding not found in vector store")
@@ -399,10 +400,11 @@ class IntelligenceRetrieveService:
             ResourceNotFoundError: If entity or embedding not found
         """
         import io
+
         import numpy as np
 
         self._get_entity_or_raise(entity_id)
-        
+
         point = self.qdrant_store.get_vector(id=entity_id)
         if not point:
             raise ResourceNotFoundError("Entity embedding not found in vector store")
@@ -425,10 +427,11 @@ class IntelligenceRetrieveService:
             ResourceNotFoundError: If entity or embedding not found
         """
         import io
+
         import numpy as np
 
         self._get_entity_or_raise(entity_id)
-        
+
         point = self.dino_store.get_vector(id=entity_id)
         if not point:
             raise ResourceNotFoundError("Entity embedding not found in vector store")

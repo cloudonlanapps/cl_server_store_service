@@ -3,8 +3,7 @@ Tests for file storage organization and management.
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-from store.common.storage import StorageService
+from unittest.mock import patch
 
 
 class TestFileStorage:
@@ -164,10 +163,10 @@ class TestFileStorage:
         abs_path = file_storage_service.base_dir / rel_path
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_text("content")
-        
+
         # Delete file and trigger cleanup
         assert file_storage_service.delete_file(str(rel_path)) is True
-        
+
         # Verify directories a/b/c are gone
         assert not (file_storage_service.base_dir / "a").exists()
         # Verify base dir still exists
