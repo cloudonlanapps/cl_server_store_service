@@ -169,8 +169,7 @@ class QdrantVectorStore(StoreInterface[StoreItem, SearchPreferences, SearchResul
         )
 
         _ = self.client.upsert(collection_name=self.collection_name, points=[point])
-
-        logger.debug(f"Upserted: {item.id} ")
+        logger.info(f"Upserted vector {item.id} into collection '{self.collection_name}'")
         return True
 
     # ---------------------------------------------------------------------

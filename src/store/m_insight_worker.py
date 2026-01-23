@@ -251,7 +251,7 @@ def main() -> int:
     )
     _ = parser.add_argument(
         "--qdrant-collection",
-        default="image_embeddings",
+        default="clip_embeddings",
         help="Qdrant collection for CLIP embeddings",
     )
     _ = parser.add_argument(
@@ -269,15 +269,23 @@ def main() -> int:
         action="store_true",
         help="Disable authentication for compute service",
     )
-    # Initialize Config
-    from .m_insight.config import MInsightConfig
-
     args = parser.parse_args()
-    config = MInsightConfig.model_validate(args)
-    config.finalize()
 
     # Initialize Database (Worker needs access to DB)
-    from .common import database
+    from .common import database, utils
+    from .m_insight.config import MInsightConfig
+
+    # Initialize basic info needed for config
+    cl_dir = utils.ensure_cl_server_dir(create_if_missing=True)
+
+    # Convert args to dict and add required path keys
+    config_dict = {k: v for k, v in vars(args).items() if v is not None}
+    config_dict["cl_server_dir"] = cl_dir
+    config_dict["media_storage_dir"] = cl_dir / "media"
+    config_dict["public_key_path"] = cl_dir / "keys" / "public_key.pem"
+
+    config = MInsightConfig.model_validate(config_dict)
+    config.finalize()
 
     database.init_db()
 

@@ -10,6 +10,7 @@ from loguru import logger
 
 from .common import (
     database,
+    utils,
     versioning,  # CRITICAL: Import versioning before database or models  # pyright: ignore[reportUnusedImport]  # noqa: F401
 )
 from .store.config import StoreConfig
@@ -55,10 +56,26 @@ def main() -> int:
     _ = parser.add_argument(
         "--face-collection", default="face_embeddings", help="Qdrant collection for face embeddings"
     )
+    _ = parser.add_argument(
+        "--dino-collection", default="dino_embeddings", help="Qdrant collection for DINOv2 embeddings"
+    )
 
     # Create Configurations
     args = parser.parse_args()
-    config = StoreConfig.model_validate(args)
+    
+    # Initialize basic info needed for config
+    cl_dir = utils.ensure_cl_server_dir(create_if_missing=True)
+    
+    # Convert args to dict and add required path keys
+    config_dict = {k: v for k, v in vars(args).items() if v is not None}
+    config_dict["cl_server_dir"] = cl_dir
+    config_dict["media_storage_dir"] = cl_dir / "media"
+    # Note: public_key_path logic might be more complex in finalize_base, 
+    # but we need to satisfy the validator. 
+    # finalize_base() implementation: self.public_key_path = cl_dir / "keys" / "public_key.pem"
+    config_dict["public_key_path"] = cl_dir / "keys" / "public_key.pem"
+
+    config = StoreConfig.model_validate(config_dict)
     config.finalize()
 
     # Initialize and configure app
