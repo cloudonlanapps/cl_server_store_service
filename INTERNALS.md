@@ -7,42 +7,102 @@ This document contains development-related information for contributors working 
 ```
 services/store/
 ├── src/store/                # Main application package
-│   ├── __init__.py           # FastAPI app with lifespan management
+│   ├── __init__.py           # Package initialization
 │   ├── main.py               # CLI entry point (store command)
-│   ├── models.py             # SQLAlchemy models (Entity, ServiceConfig)
-│   ├── schemas.py            # Pydantic schemas
-│   ├── routes.py             # API endpoints
-│   ├── service.py            # Business logic
-│   ├── auth.py               # JWT authentication
-│   ├── database.py           # Database configuration
-│   ├── config_service.py     # Runtime configuration service
-│   ├── capability_manager.py # Worker capability discovery (MQTT)
-│   ├── entity_storage.py     # Media entity storage service
-│   └── versioning.py         # SQLAlchemy-Continuum setup
+│   ├── m_insight_worker.py   # CLI entry point (m-insight-worker command)
+│   │
+│   ├── common/               # Shared infrastructure
+│   │   ├── __init__.py
+│   │   ├── auth.py           # JWT authentication & verification
+│   │   ├── config.py         # Base configuration classes
+│   │   ├── database.py       # Database session management
+│   │   ├── models.py         # SQLAlchemy models (Entity, Face, ImageIntelligence, etc.)
+│   │   ├── schemas.py        # Shared Pydantic schemas
+│   │   ├── storage.py        # File storage service abstraction
+│   │   ├── utils.py          # Shared utility functions
+│   │   └── versioning.py     # SQLAlchemy-Continuum setup (CRITICAL: import before models)
+│   │
+│   ├── store/                # Media store service
+│   │   ├── __init__.py
+│   │   ├── config.py         # Store-specific configuration
+│   │   ├── config_service.py # Runtime configuration management
+│   │   ├── dependencies.py   # FastAPI dependency injection
+│   │   ├── media_metadata.py # ExifTool & ffprobe metadata extraction
+│   │   ├── monitor.py        # Monitoring and health check utilities
+│   │   ├── routes.py         # Entity management API endpoints
+│   │   ├── service.py        # Entity CRUD business logic
+│   │   └── store.py          # FastAPI app creation with lifespan management
+│   │
+│   └── m_insight/            # Media insight (mInsight) service
+│       ├── __init__.py
+│       ├── broadcaster.py    # MQTT status broadcasting
+│       ├── config.py         # mInsight-specific configuration
+│       ├── dependencies.py   # FastAPI dependency injection
+│       ├── job_callbacks.py  # Job completion handlers (store results in DB/Qdrant)
+│       ├── job_service.py    # Job creation & tracking (face detection, embeddings)
+│       ├── media_insight.py  # Core reconciliation processor
+│       ├── retrieval_service.py # Similarity search via Qdrant
+│       ├── routes.py         # Intelligence API endpoints (search, retrieve)
+│       ├── schemas.py        # mInsight-specific Pydantic schemas
+│       └── vector_stores.py  # Qdrant singleton for CLIP/DINO/face embeddings
+│
 ├── tests/                    # Test suite
-│   ├── conftest.py           # Pytest fixtures
-│   ├── test_entity_*.py      # Entity management tests
-│   ├── test_job_*.py         # Job management tests
-│   ├── test_plugin_*.py      # Plugin tests
-│   ├── test_authentication.py # Auth tests
-│   ├── README.md             # Test documentation
+│   ├── conftest.py           # Pytest fixtures (sessions, clients, tokens)
+│   ├── test_cascade_deletion.py    # Cascade deletion verification
+│   ├── test_config.py        # Configuration management tests
+│   ├── test_m_insight_mqtt.py # MQTT integration tests
+│   ├── test_m_insight_worker.py # Worker reconciliation tests
+│   ├── test_media_files.py   # Media file handling tests
+│   ├── test_mqtt_broadcast.py # Broadcasting functionality tests
+│   ├── test_store/
+│   │   └── test_integration/ # Store service integration tests
+│   │       ├── test_entity_crud.py
+│   │       ├── test_authentication.py
+│   │       ├── test_file_upload.py
+│   │       └── ... (12+ integration test files)
+│   ├── README.md             # Comprehensive test documentation
 │   └── QUICK.md              # Quick test command reference
-├── alembic/                  # Database migrations
+│
+├── alembic/                  # Database migrations (Alembic)
 │   ├── versions/             # Migration scripts
-│   └── env.py                # Alembic configuration
-├── pyproject.toml            # Package configuration
-├── README.md                 # User documentation
-└── INTERNALS.md              # This file
+│   │   ├── a8181ccb4efa_initial_schema_from_current_models.py
+│   │   ├── 0e06b756fe80_add_m_insight_tables.py
+│   │   ├── 00268ae3f7cc_add_image_path_and_version_to_.py
+│   │   └── 6d29391ba950_consolidate_models_and_add_job_tracking.py
+│   ├── env.py                # Alembic configuration
+│   ├── script.py.mako        # Migration template
+│   └── README                # Alembic documentation
+│
+├── pyproject.toml            # Package configuration (dependencies, scripts, pytest config)
+├── README.md                 # User-facing documentation
+├── INTERNALS.md              # This file (developer documentation)
+├── REVIEW.md                 # Comprehensive code review with 86+ issues
+└── CLAUDE.md                 # Claude Code guidance documentation
 ```
 
-**Key Design:**
-- Uses shared models from `cl-server-shared` (Job, QueueEntry)
-- Local models: Entity (media) and ServiceConfig (runtime settings)
-- SQLite with WAL mode for concurrent access
-- Optional JWT authentication with ES256
-- SQLAlchemy-Continuum for entity versioning
-- MQTT-based worker capability discovery
-- Alembic for database migrations
+**Key Design Decisions:**
+
+**Service Architecture:**
+- **Three-layer structure:** Common infrastructure, Store service, mInsight service
+- **Shared database:** Both store and mInsight worker use same SQLite DB (`media_store.db`)
+- **Separate executables:** `store` command runs FastAPI server, `m-insight-worker` runs background processor
+- **Event-driven:** MQTT optional for job status broadcasting and worker coordination
+
+**Data Models:**
+- **Entity** - Core media entity model with versioning (common/models.py)
+- **ImageIntelligence** - Processing status & job tracking for each entity
+- **Face** - Detected faces with bounding boxes, embeddings, person links
+- **KnownPerson** - Person clustering via face embeddings
+- **EntityJob** - Job lifecycle tracking (queued → processing → completed/failed)
+
+**Technology Stack:**
+- **Database:** SQLite with WAL mode for concurrent read/write access
+- **ORM:** SQLAlchemy with SQLAlchemy-Continuum for versioning
+- **API:** FastAPI with Pydantic for validation
+- **Authentication:** Optional JWT with ES256 (ECDSA) signatures
+- **Migrations:** Alembic for schema evolution
+- **Vector Store:** Qdrant for CLIP/DINO/face embeddings
+- **Job Communication:** MQTT (optional) for broadcasting
 
 ## Development
 
@@ -91,6 +151,9 @@ uv run ruff check src/
 
 # Fix linting issues
 uv run ruff check --fix src/
+
+# Type checking
+uv run basedpyright
 ```
 
 ### Development Workflow
@@ -115,6 +178,47 @@ uv sync --upgrade
 ```
 
 ## Architecture Notes
+
+### Service Separation: Store vs mInsight
+
+This package contains two distinct but integrated services:
+
+**1. Store Service (`store` command)**
+- **Purpose:** RESTful API for media entity management
+- **Responsibilities:**
+  - Entity CRUD operations (create, read, update, delete)
+  - File storage and metadata extraction (ExifTool, ffprobe)
+  - Entity versioning with SQLAlchemy-Continuum
+  - Duplicate detection via MD5 hashing
+  - Runtime configuration management
+- **Entry Point:** `src/store/main.py` → runs FastAPI server
+- **API Routes:** `src/store/store/routes.py`
+- **Database:** Writes to `media_store.db`
+
+**2. mInsight Service (`m-insight-worker` command)**
+- **Purpose:** Background processor for ML intelligence on media entities
+- **Responsibilities:**
+  - Entity reconciliation (detect new/changed entities since last run)
+  - Job creation for face detection, CLIP embeddings, DINO embeddings
+  - Job completion handling (store results in database + Qdrant)
+  - Face clustering and person recognition
+  - Similarity search via vector embeddings
+- **Entry Point:** `src/store/m_insight_worker.py` → runs reconciliation loop
+- **API Routes:** `src/store/m_insight/routes.py` (search/retrieval endpoints)
+- **Database:** Reads/writes to `media_store.db` (shared with store)
+- **Vector Store:** Qdrant for embeddings storage
+
+**Integration Pattern:**
+1. User uploads media via Store API → Entity created
+2. mInsight worker detects new Entity → creates jobs
+3. Compute workers process jobs → return results
+4. mInsight job callbacks → store Face records, embeddings in Qdrant
+5. User queries via mInsight API → similarity search across embeddings
+
+**Communication:**
+- **Database:** Primary communication channel (shared SQLite DB)
+- **MQTT (optional):** Real-time job status broadcasting
+- **HTTP:** mInsight can call Store API for entity operations
 
 ### Database Design
 
@@ -201,21 +305,118 @@ from .models import Entity  # Now versioning is active
 
 **Note:** For system-wide architecture and inter-service communication, see [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) in the repository root.
 
+### mInsight Processing Pipeline
+
+**Entity Reconciliation Flow:**
+
+1. **Worker Polls for New Entities:**
+   - Queries `EntitySyncState` to find last processed version
+   - Gets all entities created/modified since last version
+   - Filters for image entities (non-collections with media files)
+
+2. **Job Creation (`job_service.py`):**
+   - For each new image entity:
+     - Create `ImageIntelligence` record with status="queued"
+     - Submit face detection job → `face_detection_job_id`
+     - Submit CLIP embedding job → `clip_job_id`
+     - Submit DINO embedding job → `dino_job_id`
+   - Jobs tracked in `EntityJob` table (status: queued → in_progress → completed/failed)
+
+3. **Job Processing (External Compute Workers):**
+   - Workers pull jobs from compute service queue
+   - Process images (face detection, embedding generation)
+   - Return results to compute service
+
+4. **Job Completion Callbacks (`job_callbacks.py`):**
+   - **Face Detection Callback:**
+     - Create `Face` records in database
+     - Save cropped face images to disk
+     - Submit face embedding jobs for each detected face
+     - Update `ImageIntelligence.face_detection_job_id`
+
+   - **CLIP Embedding Callback:**
+     - Store embedding vector in Qdrant (collection: `clip_embeddings`)
+     - Update `ImageIntelligence.clip_job_id`
+
+   - **DINO Embedding Callback:**
+     - Store embedding vector in Qdrant (collection: for duplicate detection)
+     - Update `ImageIntelligence.dino_job_id`
+
+   - **Face Embedding Callback:**
+     - Store face embedding in Qdrant (`face_embeddings` collection)
+     - Perform similarity search to find matching faces
+     - Link face to `KnownPerson` or create new person
+     - Create `FaceMatch` records for similar faces
+
+5. **Status Updates:**
+   - Update `ImageIntelligence.status` to "completed" when all jobs done
+   - Update `EntitySyncState.last_version` to latest processed version
+   - Optional: Broadcast status via MQTT
+
+**Vector Store Integration:**
+
+**Qdrant Collections:**
+- `clip_embeddings` - Image-level semantic embeddings for similarity search
+- `dino_embeddings` - Image-level features for duplicate detection
+- `face_embeddings` - Face-level embeddings for person recognition
+
+**Retrieval Service (`retrieval_service.py`):**
+- **Similarity Search:** Query Qdrant with image/text embedding → find similar images
+- **Face Search:** Query face embeddings → find images of same person
+- **Duplicate Detection:** Query DINO embeddings → find near-duplicate images
+
+**Broadcaster Pattern (MQTT):**
+
+**Purpose:** Optional real-time status updates for monitoring/debugging
+
+**MInsightBroadcaster (`broadcaster.py`):**
+- Publishes status messages to MQTT topic (e.g., `store/8001/items`)
+- Message types:
+  - `status_update` - Worker heartbeat (every 5 seconds)
+  - `job_created` - New job submitted
+  - `job_completed` - Job finished successfully
+  - `job_failed` - Job failed with error
+  - `entity_processed` - Entity reconciliation completed
+
+**Configuration:**
+- Enable with `--mqtt-port 1883` on both store and worker
+- Broker defaults to localhost
+- Topic configurable via `--mqtt-topic`
+
 ## Testing Strategy
 
 See [tests/README.md](tests/README.md) for comprehensive testing documentation, including test organization, fixtures, and coverage requirements.
 
 Tests are organized by functionality:
-- `test_entity_*.py` - Media entity management
-- `test_job_*.py` - Job orchestration
-- `test_plugin_*.py` - Compute plugins
-- `test_authentication.py` - Authentication flows
-- `test_*_permissions.py` - Authorization
-- `test_integration_*.py` - End-to-end workflows
-- `test_versioning.py` - Entity history tracking
-- `test_duplicate_detection.py` - MD5 deduplication
 
-All tests use in-memory SQLite databases and isolated test clients.
+**Top-Level Tests:**
+- `test_cascade_deletion.py` - Cascade deletion verification for related entities
+- `test_config.py` - Configuration management and validation
+- `test_m_insight_mqtt.py` - MQTT integration for mInsight broadcasting
+- `test_m_insight_worker.py` - Worker reconciliation and job processing
+- `test_media_files.py` - Media file handling and metadata
+- `test_mqtt_broadcast.py` - MQTT broadcasting functionality
+
+**Integration Tests (`test_store/test_integration/`):**
+- `test_entity_crud.py` - Entity CRUD operations
+- `test_authentication.py` - JWT authentication flows
+- `test_file_upload.py` - File upload and storage
+- `test_put_endpoint.py` - PUT endpoint validation
+- `test_patch_endpoint.py` - PATCH endpoint validation
+- `test_versioning.py` - SQLAlchemy-Continuum entity history
+- `test_duplicate_detection.py` - MD5-based duplicate detection
+- `test_pagination.py` - Pagination and page size validation
+- `test_user_tracking.py` - User identity tracking
+- `test_admin_endpoints.py` - Administrative operations
+- `test_runtime_config.py` - Runtime configuration updates
+- Plus additional integration tests
+
+**Test Characteristics:**
+- All tests use in-memory SQLite databases (`:memory:`)
+- Isolated test clients with dependency override
+- Fixtures provide JWT tokens with different permission levels
+- Coverage requirement: ≥90% (enforced in pyproject.toml)
+- HTML coverage reports generated in `htmlcov/`
 
 For plugin testing, see [../../docs/store-plugins-testing.md](../../docs/store-plugins-testing.md).
 

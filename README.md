@@ -911,14 +911,14 @@ All error responses include a JSON body with error details.
 
 ### HTTP Status Codes
 
-| Status | Meaning | When It Occurs |
-|--------|---------|----------------|
-| `400 Bad Request` | Invalid request format | Malformed JSON or missing required fields |
-| `401 Unauthorized` | Missing or invalid authentication | No token provided, expired token, invalid token |
-| `403 Forbidden` | Valid token but insufficient permissions | User lacks required permissions |
-| `404 Not Found` | Resource does not exist | Entity ID doesn't exist, invalid endpoint |
-| `422 Unprocessable Entity` | Invalid request data | Invalid field values, constraint violations |
-| `500 Internal Server Error` | Server-side error | Unexpected server error |
+| Status                      | Meaning                                  | When It Occurs                                  |
+| --------------------------- | ---------------------------------------- | ----------------------------------------------- |
+| `400 Bad Request`           | Invalid request format                   | Malformed JSON or missing required fields       |
+| `401 Unauthorized`          | Missing or invalid authentication        | No token provided, expired token, invalid token |
+| `403 Forbidden`             | Valid token but insufficient permissions | User lacks required permissions                 |
+| `404 Not Found`             | Resource does not exist                  | Entity ID doesn't exist, invalid endpoint       |
+| `422 Unprocessable Entity`  | Invalid request data                     | Invalid field values, constraint violations     |
+| `500 Internal Server Error` | Server-side error                        | Unexpected server error                         |
 
 ### Example Error Responses
 
@@ -1128,8 +1128,55 @@ except requests.exceptions.HTTPError as e:
         headers = {"Authorization": f"Bearer {token}"}
 ```
 
+## Future Enhancements
+
+See **[REVIEW.md](./REVIEW.md)** for detailed code review findings and prioritized improvement roadmap.
+
+### Media Management
+- Support for additional media types (audio, documents)
+- Thumbnail generation and caching
+- Advanced search with full-text indexing
+- Bulk operations (move, delete, tag)
+
+### Job Management
+- Job scheduling with cron-like syntax
+- Job dependencies and workflows
+- Automatic retry with exponential backoff
+- Job result caching
+
+### Intelligence & Search
+- Advanced similarity search with combined embeddings (CLIP + DINO)
+- Face clustering and automatic person detection
+- Object detection and tagging
+- Scene classification
+
+### Performance
+- Redis caching for frequently accessed entities
+- Database connection pooling optimization
+- Lazy loading for large collections
+- Pagination improvements with cursor-based navigation
+
+### Security
+- Rate limiting for API endpoints
+- File upload size limits and validation
+- Content-type validation
+- Malware scanning integration
+
+### Monitoring
+- Prometheus metrics export
+- Job queue depth monitoring
+- Worker health tracking
+- API endpoint latency tracking
+
+### Storage
+- S3-compatible object storage support
+- Storage quota management
+- Automatic archival of old media
+- Storage cost optimization
+
 ## Documentation
 
+- **[REVIEW.md](./REVIEW.md)** - Comprehensive code review with 86+ actionable issues and fixes
 - **[INTERNALS.md](./INTERNALS.md)** - Developer documentation, architecture, contributing guide
 - **[tests/README.md](./tests/README.md)** - Testing guide with fixtures and patterns
 - **[Architecture Overview](../../docs/ARCHITECTURE.md)** - System-wide architecture and inter-service communication
