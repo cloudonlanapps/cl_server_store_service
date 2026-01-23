@@ -12,6 +12,7 @@ from loguru import logger
 from numpy.typing import NDArray
 from pydantic import ValidationError
 
+from store.common.database import with_retry
 from store.common.models import Entity, Face, FaceMatch, ImageIntelligence, KnownPerson
 
 from .config import MInsightConfig
@@ -206,7 +207,7 @@ class JobCallbackHandler:
                         # Create new face with explicit ID
                         face = Face(
                             id=face_id,
-                            image_id=image_id,
+                            entity_id=image_id,
                             bbox=face_data.bbox.model_dump_json(),
                             confidence=face_data.confidence,
                             landmarks=face_data.landmarks.model_dump_json(),
@@ -233,7 +234,11 @@ class JobCallbackHandler:
                     # Continue processing other faces
 
             # Commit all Face records BEFORE submitting jobs
-            db.commit()
+            @with_retry(max_retries=10)
+            def commit_faces():
+                db.commit()
+            
+            commit_faces()
             logger.info(f"Successfully saved {len(saved_faces)} faces for image {image_id}")
 
             # Phase 2: Submit face_embedding jobs (after commit to avoid locks)
@@ -325,11 +330,14 @@ class JobCallbackHandler:
                         )
                         if intelligence:
                             current_ids = intelligence.face_embedding_job_ids or []
-                            # Use casting or direct assignment
-                            # SQLAlchemy might need a copy to detect change for JSON type
                             new_ids = list(current_ids) + face_job_ids
-                            intelligence.face_embedding_job_ids = new_ids
-                            db.commit()
+                            
+                            @with_retry(max_retries=10)
+                            def update_intelligence():
+                                intelligence.face_embedding_job_ids = new_ids
+                                db.commit()
+                            
+                            update_intelligence()
                             logger.info(
                                 f"Updated ImageIntelligence for {image_id} with {len(face_job_ids)} face embedding jobs"
                             )
@@ -665,7 +673,11 @@ class JobCallbackHandler:
                 )
             )
 
-            db.commit()
+            @with_retry(max_retries=10)
+            def finalize_face():
+                db.commit()
+            
+            finalize_face()
             logger.info(f"Successfully processed face embedding for face {face_id}")
 
         except Exception as e:

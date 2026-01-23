@@ -341,10 +341,10 @@ class EntityService:
             # SQLAlchemy-Continuum version objects can be validated via model_validate
             # with from_attributes=True enabled in the schema
             # Create dictionary with required fields
-            version_data = {
-                "transaction_id": version.transaction_id,
-                "updated_date": version.updated_date,
-                "version": idx
+            version_data = {  # pyright: ignore[reportUnknownVariableType]
+                "transaction_id": version.transaction_id,  # pyright: ignore[reportUnknownMemberType]
+                "updated_date": version.updated_date,  # pyright: ignore[reportUnknownMemberType]
+                "version": idx,
             }
             version_info = schemas.VersionInfo.model_validate(version_data)
             result.append(version_info)
@@ -695,10 +695,51 @@ class EntityService:
         return self._entity_to_item(entity)
 
     def delete_all_entities(self) -> None:
-        """Delete all entities from the database."""
-        # This is a dangerous operation, mostly for tests/demo
-        from ..common.models import Entity
+        """Delete all entities and related data from the database."""
+        # This is used for cleanup in tests/admin
+        from sqlalchemy import text
+        from ..common.models import (
+            Entity,
+            Face,
+            EntityJob,
+            ImageIntelligence,
+            EntitySyncState,
+            KnownPerson,
+            FaceMatch,
+        )
+        
+        # 1. Clear intelligence and related tables
+        self.db.query(EntityJob).delete()
+        self.db.query(FaceMatch).delete()
+        self.db.query(Face).delete()
+        self.db.query(ImageIntelligence).delete()
+        self.db.query(KnownPerson).delete()
+        
+        # 2. Clear versioning and transaction metadata (using raw SQL for Continuum tables)
+        # Sequence of deletion matters for FKs
+        tables_to_clear = [
+            "entities_version",
+            "known_persons_version",
+            "transaction_changes",
+            "transaction",
+        ]
+        for table in tables_to_clear:
+            try:
+                self.db.execute(text(f"DELETE FROM {table}"))
+            except Exception as e:
+                logger.warning(f"Failed to clear Continuum table {table}: {e}")
 
-        # 1. Delete all records from database
-        _ = self.db.query(Entity).delete()
-        _ = self.db.commit()
+        # 3. Delete all records from main Entity table
+        self.db.query(Entity).delete()
+        
+        # 4. Reset sync state and sequences
+        sync_state = self.db.query(EntitySyncState).filter(EntitySyncState.id == 1).first()
+        if sync_state:
+            sync_state.last_version = 0
+        
+        try:
+            self.db.execute(text("DELETE FROM sqlite_sequence"))
+        except Exception as e:
+            logger.debug(f"Note: sqlite_sequence clear failed (common if no AUTOINCREMENT used yet): {e}")
+
+        self.db.commit()

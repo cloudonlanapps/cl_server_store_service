@@ -9,6 +9,7 @@ from cl_client.models import OnJobResponseCallback
 from loguru import logger
 
 from store.common import Entity, EntityJob, Face
+from store.common.database import with_retry
 from store.common.storage import StorageService
 
 from .schemas import EntityVersionData
@@ -84,18 +85,21 @@ class JobSubmissionService:
 
             db = SessionLocal()
             try:
-                now = self._now_timestamp()
-                entity_job = EntityJob(
-                    image_id=entity.id,
-                    job_id=job_response.job_id,
-                    task_type="face_detection",
-                    status="queued",
-                    created_at=now,
-                    updated_at=now,
-                )
-                db.add(entity_job)
-                db.commit()
-
+                @with_retry(max_retries=10)
+                def save_job():
+                    now = self._now_timestamp()
+                    entity_job = EntityJob(
+                        entity_id=entity.id,
+                        job_id=job_response.job_id,
+                        task_type="face_detection",
+                        status="queued",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    db.add(entity_job)
+                    db.commit()
+                
+                save_job()
                 logger.info(
                     f"Submitted face_detection job {job_response.job_id} for entity {entity.id}"
                 )
@@ -142,7 +146,7 @@ class JobSubmissionService:
             try:
                 now = self._now_timestamp()
                 entity_job = EntityJob(
-                    image_id=entity.id,
+                    entity_id=entity.id,
                     job_id=job_response.job_id,
                     task_type="clip_embedding",
                     status="queued",
@@ -197,7 +201,7 @@ class JobSubmissionService:
             try:
                 now = self._now_timestamp()
                 entity_job = EntityJob(
-                    image_id=entity.id,
+                    entity_id=entity.id,
                     job_id=job_response.job_id,
                     task_type="dino_embedding",
                     status="queued",
@@ -255,7 +259,7 @@ class JobSubmissionService:
                 now = self._now_timestamp()
                 # Track face_embedding jobs under the parent entity
                 entity_job = EntityJob(
-                    image_id=entity.id,  # Use parent image_id
+                    entity_id=entity.id,  # Use parent entity_id
                     job_id=job_response.job_id,
                     task_type="face_embedding",
                     status="queued",
@@ -315,24 +319,25 @@ class JobSubmissionService:
 
         db = SessionLocal()
         try:
-            entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
-            if not entity_job:
-                # This logic changes slightly if we delete records on completion
-                # But currently we keep them?
-                # If not found, just log warning
-                logger.warning(f"Job {job_id} not found in database")
-                return
+            @with_retry(max_retries=10)
+            def do_update():
+                entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
+                if not entity_job:
+                    logger.warning(f"Job {job_id} not found in database")
+                    return
 
-            entity_job.status = status
-            entity_job.updated_at = self._now_timestamp()
+                entity_job.status = status
+                entity_job.updated_at = self._now_timestamp()
 
-            if status in ["completed", "failed"]:
-                entity_job.completed_at = self._now_timestamp()
+                if status in ["completed", "failed"]:
+                    entity_job.completed_at = self._now_timestamp()
 
-            if error_message:
-                entity_job.error_message = error_message
+                if error_message:
+                    entity_job.error_message = error_message
 
-            db.commit()
+                db.commit()
+            
+            do_update()
             logger.debug(f"Updated job {job_id} status to {status}")
         except Exception as e:
             logger.error(f"Failed to update job {job_id} status: {e}")

@@ -299,10 +299,12 @@ async def patch_entity(
     # Create body object from form fields
     # Handle type conversions for form data (strings to proper types)
     patch_data = {}
-    if label is not None:
-        patch_data["label"] = label
-    if description is not None:
-        patch_data["description"] = description
+    if "label" in form_keys:
+        label_val = form_data.get("label")
+        patch_data["label"] = label_val if label_val != "" else None
+    if "description" in form_keys:
+        description_val = form_data.get("description")
+        patch_data["description"] = description_val if description_val != "" else None
     # Check if parent_id was actually sent (even as empty string)
     _ = parent_id
     if "parent_id" in form_keys:

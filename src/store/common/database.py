@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Generator
 
+from loguru import logger
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.orm import Session, sessionmaker
@@ -48,7 +49,7 @@ def enable_wal_mode(
             cursor.execute("PRAGMA temp_store=MEMORY")
             cursor.execute("PRAGMA mmap_size=30000000000")
             cursor.execute("PRAGMA wal_autocheckpoint=1000")
-            cursor.execute("PRAGMA busy_timeout=10000")
+            cursor.execute("PRAGMA busy_timeout=60000")
 
         # Always enable foreign keys for all SQLite databases (memory or file-based)
         cursor.execute("PRAGMA foreign_keys=ON")
@@ -158,3 +159,27 @@ def get_db_session(
 def get_db() -> Generator[Session, None, None]:
     """Get database session for FastAPI dependency injection."""
     yield from get_db_session(SessionLocal)
+
+def with_retry(max_retries: int = 5, initial_delay: float = 0.5):
+    """Decorator to retry a function on SQLite locking errors."""
+    import time
+    from sqlalchemy.exc import OperationalError
+
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            last_error = None
+            delay = initial_delay
+            for i in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except OperationalError as e:
+                    if "database is locked" in str(e).lower():
+                        last_error = e
+                        logger.warning(f"Database locked, retrying {i+1}/{max_retries} after {delay}s...")
+                        time.sleep(delay)
+                        delay *= 2  # Exponential backoff
+                    else:
+                        raise e
+            raise last_error
+        return wrapper
+    return decorator

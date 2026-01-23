@@ -194,8 +194,7 @@ class Face(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     # Foreign key to Image (Entity)
-    image_id: Mapped[int] = mapped_column(
-        "entity_id",
+    entity_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("entities.id", ondelete="CASCADE"),
         nullable=False,
@@ -228,7 +227,7 @@ class Face(Base):
 
     @override
     def __repr__(self) -> str:
-        return f"<Face(id={self.id}, image_id={self.image_id}, confidence={self.confidence})>"
+        return f"<Face(id={self.id}, entity_id={self.entity_id}, confidence={self.confidence})>"
 
     def get_file_path(self, storage_service: StorageService) -> Path:
         """Resolve absolute file path using storage service.
@@ -253,8 +252,7 @@ class EntityJob(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Foreign key to Image (Entity)
-    image_id: Mapped[int] = mapped_column(
-        "entity_id",
+    entity_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("entities.id", ondelete="CASCADE"),
         nullable=False,

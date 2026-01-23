@@ -246,27 +246,27 @@ class MediaInsight:
                 intelligence.version = version_val
 
             session.commit()
-
-            # Trigger async jobs
-            await self._trigger_async_jobs(entity_version, session)
-
-            logger.info(f"Image intelligence jobs triggered for {entity_id}")
+            logger.info(f"Image intelligence record created/updated for {entity_id}")
 
         except Exception as e:
             logger.error(f"Failed to enqueue image {entity_id} for intelligence: {e}")
             session.rollback()
+            return
         finally:
             session.close()
 
-    async def _trigger_async_jobs(self, entity: EntityVersionData, session: Session) -> None:
+        # Trigger async jobs AFTER closing the enqueue session to reduce lock duration
+        try:
+            await self._trigger_async_jobs(entity_version)
+            logger.info(f"Image intelligence jobs triggered for {entity_id}")
+        except Exception as e:
+            logger.error(f"Failed to trigger jobs for image {entity_id}: {e}")
+
+    async def _trigger_async_jobs(self, entity: EntityVersionData) -> None:
         """Trigger face detection, CLIP, and DINO embedding jobs for an entity version.
 
         Args:
             entity: Entity version data
-            session: Active DB session (allows updating ImageIntelligence within same tx or new one)
-                     Note: If called from _enqueue_image, session is already committed.
-                     We should probably use a fresh session or reuse carefully.
-                     Current design in processing_service used self.db which was passed in create().
         """
         if not self._initialized or not self.job_service or not self.callback_handler:
             logger.warning("Services not initialized, attempting initialization")
@@ -348,11 +348,10 @@ class MediaInsight:
         )
 
         # Update ImageIntelligence with job IDs
-        # We need to perform a DB write.
-        # The session passed to this method might be closed?
-        # In _enqueue_image: session.commit() is called, then _trigger is called, then finally closed.
-        # So session is still usable for new transaction.
+        if not database.SessionLocal:
+            raise RuntimeError("Database not initialized")
 
+        session = database.SessionLocal()
         try:
             # Re-query using primary key (image_id)
             intelligence = (
@@ -369,6 +368,8 @@ class MediaInsight:
         except Exception as e:
             logger.error(f"Failed to update ImageIntelligence job IDs for {entity.id}: {e}")
             session.rollback()
+        finally:
+            session.close()
 
     def _get_last_version(self) -> int:
         """Get last processed version from sync state."""

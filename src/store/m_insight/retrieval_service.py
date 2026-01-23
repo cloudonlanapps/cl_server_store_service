@@ -87,14 +87,14 @@ class IntelligenceRetrieveService:
     def get_entity_faces(self, entity_id: int) -> list[FaceResponse]:
         """Get all faces detected in an entity."""
         self._get_entity_or_raise(entity_id)
-        faces = self.db.query(Face).filter(Face.image_id == entity_id).all()
+        faces = self.db.query(Face).filter(Face.entity_id == entity_id).all()
 
         results: list[FaceResponse] = []
         for face in faces:
             results.append(
                 FaceResponse(
                     id=face.id,
-                    image_id=face.image_id,
+                    image_id=face.entity_id,
                     bbox=BBox.model_validate_json(face.bbox),
                     confidence=face.confidence,
                     landmarks=FaceLandmarks.model_validate_json(face.landmarks),
@@ -108,14 +108,14 @@ class IntelligenceRetrieveService:
     def get_entity_jobs(self, entity_id: int) -> list[EntityJobResponse]:
         """Get all jobs for an entity."""
         self._get_entity_or_raise(entity_id)
-        jobs = self.db.query(EntityJob).filter(EntityJob.image_id == entity_id).all()
+        jobs = self.db.query(EntityJob).filter(EntityJob.entity_id == entity_id).all()
 
         results: list[EntityJobResponse] = []
         for job in jobs:
             results.append(
                 EntityJobResponse(
                     id=job.id,
-                    image_id=job.image_id,
+                    image_id=job.entity_id,
                     job_id=job.job_id,
                     task_type=job.task_type,
                     status=job.status,
@@ -274,7 +274,7 @@ class IntelligenceRetrieveService:
             results.append(
                 FaceResponse(
                     id=face.id,
-                    image_id=face.image_id,
+                    image_id=face.entity_id,
                     bbox=BBox.model_validate_json(face.bbox),
                     confidence=face.confidence,
                     landmarks=FaceLandmarks.model_validate_json(face.landmarks),
@@ -299,7 +299,7 @@ class IntelligenceRetrieveService:
             if matched_face:
                 matched_face_response = FaceResponse(
                     id=matched_face.id,
-                    image_id=matched_face.image_id,
+                    image_id=matched_face.entity_id,
                     bbox=BBox.model_validate_json(matched_face.bbox),
                     confidence=matched_face.confidence,
                     landmarks=FaceLandmarks.model_validate_json(matched_face.landmarks),
@@ -373,7 +373,7 @@ class IntelligenceRetrieveService:
                 if face:
                     face_response = FaceResponse(
                         id=face.id,
-                        image_id=face.image_id,
+                        image_id=face.entity_id,
                         bbox=BBox.model_validate_json(face.bbox),
                         confidence=face.confidence,
                         landmarks=FaceLandmarks.model_validate_json(face.landmarks),
