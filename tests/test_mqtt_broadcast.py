@@ -99,7 +99,7 @@ def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt
     from paho.mqtt.enums import CallbackAPIVersion
 
     config = client.app.state.config
-    mqtt_server = mqtt_config["server"]
+    mqtt_broker = mqtt_config["server"]
     mqtt_port = mqtt_config["port"]
     topic = f"store/{config.port}/items"
 
@@ -118,7 +118,7 @@ def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt
     subscriber.on_connect = on_connect
     subscriber.on_message = on_message
 
-    subscriber.connect(mqtt_server, mqtt_port)
+    subscriber.connect(mqtt_broker, mqtt_port)
     subscriber.loop_start()
 
     try:
@@ -172,7 +172,7 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
     from paho.mqtt.enums import CallbackAPIVersion
 
     config = client.app.state.config
-    mqtt_server = mqtt_config["server"]
+    mqtt_broker = mqtt_config["server"]
     mqtt_port = mqtt_config["port"]
     topic = f"store/{config.port}/items"
 
@@ -191,7 +191,7 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
     subscriber.on_connect = on_connect
     subscriber.on_message = on_message
 
-    subscriber.connect(mqtt_server, mqtt_port)
+    subscriber.connect(mqtt_broker, mqtt_port)
     subscriber.loop_start()
 
     try:

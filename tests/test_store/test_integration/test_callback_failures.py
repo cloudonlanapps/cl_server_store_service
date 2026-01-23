@@ -23,7 +23,7 @@ def mock_m_insight_config(mock_store_config):
         compute_username="admin",
         compute_password="password",
         qdrant_url="http://qdrant",
-        mqtt_server="localhost",
+        mqtt_broker="localhost",
         mqtt_port=1883
     )
 

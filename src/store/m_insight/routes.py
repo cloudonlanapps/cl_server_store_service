@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
-from sqlalchemy.orm import Session
 
 from store.common.auth import UserPayload, require_permission
-from store.common.database import get_db
-from store.store.config import StoreConfig
-
-# from . import models as intel_models
 from . import schemas as intel_schemas
-from .dependencies import get_config, get_intelligence_service
+from .dependencies import get_intelligence_service
 from .retrieval_service import IntelligenceRetrieveService, ResourceNotFoundError
 
 router = APIRouter(tags=["intelligence"])
@@ -24,7 +19,6 @@ router = APIRouter(tags=["intelligence"])
 )
 async def get_entity_faces(
     entity_id: int = Path(..., title="Entity Id"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> list[intel_schemas.FaceResponse]:
@@ -46,7 +40,6 @@ async def get_entity_faces(
 )
 async def download_face_embedding(
     face_id: int = Path(..., title="Face Id"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ):
@@ -75,7 +68,6 @@ async def download_face_embedding(
 )
 async def download_entity_clip_embedding(
     entity_id: int = Path(..., title="Entity Id"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ):
@@ -106,7 +98,6 @@ async def download_entity_clip_embedding(
 )
 async def download_entity_dino_embedding(
     entity_id: int = Path(..., title="Entity Id"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ):
@@ -137,7 +128,6 @@ async def download_entity_dino_embedding(
 )
 async def get_entity_jobs(
     entity_id: int = Path(..., title="Entity Id"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> list[intel_schemas.EntityJobResponse]:
@@ -162,16 +152,16 @@ async def find_similar_images(
     limit: int = Query(5, ge=1, le=50, description="Maximum number of results"),
     score_threshold: float = Query(0.85, ge=0.0, le=1.0, description="Minimum similarity score"),
     include_details: bool = Query(False, description="Include entity details in results"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
-    config: StoreConfig = Depends(get_config),
 ) -> intel_schemas.SimilarImagesResponse:
     """Find similar images using CLIP embeddings."""
     _ = user
 
     try:
-        results = service.search_similar_images(entity_id, limit, score_threshold)
+        results = service.search_similar_images(
+            entity_id, limit, score_threshold, include_details=include_details
+        )
     except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Entity not found")
 
@@ -180,14 +170,6 @@ async def find_similar_images(
             status_code=404,
             detail="No similar images found. Entity may not have an embedding yet.",
         )
-
-    # Optionally include entity details
-    if include_details:
-        from store.store.service import EntityService
-
-        entity_service = EntityService(db, config)
-        for result in results:
-            result.entity = entity_service.get_entity_by_id(result.image_id)
 
     return intel_schemas.SimilarImagesResponse(
         results=results,
@@ -206,7 +188,6 @@ async def find_similar_faces(
     face_id: int = Path(..., title="Face Id"),
     limit: int = Query(5, ge=1, le=50, description="Maximum number of results"),
     threshold: float = Query(0.7, ge=0.0, le=1.0, description="Minimum similarity score"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> intel_schemas.SimilarFacesResponse:
@@ -239,7 +220,6 @@ async def find_similar_faces(
 )
 async def get_face_matches(
     face_id: int = Path(..., title="Face Id"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> list[intel_schemas.FaceMatchResult]:
@@ -260,7 +240,6 @@ async def get_face_matches(
     operation_id="get_all_known_persons",
 )
 async def get_all_known_persons(
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> list[intel_schemas.KnownPersonResponse]:
@@ -278,7 +257,6 @@ async def get_all_known_persons(
 )
 async def get_known_person(
     person_id: int = Path(..., title="Person Id"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> intel_schemas.KnownPersonResponse:
@@ -301,7 +279,6 @@ async def get_known_person(
 )
 async def get_person_faces(
     person_id: int = Path(..., title="Person Id"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> list[intel_schemas.FaceResponse]:
@@ -324,7 +301,6 @@ async def get_person_faces(
 async def update_person_name(
     person_id: int = Path(..., title="Person Id"),
     body: intel_schemas.UpdatePersonNameRequest = Body(...),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
 ) -> intel_schemas.KnownPersonResponse:

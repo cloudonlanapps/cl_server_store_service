@@ -1,21 +1,25 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, Field
-
-if TYPE_CHECKING:
-    from store.common.storage import StorageService
-
+import numpy as np
 from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
+from numpy.typing import NDArray
+from pydantic import BaseModel, ConfigDict, Field
+from qdrant_client.http.models.models import Payload
+from qdrant_client.models import StrictInt
 
-from store.common.schemas import Item
+from store.common.schemas import (
+    Item as Item,
+    MInsightStatus as MInsightStatus,
+)
+from store.common.storage import StorageService
 
 
 # Processing and Entity schemas
 class JobSubmissionStatus(BaseModel):
     """Status of job submissions for an entity (return value)."""
+
     face_detection_job_id: str | None = None
     clip_job_id: str | None = None
     dino_job_id: str | None = None
@@ -23,7 +27,7 @@ class JobSubmissionStatus(BaseModel):
 
 class EntityVersionData(BaseModel):
     """Pydantic model for Entity version data from SQLAlchemy-Continuum.
-    
+
     This represents all fields from an Entity version record,
     matching the Item schema for use in mInsight processing.
     """
@@ -63,7 +67,9 @@ class EntityVersionData(BaseModel):
     # Version tracking (from SQLAlchemy-Continuum)
     transaction_id: int | None = None
 
-    model_config = ConfigDict(from_attributes=True)  # Allow creation from ORM objects
+    model_config: ConfigDict = ConfigDict(  # pyright: ignore[reportIncompatibleVariableOverride]
+        from_attributes=True
+    )  # Allow creation from ORM objects
 
     def get_file_path(self, storage_service: StorageService) -> Path:
         """Resolve absolute file path using storage service.
@@ -79,26 +85,6 @@ class EntityVersionData(BaseModel):
         return storage_service.get_absolute_path(self.file_path)
 
 
-class MInsightStartPayload(BaseModel):
-    """Payload for mInsight/start topic."""
-
-    version_start: int
-    version_end: int
-    timestamp: int
-
-
-class MInsightStopPayload(BaseModel):
-    """Payload for mInsight/stop topic."""
-
-    processed_count: int
-    timestamp: int
-
-
-class MInsightStatusPayload(BaseModel):
-    """Payload for mInsight status heartbeat."""
-
-    status: str
-    timestamp: int
 
 
 class FaceResponse(BaseModel):
@@ -203,3 +189,24 @@ class SimilarFacesResponse(BaseModel):
 
     results: list[SimilarFacesResult] = Field(..., description="List of similar faces")
     query_face_id: int = Field(..., description="Query face ID")
+
+
+class StoreItem(BaseModel):
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)  # pyright: ignore[reportIncompatibleVariableOverride]
+    id: StrictInt
+    embedding: NDArray[np.float32]
+    payload: Payload | None
+
+
+class SearchPreferences(BaseModel):
+    with_payload: bool = True
+    with_vectors: bool = True
+    score_threshold: float = 0.85
+
+
+class SearchResult(BaseModel):
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)  # pyright: ignore[reportIncompatibleVariableOverride]
+    id: int
+    embedding: NDArray[np.float32]
+    score: float
+    payload: Payload | None

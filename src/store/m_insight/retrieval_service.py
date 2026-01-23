@@ -8,16 +8,31 @@ from sqlalchemy.orm import Session
 from store.common.models import EntityJob, Face, FaceMatch, KnownPerson
 from store.store.config import StoreConfig
 
-from . import schemas
-from .vector_stores import SearchPreferences, get_clip_store, get_dino_store, get_face_store
+from .schemas import (
+    EntityJobResponse,
+    FaceMatchResult,
+    FaceResponse,
+    KnownPersonResponse,
+    SearchPreferences,
+    SimilarFacesResult,
+    SimilarImageDinoResult,
+    SimilarImageResult,
+    SimilarImagesDinoResponse,
+)
+from .vector_stores import (
+    QdrantVectorStore,
+    get_clip_store,
+    get_dino_store,
+    get_face_store,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class ResourceNotFoundError(Exception):
     """Raised when a requested resource is not found."""
-    pass
 
+    pass
 
 
 class IntelligenceRetrieveService:
@@ -26,6 +41,12 @@ class IntelligenceRetrieveService:
     This service depends only on the database and StoreConfig (which contains Qdrant settings),
     avoiding the need for ML Compute/Auth credentials in the Store process.
     """
+
+    qdrant_store: QdrantVectorStore
+    face_store: QdrantVectorStore
+    dino_store: QdrantVectorStore
+    db: Session
+    config: StoreConfig
 
     def __init__(self, db: Session, config: StoreConfig):
         """Initialize the intelligence retrieval service."""
@@ -50,27 +71,28 @@ class IntelligenceRetrieveService:
     def _get_entity_or_raise(self, entity_id: int) -> None:
         """Check if entity exists, raise exception if not."""
         from store.common.models import Entity
-        exists = self.db.query(Entity.id).filter(Entity.id == entity_id).scalar()
+
+        exists = self.db.query(Entity.id).filter(Entity.id == entity_id).scalar()  # pyright: ignore[reportAny]
         if not exists:
             raise ResourceNotFoundError("Entity not found")
 
     def _get_face_or_raise(self, face_id: int) -> None:
         """Check if face exists, raise exception if not."""
         from store.common.models import Face
-        exists = self.db.query(Face.id).filter(Face.id == face_id).scalar()
+
+        exists = self.db.query(Face.id).filter(Face.id == face_id).scalar()  # pyright: ignore[reportAny]
         if not exists:
             raise ResourceNotFoundError("Face not found")
 
-
-    def get_entity_faces(self, entity_id: int) -> list[schemas.FaceResponse]:
+    def get_entity_faces(self, entity_id: int) -> list[FaceResponse]:
         """Get all faces detected in an entity."""
         self._get_entity_or_raise(entity_id)
         faces = self.db.query(Face).filter(Face.image_id == entity_id).all()
 
-        results: list[schemas.FaceResponse] = []
+        results: list[FaceResponse] = []
         for face in faces:
             results.append(
-                schemas.FaceResponse(
+                FaceResponse(
                     id=face.id,
                     image_id=face.image_id,
                     bbox=BBox.model_validate_json(face.bbox),
@@ -83,15 +105,15 @@ class IntelligenceRetrieveService:
             )
         return results
 
-    def get_entity_jobs(self, entity_id: int) -> list[schemas.EntityJobResponse]:
+    def get_entity_jobs(self, entity_id: int) -> list[EntityJobResponse]:
         """Get all jobs for an entity."""
         self._get_entity_or_raise(entity_id)
         jobs = self.db.query(EntityJob).filter(EntityJob.image_id == entity_id).all()
 
-        results: list[schemas.EntityJobResponse] = []
+        results: list[EntityJobResponse] = []
         for job in jobs:
             results.append(
-                schemas.EntityJobResponse(
+                EntityJobResponse(
                     id=job.id,
                     image_id=job.image_id,
                     job_id=job.job_id,
@@ -107,8 +129,12 @@ class IntelligenceRetrieveService:
         return results
 
     def search_similar_images(
-        self, entity_id: int, limit: int = 5, score_threshold: float = 0.85
-    ) -> list[schemas.SimilarImageResult]:
+        self,
+        entity_id: int,
+        limit: int = 5,
+        score_threshold: float = 0.85,
+        include_details: bool = False,
+    ) -> list[SimilarImageResult]:
         """Search for similar images using CLIP embeddings."""
         self._get_entity_or_raise(entity_id)
 
@@ -131,20 +157,30 @@ class IntelligenceRetrieveService:
         )
 
         # Filter out the query entity itself and convert to Pydantic
-        filtered_results: list[schemas.SimilarImageResult] = []
+        filtered_results: list[SimilarImageResult] = []
         for result in results:
             if result.id != entity_id:
                 filtered_results.append(
-                    schemas.SimilarImageResult(
+                    SimilarImageResult(
                         image_id=int(result.id),
                         score=float(result.score),
-                        entity=None,  # Will be populated by route handler if requested
+                        entity=None,  # Will be populated below if requested
                     )
                 )
 
-        return filtered_results[:limit]
+        final_results = filtered_results[:limit]
 
-    def get_known_person(self, person_id: int) -> schemas.KnownPersonResponse | None:
+        # Optionally include entity details
+        if include_details and final_results:
+            from store.store.service import EntityService
+
+            entity_service = EntityService(self.db, self.config)
+            for result in final_results:
+                result.entity = entity_service.get_entity_by_id(result.image_id)
+
+        return final_results
+
+    def get_known_person(self, person_id: int) -> KnownPersonResponse | None:
         """Get known person details."""
         person = self.db.query(KnownPerson).filter(KnownPerson.id == person_id).first()
         if not person:
@@ -153,7 +189,7 @@ class IntelligenceRetrieveService:
         # Count faces for this person
         face_count = self.db.query(Face).filter(Face.known_person_id == person_id).count()
 
-        return schemas.KnownPersonResponse(
+        return KnownPersonResponse(
             id=person.id,
             name=person.name,
             created_at=person.created_at,
@@ -163,14 +199,14 @@ class IntelligenceRetrieveService:
 
     def search_similar_images_dino(
         self, entity_id: int, limit: int = 10, threshold: float | None = None
-    ) -> schemas.SimilarImagesDinoResponse:
+    ) -> SimilarImagesDinoResponse:
         """Search for similar images using DINOv2 embeddings."""
         self._get_entity_or_raise(entity_id)
 
         # Get embedding for query image
         item = self.dino_store.get_vector(entity_id)
         if not item:
-            return schemas.SimilarImagesDinoResponse(
+            return SimilarImagesDinoResponse(
                 query_image_id=entity_id,
                 results=[],
             )
@@ -180,38 +216,40 @@ class IntelligenceRetrieveService:
             query_vector=item.embedding,
             limit=limit + 1,  # +1 to account for the query image itself
             search_options=SearchPreferences(
-                score_threshold=threshold if threshold is not None else 0.7  # Default DINO threshold
+                score_threshold=threshold
+                if threshold is not None
+                else 0.7  # Default DINO threshold
             ),
         )
 
-        results: list[schemas.SimilarImageDinoResult] = []
+        results: list[SimilarImageDinoResult] = []
         for result in search_results:
             if result.id == entity_id:
                 continue
 
             results.append(
-                schemas.SimilarImageDinoResult(
+                SimilarImageDinoResult(
                     image_id=int(result.id),
                     score=result.score,
                 )
             )
 
-        return schemas.SimilarImagesDinoResponse(
+        return SimilarImagesDinoResponse(
             query_image_id=entity_id,
             results=results,
         )
 
-    def get_all_known_persons(self) -> list[schemas.KnownPersonResponse]:
+    def get_all_known_persons(self) -> list[KnownPersonResponse]:
         """Get all known persons."""
         persons = self.db.query(KnownPerson).all()
 
-        results: list[schemas.KnownPersonResponse] = []
+        results: list[KnownPersonResponse] = []
         for person in persons:
             # Count faces for this person
             face_count = self.db.query(Face).filter(Face.known_person_id == person.id).count()
 
             results.append(
-                schemas.KnownPersonResponse(
+                KnownPersonResponse(
                     id=person.id,
                     name=person.name,
                     created_at=person.created_at,
@@ -222,19 +260,19 @@ class IntelligenceRetrieveService:
 
         return results
 
-    def get_known_person_faces(self, person_id: int) -> list[schemas.FaceResponse]:
+    def get_known_person_faces(self, person_id: int) -> list[FaceResponse]:
         """Get all faces for a known person."""
         # Check if person exists
-        person_exists = self.db.query(KnownPerson.id).filter(KnownPerson.id == person_id).scalar()
-        if not person_exists:
+        exists = self.db.query(KnownPerson.id).filter(KnownPerson.id == person_id).scalar()  # pyright: ignore[reportAny]
+        if not exists:
             raise ResourceNotFoundError("Known person not found")
 
         faces = self.db.query(Face).filter(Face.known_person_id == person_id).all()
 
-        results: list[schemas.FaceResponse] = []
+        results: list[FaceResponse] = []
         for face in faces:
             results.append(
-                schemas.FaceResponse(
+                FaceResponse(
                     id=face.id,
                     image_id=face.image_id,
                     bbox=BBox.model_validate_json(face.bbox),
@@ -248,18 +286,18 @@ class IntelligenceRetrieveService:
 
         return results
 
-    def get_face_matches(self, face_id: int) -> list[schemas.FaceMatchResult]:
+    def get_face_matches(self, face_id: int) -> list[FaceMatchResult]:
         """Get all match records for a face."""
         self._get_face_or_raise(face_id)
         matches = self.db.query(FaceMatch).filter(FaceMatch.face_id == face_id).all()
 
-        results: list[schemas.FaceMatchResult] = []
+        results: list[FaceMatchResult] = []
         for match in matches:
             # Optionally load matched face details
             matched_face = self.db.query(Face).filter(Face.id == match.matched_face_id).first()
             matched_face_response = None
             if matched_face:
-                matched_face_response = schemas.FaceResponse(
+                matched_face_response = FaceResponse(
                     id=matched_face.id,
                     image_id=matched_face.image_id,
                     bbox=BBox.model_validate_json(matched_face.bbox),
@@ -271,7 +309,7 @@ class IntelligenceRetrieveService:
                 )
 
             results.append(
-                schemas.FaceMatchResult(
+                FaceMatchResult(
                     id=match.id,
                     face_id=match.face_id,
                     matched_face_id=match.matched_face_id,
@@ -283,9 +321,7 @@ class IntelligenceRetrieveService:
 
         return results
 
-    def update_known_person_name(
-        self, person_id: int, name: str
-    ) -> schemas.KnownPersonResponse | None:
+    def update_known_person_name(self, person_id: int, name: str) -> KnownPersonResponse | None:
         """Update known person name."""
         person = self.db.query(KnownPerson).filter(KnownPerson.id == person_id).first()
         if not person:
@@ -307,7 +343,7 @@ class IntelligenceRetrieveService:
 
     def search_similar_faces_by_id(
         self, face_id: int, limit: int = 5, threshold: float = 0.7
-    ) -> list[schemas.SimilarFacesResult]:
+    ) -> list[SimilarFacesResult]:
         """Search for similar faces using face store."""
         self._get_face_or_raise(face_id)
 
@@ -328,14 +364,14 @@ class IntelligenceRetrieveService:
         )
 
         # Filter out the query face itself and convert to Pydantic
-        filtered_results: list[schemas.SimilarFacesResult] = []
+        filtered_results: list[SimilarFacesResult] = []
         for result in results:
             if result.id != face_id:
                 # Optionally load face details
                 face = self.db.query(Face).filter(Face.id == result.id).first()
                 face_response = None
                 if face:
-                    face_response = schemas.FaceResponse(
+                    face_response = FaceResponse(
                         id=face.id,
                         image_id=face.image_id,
                         bbox=BBox.model_validate_json(face.bbox),
@@ -347,7 +383,7 @@ class IntelligenceRetrieveService:
                     )
 
                 filtered_results.append(
-                    schemas.SimilarFacesResult(
+                    SimilarFacesResult(
                         face_id=int(result.id),
                         score=float(result.score),
                         known_person_id=(
@@ -359,16 +395,15 @@ class IntelligenceRetrieveService:
 
         return filtered_results[:limit]
 
-
     def get_face_embedding_buffer(self, face_id: int):
         """Get face embedding as a numpy buffer.
-        
+
         Args:
             face_id: ID of the face
-            
+
         Returns:
             BytesIO buffer containing the .npy array
-            
+
         Raises:
             ResourceNotFoundError: If face or embedding not found
         """
@@ -384,18 +419,18 @@ class IntelligenceRetrieveService:
 
         buffer = io.BytesIO()
         np.save(buffer, point.embedding)
-        buffer.seek(0)
+        _ = buffer.seek(0)
         return buffer
 
     def get_clip_embedding_buffer(self, entity_id: int):
         """Get CLIP embedding as a numpy buffer.
-        
+
         Args:
             entity_id: ID of the entity
-            
+
         Returns:
             BytesIO buffer containing the .npy array
-            
+
         Raises:
             ResourceNotFoundError: If entity or embedding not found
         """
@@ -411,18 +446,18 @@ class IntelligenceRetrieveService:
 
         buffer = io.BytesIO()
         np.save(buffer, point.embedding)
-        buffer.seek(0)
+        _ = buffer.seek(0)
         return buffer
 
     def get_dino_embedding_buffer(self, entity_id: int):
         """Get DINO embedding as a numpy buffer.
-        
+
         Args:
             entity_id: ID of the entity
-            
+
         Returns:
             BytesIO buffer containing the .npy array
-            
+
         Raises:
             ResourceNotFoundError: If entity or embedding not found
         """
@@ -438,5 +473,5 @@ class IntelligenceRetrieveService:
 
         buffer = io.BytesIO()
         np.save(buffer, point.embedding)
-        buffer.seek(0)
+        _ = buffer.seek(0)
         return buffer

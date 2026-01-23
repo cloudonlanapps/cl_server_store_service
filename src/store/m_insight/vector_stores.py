@@ -7,10 +7,8 @@ from typing import cast, override
 import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
-from pydantic import BaseModel, ConfigDict
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import HnswConfigDiff, PointStruct
-from qdrant_client.http.models.models import Payload
 from qdrant_client.models import (
     Distance,
     OptimizersConfigDiff,
@@ -23,26 +21,7 @@ from qdrant_client.models import (
     VectorStructOutput,
 )
 
-
-class StoreItem(BaseModel):
-    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
-    id: StrictInt
-    embedding: NDArray[np.float32]
-    payload: Payload | None
-
-
-class SearchPreferences(BaseModel):
-    with_payload: bool = True
-    with_vectors: bool = True
-    score_threshold: float = 0.85
-
-
-class SearchResult(BaseModel):
-    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
-    id: int
-    embedding: NDArray[np.float32]
-    score: float
-    payload: Payload | None
+from .schemas import SearchPreferences, SearchResult, StoreItem
 
 
 class StoreInterface[StoreItemT, SearchOptionsT, SearchResultT]:
@@ -58,18 +37,21 @@ class StoreInterface[StoreItemT, SearchOptionsT, SearchResultT]:
         """
         Adds a single vector to the store with a given ID and optional payload.
         """
+        _ = item
         raise NotImplementedError
 
     def get_vector(self, id: int) -> StoreItemT | None:
         """
         Retrieves a vector by its ID.
         """
+        _ = id
         raise NotImplementedError
 
-    def delete_vector(self, id: int):
+    def delete_vector(self, id: int) -> None:
         """
         Deletes a vector by its ID.
         """
+        _ = id
         raise NotImplementedError
 
     def search(
@@ -81,8 +63,10 @@ class StoreInterface[StoreItemT, SearchOptionsT, SearchResultT]:
         """
         Searches for similar vectors in the store.
         """
+        _ = query_vector
+        _ = limit
+        _ = search_options
         raise NotImplementedError
-
 
 
 class QdrantVectorStore(StoreInterface[StoreItem, SearchPreferences, SearchResult]):
@@ -110,8 +94,8 @@ class QdrantVectorStore(StoreInterface[StoreItem, SearchPreferences, SearchResul
         """
         self.collection_name: str = collection_name
         self.client: QdrantClient = QdrantClient(url)
-        self.url = url
-        self._vector_size = vector_size # Store for singleton check
+        self.url: str = url
+        self.vector_size: int = vector_size  # Store for singleton check
 
         vector_params = VectorParams(size=vector_size, distance=distance)
         hnsw_params = HnswConfigDiff(m=hnsw_m, ef_construct=hnsw_ef_construct)
@@ -297,9 +281,9 @@ def get_clip_store(url: str, collection_name: str, vector_size: int = 512) -> Qd
     if _clip_store is not None:
         if _clip_store.url != url or _clip_store.collection_name != collection_name:
             raise RuntimeError(
-                f"ClipStore already initialized with different parameters: "
-                f"existing(url={_clip_store.url}, col={_clip_store.collection_name}), "
-                f"requested(url={url}, col={collection_name})"
+                "ClipStore already initialized with different parameters: "
+                + f"existing(url={_clip_store.url}, col={_clip_store.collection_name}), "
+                + f"requested(url={url}, col={collection_name})"
             )
         return _clip_store
 
@@ -308,7 +292,9 @@ def get_clip_store(url: str, collection_name: str, vector_size: int = 512) -> Qd
         url=url,
         vector_size=vector_size,  # Configurable
     )
-    logger.info(f"Initialized ClipStore: url={url}, collection={collection_name}, size={vector_size}")
+    logger.info(
+        f"Initialized ClipStore: url={url}, collection={collection_name}, size={vector_size}"
+    )
 
     return _clip_store
 
@@ -329,9 +315,9 @@ def get_dino_store(url: str, collection_name: str, vector_size: int = 384) -> Qd
     if _dino_store is not None:
         if _dino_store.url != url or _dino_store.collection_name != collection_name:
             raise RuntimeError(
-                f"DinoStore already initialized with different parameters: "
-                f"existing(url={_dino_store.url}, col={_dino_store.collection_name}), "
-                f"requested(url={url}, col={collection_name})"
+                "DinoStore already initialized with different parameters: "
+                + f"existing(url={_dino_store.url}, col={_dino_store.collection_name}), "
+                + f"requested(url={url}, col={collection_name})"
             )
         return _dino_store
 
@@ -340,7 +326,9 @@ def get_dino_store(url: str, collection_name: str, vector_size: int = 384) -> Qd
         url=url,
         vector_size=vector_size,  # Configurable
     )
-    logger.info(f"Initialized DinoStore: url={url}, collection={collection_name}, size={vector_size}")
+    logger.info(
+        f"Initialized DinoStore: url={url}, collection={collection_name}, size={vector_size}"
+    )
 
     return _dino_store
 
@@ -367,12 +355,12 @@ def get_face_store(
         if (
             _face_store.url != url
             or _face_store.collection_name != collection_name
-            or _face_store._vector_size != vector_size
+            or _face_store.vector_size != vector_size
         ):
             raise RuntimeError(
-                f"FaceStore already initialized with different parameters: "
-                f"existing(url={_face_store.url}, col={_face_store.collection_name}, size={_face_store._vector_size}), "
-                f"requested(url={url}, col={collection_name}, size={vector_size})"
+                "FaceStore already initialized with different parameters: "
+                + f"existing(url={_face_store.url}, col={_face_store.collection_name}, size={_face_store.vector_size}), "
+                + f"requested(url={url}, col={collection_name}, size={vector_size})"
             )
         return _face_store
 
@@ -382,6 +370,8 @@ def get_face_store(
         vector_size=vector_size,
         distance=Distance.COSINE,  # For face similarity
     )
-    logger.info(f"Initialized Face Store: url={url}, collection={collection_name}, size={vector_size}")
+    logger.info(
+        f"Initialized Face Store: url={url}, collection={collection_name}, size={vector_size}"
+    )
 
     return _face_store

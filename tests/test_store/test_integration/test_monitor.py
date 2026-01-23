@@ -15,7 +15,7 @@ def mock_store_config(integration_config):
         public_key_path=Path("/tmp/fake/keys/public_key.pem"),
         no_auth=True,
         port=integration_config.store_port,
-        mqtt_server="localhost",
+        mqtt_broker="localhost",
         mqtt_port=1883
     )
 

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import cast
 
+from cl_ml_tools import BroadcasterBase
 from fastapi import (
     APIRouter,
     Depends,
@@ -18,18 +19,16 @@ from fastapi import (
 )
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+
+from store.store.config_service import ConfigService
 
 from ..common import schemas
 from ..common.auth import UserPayload, require_admin, require_permission
-from ..common.database import get_db
-from . import config_service as cfg_service
-from .config import StoreConfig
+from .dependencies import get_broadcaster, get_config_service, get_entity_service, get_monitor
+from .monitor import MInsightMonitor
 from .service import EntityService
 
 router = APIRouter()
-
-
 
 
 @router.get(
@@ -41,7 +40,6 @@ router = APIRouter()
     responses={200: {"model": schemas.PaginatedResponse, "description": "Successful Response"}},
 )
 async def get_entities(
-    request: Request,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
     version: int | None = Query(
@@ -56,15 +54,13 @@ async def get_entities(
     exclude_deleted: bool = Query(
         False, title="Exclude Deleted", description="Whether to exclude soft-deleted entities"
     ),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    service: EntityService = Depends(get_entity_service),
 ) -> schemas.PaginatedResponse:
     """
     Get all entities with pagination.
     """
     _ = user
-    config = cast(StoreConfig, request.app.state.config)
-    service = EntityService(db, config)
     items, total_count = service.get_entities(
         page=page,
         page_size=page_size,
@@ -103,17 +99,16 @@ async def get_entities(
     responses={201: {"model": schemas.Item, "description": "Successful Response"}},
 )
 async def create_entity(
-    request: Request,
     is_collection: bool = Form(..., title="Is Collection"),
     label: str | None = Form(None, title="Label"),
     description: str | None = Form(None, title="Description"),
     parent_id: int | None = Form(None, title="Parent Id"),
     image: UploadFile | None = File(None, title="Image"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
+    service: EntityService = Depends(get_entity_service),
+    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
 ) -> schemas.Item:
-    config = cast(StoreConfig, request.app.state.config)
-    service = EntityService(db, config)
+    config = service.config
 
     # Extract user_id from JWT payload (None in demo mode)
     user_id = user.id if user else None
@@ -137,15 +132,10 @@ async def create_entity(
         item, is_duplicate = service.create_entity(body, file_bytes, filename, user_id)
 
         # Broadcast MQTT event only if this was a new entity (not a duplicate)
-        broadcaster = getattr(request.app.state, "broadcaster", None)
         if broadcaster and item.md5 and not is_duplicate:
             topic = f"store/{config.port}/items"
-            payload = {
-                "id": item.id,
-                "md5": item.md5,
-                "timestamp": int(time.time() * 1000)
-            }
-            broadcaster.publish_event(topic=topic, payload=json.dumps(payload))
+            payload = {"id": item.id, "md5": item.md5, "timestamp": int(time.time() * 1000)}
+            _ = broadcaster.publish_event(topic=topic, payload=json.dumps(payload))
             logger.info(f"Broadcasted creation event for item {item.id} on {topic}")
 
         # Trigger async jobs for images (NON-BLOCKING)
@@ -172,13 +162,10 @@ async def create_entity(
     responses={204: {"description": "All entities deleted successfully"}},
 )
 async def delete_collection(
-    request: Request,
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
+    service: EntityService = Depends(get_entity_service),
 ):
     _ = user
-    config = cast(StoreConfig, request.app.state.config)
-    service = EntityService(db, config)
     service.delete_all_entities()
     # No return statement - FastAPI will return 204 automatically
 
@@ -192,17 +179,14 @@ async def delete_collection(
     responses={200: {"model": schemas.Item, "description": "Successful Response"}},
 )
 async def get_entity(
-    request: Request,
     entity_id: int = Path(..., title="Entity Id"),
     version: int | None = Query(
         None, title="Version", description="Optional version number to retrieve"
     ),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    service: EntityService = Depends(get_entity_service),
 ) -> schemas.Item:
     _ = user
-    config = cast(StoreConfig, request.app.state.config)
-    service = EntityService(db, config)
     item = service.get_entity_by_id(entity_id, version=version)
     if not item:
         if version is not None:
@@ -223,18 +207,17 @@ async def get_entity(
     responses={200: {"model": schemas.Item, "description": "Successful Response"}},
 )
 async def put_entity(
-    request: Request,
     entity_id: int = Path(..., title="Entity Id"),
     is_collection: bool = Form(..., title="Is Collection"),
     label: str = Form(..., title="Label"),
     description: str | None = Form(None, title="Description"),
     parent_id: int | None = Form(None, title="Parent Id"),
     image: UploadFile | None = File(None, title="Image"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
+    service: EntityService = Depends(get_entity_service),
+    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
 ) -> schemas.Item:
-    config = cast(StoreConfig, request.app.state.config)
-    service = EntityService(db, config)
+    config = service.config
 
     # Extract user_id from JWT payload (None in demo mode)
     user_id = user.id if user else None
@@ -264,15 +247,10 @@ async def put_entity(
 
         # Broadcast MQTT event only if file was actually updated (not a duplicate)
         # Note: Broadcaster only emits if a file was actually updated (item.md5 is not None for media)
-        broadcaster = getattr(request.app.state, "broadcaster", None)
         if broadcaster and item.md5 and image and not is_duplicate:
             topic = f"store/{config.port}/items"
-            payload = {
-                "id": item.id,
-                "md5": item.md5,
-                "timestamp": int(time.time() * 1000)
-            }
-            broadcaster.publish_event(topic=topic, payload=json.dumps(payload))
+            payload = {"id": item.id, "md5": item.md5, "timestamp": int(time.time() * 1000)}
+            _ = broadcaster.publish_event(topic=topic, payload=json.dumps(payload))
             logger.info(f"Broadcasted update event for item {item.id} on {topic}")
 
         return item
@@ -308,12 +286,9 @@ async def patch_entity(
     description: str | None = Form(None, title="Description"),
     _parent_id: str = Form("__UNSET__", title="Parent Id"),
     _is_deleted: str = Form("__UNSET__", title="Is Deleted"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
+    service: EntityService = Depends(get_entity_service),
 ) -> schemas.Item:
-    config = cast(StoreConfig, request.app.state.config)
-    service = EntityService(db, config)
-
     # Extract user_id from JWT payload (None in demo mode)
     user_id = user.id if user else None
 
@@ -333,9 +308,9 @@ async def patch_entity(
         # Empty string means set to None, otherwise parse as int
         parent_id_val = form_data.get("parent_id")
         if isinstance(parent_id_val, str) and parent_id_val != "":
-             patch_data["parent_id"] = int(parent_id_val)
+            patch_data["parent_id"] = int(parent_id_val)
         else:
-             patch_data["parent_id"] = None
+            patch_data["parent_id"] = None
     # Check if is_deleted was actually sent
     if "is_deleted" in form_keys:
         # Convert string boolean to actual boolean
@@ -344,7 +319,9 @@ async def patch_entity(
             patch_data["is_deleted"] = is_deleted_val.lower() in ("true", "1", "yes")
 
     # Use model_construct to preserve explicit None values as "set"
-    body = schemas.BodyPatchEntity.model_construct(**patch_data, _fields_set=set(cast(dict[str, object], patch_data).keys()))
+    body = schemas.BodyPatchEntity.model_construct(
+        **patch_data, _fields_set=set(cast(dict[str, object], patch_data).keys())
+    )
 
     item = service.patch_entity(entity_id, body, user_id)
     if not item:
@@ -365,14 +342,11 @@ async def patch_entity(
     },
 )
 async def delete_entity(
-    request: Request,
     entity_id: int,
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
+    service: EntityService = Depends(get_entity_service),
 ):
     _ = user
-    config = cast(StoreConfig, request.app.state.config)
-    service = EntityService(db, config)
 
     # Delete entity (will raise ValueError if not soft-deleted first)
     deleted = service.delete_entity(entity_id)
@@ -391,14 +365,11 @@ async def delete_entity(
     response_model=list[schemas.VersionInfo],
 )
 async def get_entity_versions(
-    request: Request,
     entity_id: int = Path(..., title="Entity Id"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
+    service: EntityService = Depends(get_entity_service),
 ) -> list[schemas.VersionInfo]:
     _ = user
-    config = cast(StoreConfig, request.app.state.config)
-    service = EntityService(db, config)
     versions = service.get_entity_versions(entity_id)
     if not versions:
         raise HTTPException(status_code=404, detail="Entity not found or no versions available")
@@ -415,15 +386,14 @@ async def get_entity_versions(
     responses={200: {"model": schemas.ConfigResponse, "description": "Successful Response"}},
 )
 async def get_config(
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_admin),
+    config_service: ConfigService = Depends(get_config_service),
 ) -> schemas.ConfigResponse:
     """Get current service configuration.
 
     Requires admin access.
     """
     _ = user
-    config_service = cfg_service.ConfigService(db)
 
     # Get config metadata
     metadata = config_service.get_config_metadata("read_auth_enabled")
@@ -458,8 +428,8 @@ async def get_config(
 )
 async def update_guest_mode(
     guest_mode: bool = Form(..., title="Guest Mode"),
-    db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_admin),
+    config_service: ConfigService = Depends(get_config_service),
 ) -> dict[str, bool | str]:
     """Update guest mode configuration.
 
@@ -467,10 +437,6 @@ async def update_guest_mode(
     guest_mode=true means no authentication required.
     guest_mode=false means authentication required.
     """
-
-    from .config_service import ConfigService
-
-    config_service = ConfigService(db)
 
     # Get user ID from JWT
     user_id = user.id if user else None
@@ -498,10 +464,7 @@ class RootResponse(BaseModel):
     response_model=RootResponse,
     operation_id="root_get",
 )
-async def root(db: Session = Depends(get_db)):
-    from .config_service import ConfigService
-
-    config_service = ConfigService(db)
+async def root(config_service: ConfigService = Depends(get_config_service)):
     read_auth_enabled = config_service.get_read_auth_enabled()
     # guestMode is "on" when read_auth is disabled (public read access)
     guest_mode = "off" if read_auth_enabled else "on"
@@ -515,25 +478,14 @@ async def root(db: Session = Depends(get_db)):
     "/m_insight/status",
     tags=["admin"],
     summary="Get MInsight Status",
-    description="Get current status of MInsight processes.",
+    description="Get current status of MInsight processes for the configured port.",
     operation_id="get_m_insight_status",
-    response_model=schemas.MInsightStatusResponse,
+    response_model=schemas.MInsightStatus | None,
 )
-async def get_m_insight_status(request: Request) -> schemas.MInsightStatusResponse:
+async def get_m_insight_status(
+    monitor: MInsightMonitor | None = Depends(get_monitor),
+) -> schemas.MInsightStatus | None:
     """Get MInsight process status."""
-    if hasattr(request.app.state, "monitor"):
-        from .monitor import MInsightMonitor
-        monitor = cast(MInsightMonitor, request.app.state.monitor)
-        status_data = monitor.get_status()
-        
-        processes: list[schemas.MInsightProcessStatus] = []
-        if isinstance(status_data, dict):
-            # If status_data is dict[int, dict], iterate values
-            for data in status_data.values():
-                if isinstance(data, dict):
-                    processes.append(schemas.MInsightProcessStatus.model_validate(data))
-        
-        return schemas.MInsightStatusResponse(processes=processes)
-    return schemas.MInsightStatusResponse(processes=[])
-
-
+    if monitor:
+        return monitor.get_status()
+    return None

@@ -3,17 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, override
 
-# Import shared Base
-from sqlalchemy.orm import DeclarativeBase
-
-
-class Base(DeclarativeBase):
-    """Base class for Store service models."""
-
-    pass
-
-
-from sqlalchemy import ( 
+from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
@@ -23,25 +13,29 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship 
+
+# Import shared Base
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # CRITICAL: Import versioning BEFORE defining models with __versioned__
 # Using absolute import to avoid circular dependency
-import store.common.versioning as _versioning
+import store.common.versioning as _versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 if TYPE_CHECKING:
-    from typing import Any
-
-    from typings.sqlalchemy_continuum import VersionsRelationship
-
     from .storage import StorageService
+
+
+class Base(DeclarativeBase):
+    """Base class for Store service models."""
+
+    pass
 
 
 class Entity(Base):
     """SQLAlchemy model for media entities."""
 
-    __tablename__: str = "entities"
-    __versioned__: dict[object, object] = {}  # Enable SQLAlchemy-Continuum versioning
+    __tablename__ = "entities"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning  # pyright: ignore[reportUnannotatedClassAttribute]
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -90,11 +84,6 @@ class Entity(Base):
         "ImageIntelligence", back_populates="image", uselist=False, cascade="all, delete-orphan"
     )
 
-    # SQLAlchemy-Continuum adds this relationship dynamically
-    if TYPE_CHECKING:
-
-        versions: VersionsRelationship[Any]
-
     @override
     def __repr__(self) -> str:
         return f"<Entity(id={self.id}, label={self.label})>"
@@ -103,7 +92,7 @@ class Entity(Base):
 class ServiceConfig(Base):
     """SQLAlchemy model for service configuration."""
 
-    __tablename__: str = "service_config"
+    __tablename__ = "service_config"  # pyright: ignore[reportUnannotatedClassAttribute]
 
     # Primary key
     key: Mapped[str] = mapped_column(String, primary_key=True)
@@ -126,7 +115,7 @@ class EntitySyncState(Base):
     This is a singleton table with only one row (id=1).
     """
 
-    __tablename__: str = "entity_sync_state"
+    __tablename__ = "entity_sync_state"  # pyright: ignore[reportUnannotatedClassAttribute]
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     last_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -143,7 +132,7 @@ class ImageIntelligence(Base):
     Cascade deletes when parent entity is deleted.
     """
 
-    __tablename__: str = "image_intelligence"
+    __tablename__ = "image_intelligence"  # pyright: ignore[reportUnannotatedClassAttribute]
 
     image_id: Mapped[int] = mapped_column(
         Integer,
@@ -199,7 +188,7 @@ class ImageIntelligence(Base):
 class Face(Base):
     """SQLAlchemy model for detected faces."""
 
-    __tablename__: str = "faces"
+    __tablename__ = "faces"  # pyright: ignore[reportUnannotatedClassAttribute]
 
     # Primary key (derived from image_id and face index)
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -237,10 +226,6 @@ class Face(Base):
     image: Mapped[Entity] = relationship("Entity", back_populates="faces")
     known_person: Mapped[KnownPerson | None] = relationship("KnownPerson", back_populates="faces")
 
-    # SQLAlchemy-Continuum adds this relationship dynamically
-    if TYPE_CHECKING:
-        versions: VersionsRelationship[Any]
-
     @override
     def __repr__(self) -> str:
         return f"<Face(id={self.id}, image_id={self.image_id}, confidence={self.confidence})>"
@@ -262,7 +247,7 @@ class Face(Base):
 class EntityJob(Base):
     """Relationship table connecting entities to compute jobs."""
 
-    __tablename__: str = "entity_jobs"
+    __tablename__ = "entity_jobs"  # pyright: ignore[reportUnannotatedClassAttribute]
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -304,8 +289,8 @@ class EntityJob(Base):
 class KnownPerson(Base):
     """Person identified by face embeddings."""
 
-    __tablename__: str = "known_persons"
-    __versioned__: dict[object, object] = {}  # Enable SQLAlchemy-Continuum versioning
+    __tablename__ = "known_persons"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning # pyright: ignore[reportUnannotatedClassAttribute]
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -320,11 +305,6 @@ class KnownPerson(Base):
     # Relationship to Face
     faces: Mapped[list[Face]] = relationship("Face", back_populates="known_person")
 
-    # SQLAlchemy-Continuum adds this relationship dynamically
-    if TYPE_CHECKING:
-
-        versions: VersionsRelationship[Any]
-
     @override
     def __repr__(self) -> str:
         return f"<KnownPerson(id={self.id}, name={self.name})>"
@@ -333,7 +313,7 @@ class KnownPerson(Base):
 class FaceMatch(Base):
     """Track face similarity matches for audit and debugging."""
 
-    __tablename__: str = "face_matches"
+    __tablename__ = "face_matches"  # pyright: ignore[reportUnannotatedClassAttribute]
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

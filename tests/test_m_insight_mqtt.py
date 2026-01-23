@@ -25,7 +25,7 @@ def test_subscriber(integration_config):
 
     client.on_message = on_message
     port = integration_config.mqtt_port or 1883
-    client.connect(integration_config.mqtt_server, port, 60)
+    client.connect(integration_config.mqtt_broker, port, 60)
     client.loop_start()
     yield client, messages
     client.loop_stop()
@@ -45,7 +45,7 @@ def test_m_insight_worker(
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         store_port=integration_config.store_port,
-        mqtt_server=integration_config.mqtt_server,
+        mqtt_broker=integration_config.mqtt_broker,
         mqtt_port=integration_config.mqtt_port,
         mqtt_topic="test/m_insight_mqtt",
     )
@@ -142,7 +142,7 @@ def test_m_insight_heartbeat_status(
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         store_port=integration_config.store_port,
-        mqtt_server=integration_config.mqtt_server,
+        mqtt_broker=integration_config.mqtt_broker,
         mqtt_port=port,
     )
 

@@ -1,24 +1,23 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
-
-if TYPE_CHECKING:
-    from .config import StoreConfig
+from typing import cast
 
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from store.common.models import Entity, ImageIntelligence
 from store.common import schemas
+from store.common.models import Entity, ImageIntelligence
 from store.common.schemas import (
     BodyCreateEntity,
     BodyPatchEntity,
     BodyUpdateEntity,
     Item,
 )
+
 from ..common.storage import StorageService
+from .config import StoreConfig
 from .media_metadata import MediaMetadataExtractor
 
 
@@ -41,9 +40,7 @@ class EntityService:
         self.db: Session = db
         self.config: StoreConfig = config
         # Use media_storage_dir from config for entity files (organized by date)
-        self.file_storage: StorageService = StorageService(
-            base_dir=str(config.media_storage_dir)
-        )
+        self.file_storage: StorageService = StorageService(base_dir=str(config.media_storage_dir))
         # Initialize metadata extractor
         self.metadata_extractor: MediaMetadataExtractor = MediaMetadataExtractor()
 
@@ -97,9 +94,7 @@ class EntityService:
         # Rule: Parent must exist
         parent = self.db.query(Entity).filter(Entity.id == parent_id).first()
         if not parent:
-            raise ValueError(
-                f"Cannot set parent_id to {parent_id}: parent entity does not exist"
-            )
+            raise ValueError(f"Cannot set parent_id to {parent_id}: parent entity does not exist")
 
         # Rule: Parent must be a collection
         if not parent.is_collection:
@@ -110,9 +105,7 @@ class EntityService:
 
         # Rule: Parent must not be soft-deleted
         if parent.is_deleted:
-            raise ValueError(
-                f"Cannot set parent_id to {parent_id}: parent entity is deleted"
-            )
+            raise ValueError(f"Cannot set parent_id to {parent_id}: parent entity is deleted")
 
         # Rule: Prevent circular hierarchies (only for updates)
         if entity_id is not None:
@@ -125,18 +118,14 @@ class EntityService:
                         + f"a descendant of {entity_id}"
                     )
                 visited.add(current_parent)
-                parent_entity = (
-                    self.db.query(Entity).filter(Entity.id == current_parent).first()
-                )
+                parent_entity = self.db.query(Entity).filter(Entity.id == current_parent).first()
                 current_parent = parent_entity.parent_id if parent_entity else None
 
         # Rule: Max hierarchy depth check (max 10 levels)
         depth = 1  # Starting at depth 1 (the parent)
         current_check = parent_id
         while current_check is not None:
-            parent_ent = (
-                self.db.query(Entity).filter(Entity.id == current_check).first()
-            )
+            parent_ent = self.db.query(Entity).filter(Entity.id == current_check).first()
             if not parent_ent:
                 break
             current_check = parent_ent.parent_id
@@ -180,9 +169,7 @@ class EntityService:
 
         return False
 
-    def _entity_to_item(
-        self, entity: Entity, intelligence_status: str | None = None
-    ) -> Item:
+    def _entity_to_item(self, entity: Entity, intelligence_status: str | None = None) -> Item:
         """
         Convert SQLAlchemy Entity to Pydantic Item schema.
 
@@ -222,8 +209,8 @@ class EntityService:
         page: int = 1,
         page_size: int = 20,
         version: int | None = None,
-        _filter_param: str | None = None,
-        _search_query: str | None = None,
+        filter_param: str | None = None,
+        search_query: str | None = None,
         exclude_deleted: bool = False,
     ) -> tuple[list[Item], int]:
         """
@@ -240,6 +227,8 @@ class EntityService:
         Returns:
             Tuple of (items, total_count)
         """
+        _ = filter_param
+        _ = search_query
         # Join with ImageIntelligence to get status
         query = self.db.query(Entity, ImageIntelligence.status).outerjoin(
             ImageIntelligence, Entity.id == ImageIntelligence.image_id
@@ -247,7 +236,7 @@ class EntityService:
 
         # Apply deleted filter
         if exclude_deleted:
-            query = query.filter(Entity.is_deleted == False) 
+            query = query.filter(Entity.is_deleted == False)  # noqa: E712
 
         # TODO: Implement filtering and search logic
 
@@ -321,15 +310,11 @@ class EntityService:
         # Get the specific version
         # SQLAlchemy-Continuum creates a versions relationship on the model
         if hasattr(entity, "versions"):
-            versions_list = cast(list[Entity], entity.versions.all())
+            versions_list = cast(list[Entity], entity.versions.all())  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             # Versions are 1-indexed for the API
             if 1 <= version <= len(versions_list):
-                version_entity = versions_list[
-                    version - 1
-                ]
-                return self._entity_to_item(
-                    version_entity
-                )
+                version_entity = versions_list[version - 1]
+                return self._entity_to_item(version_entity)
 
         return None
 
@@ -350,9 +335,9 @@ class EntityService:
         if not hasattr(entity, "versions"):
             return []
 
-        versions_list = cast(list[Any], entity.versions.all())
+        versions_list = entity.versions.all()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
         result: list[schemas.VersionInfo] = []
-        for idx, version in enumerate(versions_list, start=1):
+        for idx, version in enumerate(versions_list, start=1):  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
             # SQLAlchemy-Continuum version objects can be validated via model_validate
             # with from_attributes=True enabled in the schema
             version_info = schemas.VersionInfo.model_validate(version)
@@ -614,7 +599,7 @@ class EntityService:
         # Update only provided fields (get values from Pydantic model to preserve types)
         patch_fields = body.model_dump(exclude_unset=True)
         for field_name in patch_fields:
-            value = getattr(body, field_name)
+            value = cast(object, getattr(body, field_name))
             setattr(entity, field_name, value)
 
         entity.updated_date = self._now_timestamp()
@@ -632,7 +617,7 @@ class EntityService:
         When called directly (from API route):
         - Entity MUST already be soft-deleted, otherwise raises ValueError
         - Recursively soft-deletes and hard-deletes all children
-        
+
         When called recursively (from parent's deletion):
         - Auto-soft-deletes the entity if not already soft-deleted
         - Then proceeds with hard deletion
@@ -643,7 +628,7 @@ class EntityService:
 
         Returns:
             True if entity was deleted, False if entity not found
-            
+
         Raises:
             ValueError: If entity is not soft-deleted (only for direct calls)
         """
@@ -685,7 +670,7 @@ class EntityService:
 
         This creates a version record with is_deleted=True for audit trail.
         The entity remains in the database but is marked as deleted.
-        
+
         Note: This does NOT soft-delete children. Children must be explicitly
         soft-deleted or will be soft-deleted automatically during hard deletion.
 
@@ -705,7 +690,6 @@ class EntityService:
 
         return self._entity_to_item(entity)
 
-
     def delete_all_entities(self) -> None:
         """Delete all entities from the database."""
         # This is a dangerous operation, mostly for tests/demo
@@ -714,7 +698,3 @@ class EntityService:
         # 1. Delete all records from database
         _ = self.db.query(Entity).delete()
         _ = self.db.commit()
-
-
-
-

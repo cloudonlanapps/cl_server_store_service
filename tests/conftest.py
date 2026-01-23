@@ -37,7 +37,7 @@ class IntegrationConfig(BaseModel):
     # Kept for backward compat in test calls, but values might be empty strings
     username: str
     password: str
-    mqtt_server: str = "127.0.0.1"
+    mqtt_broker: str = "127.0.0.1"
     mqtt_port: int | None = None
     auth_url: str = "http://127.0.0.1:8010"
     store_port: int = 8011
@@ -136,7 +136,7 @@ def integration_config(request: pytest.FixtureRequest) -> IntegrationConfig:
     """
     username = request.config.getoption("--username")
     password = request.config.getoption("--password")
-    mqtt_server = request.config.getoption("--mqtt-server")
+    mqtt_broker = request.config.getoption("--mqtt-server")
     mqtt_port = request.config.getoption("--mqtt-port")
     auth_url = request.config.getoption("--auth-url")
     store_port = request.config.getoption("--store-port")
@@ -146,7 +146,7 @@ def integration_config(request: pytest.FixtureRequest) -> IntegrationConfig:
     return IntegrationConfig(
         username=str(username) if username else "admin",
         password=str(password) if password else "admin",
-        mqtt_server=str(mqtt_server),
+        mqtt_broker=str(mqtt_broker),
         mqtt_port=mqtt_port,
         auth_url=str(auth_url),
         compute_url=str(compute_url),
@@ -377,7 +377,7 @@ def client(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=False,
         port=random.randint(20000, 30000),
-        mqtt_server=integration_config.mqtt_server,
+        mqtt_broker=integration_config.mqtt_broker,
         mqtt_port=integration_config.mqtt_port,
     )
     app.state.config = store_config
@@ -458,7 +458,7 @@ def auth_client(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=False,
         port=8001,
-        mqtt_server=integration_config.mqtt_server,
+        mqtt_broker=integration_config.mqtt_broker,
         mqtt_port=integration_config.mqtt_port,
     )
     app.state.config = store_config

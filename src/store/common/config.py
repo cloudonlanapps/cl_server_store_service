@@ -1,28 +1,22 @@
 from __future__ import annotations
 
-from argparse import Namespace
 from pathlib import Path
 from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
 
-class BaseConfig(BaseModel, Namespace):
+class BaseConfig(BaseModel):
     """Base configuration shared between Store and MInsight, compliant with Namespace."""
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
         arbitrary_types_allowed=True, validate_assignment=True
     )
 
-    def __init__(self, **kwargs):
-        # Satisfy both BaseModel and Namespace
-        BaseModel.__init__(self, **kwargs)
-        Namespace.__init__(self)
-
     # Paths (populated after CLI parsing by finalize_base)
-    cl_server_dir: Path | None = None
-    media_storage_dir: Path | None = None
-    public_key_path: Path | None = None
+    cl_server_dir: Path
+    media_storage_dir: Path
+    public_key_path: Path
 
     # Auth
     no_auth: bool = False
@@ -36,7 +30,7 @@ class BaseConfig(BaseModel, Namespace):
     face_collection: str = "face_embeddings"
 
     # MQTT configuration
-    mqtt_server: str = "localhost"
+    mqtt_broker: str = "localhost"
     mqtt_port: int | None = None
 
     def finalize_base(self):

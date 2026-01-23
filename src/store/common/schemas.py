@@ -109,18 +109,16 @@ class VersionInfo(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
 
 
-class MInsightProcessStatus(BaseModel):
-    """Status information for a single MInsight process."""
+class MInsightStatus(BaseModel):
+    """Unified status information for a monitored MInsight process."""
 
-    status: str = Field(..., description="Process status (unknown, running, idle)")
-    last_update: int = Field(..., description="Last update timestamp (milliseconds)")
     port: int = Field(..., description="Process port")
-    # MQTT heartbeat can include more fields
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", from_attributes=True)
+    status: str = Field(..., description="Process status (unknown, running, idle, offline)")
+    timestamp: int = Field(..., description="Event timestamp (milliseconds)")
+    version_start: int | None = Field(default=None, description="Start version for current/last job")
+    version_end: int | None = Field(default=None, description="End version for current/last job")
+    processed_count: int | None = Field(default=None, description="Items processed in last job")
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", from_attributes=True)
 
 
-class MInsightStatusResponse(BaseModel):
-    """Response schema for MInsight process status."""
-
-    # Using a list instead of dict for better API compatibility and typing
-    processes: list[MInsightProcessStatus] = Field(..., description="List of monitored processes")

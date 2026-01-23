@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 # CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
 # Using absolute import to avoid circular dependency
-import store.common.versioning as _versioning  
+import store.common.versioning as _versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 from .utils import get_db_url
 
 # Global session factory
-SessionLocal: sessionmaker[Session] | None = None
-engine: Engine | None = None
+SessionLocal: sessionmaker[Session]
+engine: Engine
 
 
 def enable_wal_mode(
@@ -38,7 +38,7 @@ def enable_wal_mode(
         db_list = cursor.fetchall()
         # db_list format: [(seq, name, file), ...]
         # For in-memory: file is '' (empty string)
-        is_memory = any(row[2] == "" for row in db_list)
+        is_memory = any(row[2] == "" for row in db_list)  # pyright: ignore[reportAny]
 
         if not is_memory:
             # Only set WAL mode for file-based databases
@@ -157,6 +157,4 @@ def get_db_session(
 
 def get_db() -> Generator[Session, None, None]:
     """Get database session for FastAPI dependency injection."""
-    if SessionLocal is None:
-        raise RuntimeError("Database not initialized")
     yield from get_db_session(SessionLocal)

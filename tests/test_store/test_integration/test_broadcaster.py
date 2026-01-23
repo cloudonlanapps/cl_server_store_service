@@ -15,7 +15,7 @@ def mock_config(integration_config):
         media_storage_dir=Path("/tmp/fake/media"),
         public_key_path=Path("/tmp/fake/keys/public_key.pem"),
         store_port=integration_config.store_port,
-        mqtt_server="localhost",
+        mqtt_broker="localhost",
         mqtt_port=1883
     )
 

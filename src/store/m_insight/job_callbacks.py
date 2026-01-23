@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import cast
 
+from cl_client import ComputeClient
+from cl_client.models import JobResponse
 from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput
 from loguru import logger
 from numpy.typing import NDArray
@@ -12,14 +14,10 @@ from pydantic import ValidationError
 
 from store.common.models import Entity, Face, FaceMatch, ImageIntelligence, KnownPerson
 
-from .vector_stores import QdrantVectorStore, StoreItem
-
-if TYPE_CHECKING:
-    from cl_client import ComputeClient
-    from cl_client.models import JobResponse
-
-    from .config import MInsightConfig
-    from .job_service import JobSubmissionService
+from .config import MInsightConfig
+from .job_service import JobSubmissionService
+from .schemas import SearchPreferences, StoreItem
+from .vector_stores import QdrantVectorStore
 
 
 class JobCallbackHandler:
@@ -55,9 +53,7 @@ class JobCallbackHandler:
         self.dino_store = dino_store
         self.face_store = face_store
         self.config = config
-        self.job_submission_service: JobSubmissionService | None = (
-            job_submission_service
-        )
+        self.job_submission_service: JobSubmissionService | None = job_submission_service
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -68,9 +64,7 @@ class JobCallbackHandler:
         """
         return int(datetime.now(UTC).timestamp() * 1000)
 
-    async def _download_face_image(
-        self, job_id: str, file_path: str, dest: Path
-    ) -> None:
+    async def _download_face_image(self, job_id: str, file_path: str, dest: Path) -> None:
         """Download face image from job output.
 
         Args:
@@ -113,9 +107,7 @@ class JobCallbackHandler:
 
         return dir_path / filename
 
-    async def handle_face_detection_complete(
-        self, image_id: int, job: JobResponse
-    ) -> None:
+    async def handle_face_detection_complete(self, image_id: int, job: JobResponse) -> None:
         """Handle face detection job completion.
 
         Downloads cropped faces, saves to files, and creates Face records in database.
@@ -147,16 +139,12 @@ class JobCallbackHandler:
             # Query Entity to get its create_date for organizing face files
             entity = db.query(Entity).filter(Entity.id == image_id).first()
             if not entity:
-                logger.error(
-                    f"Entity {image_id} not found for face detection job {job.job_id}"
-                )
+                logger.error(f"Entity {image_id} not found for face detection job {job.job_id}")
                 return
 
             # Extract faces from task_output
             if not full_job.task_output or "faces" not in full_job.task_output:
-                logger.warning(
-                    f"No faces found in job {job.job_id} output for image {image_id}"
-                )
+                logger.warning(f"No faces found in job {job.job_id} output for image {image_id}")
                 return
 
             try:
@@ -197,9 +185,7 @@ class JobCallbackHandler:
                     )
 
                     # Get relative path from MEDIA_STORAGE_DIR
-                    relative_path = face_path.relative_to(
-                        self.config.media_storage_dir
-                    )
+                    relative_path = face_path.relative_to(self.config.media_storage_dir)
 
                     # Generate deterministic face ID: image_id * 10000 + face_index
                     # This prevents duplicates if callback runs multiple times
@@ -215,9 +201,7 @@ class JobCallbackHandler:
                         existing_face.landmarks = face_data.landmarks.model_dump_json()
                         existing_face.file_path = str(relative_path)
                         face = existing_face
-                        logger.debug(
-                            f"Updated existing face {face_id} for image {image_id}"
-                        )
+                        logger.debug(f"Updated existing face {face_id} for image {image_id}")
                     else:
                         # Create new face with explicit ID
                         face = Face(
@@ -230,9 +214,7 @@ class JobCallbackHandler:
                             created_at=self._now_timestamp(),
                         )
                         db.add(face)
-                        logger.debug(
-                            f"Created new face {face_id} for image {image_id}"
-                        )
+                        logger.debug(f"Created new face {face_id} for image {image_id}")
 
                     db.flush()
 
@@ -252,13 +234,11 @@ class JobCallbackHandler:
 
             # Commit all Face records BEFORE submitting jobs
             db.commit()
-            logger.info(
-                f"Successfully saved {len(saved_faces)} faces for image {image_id}"
-            )
+            logger.info(f"Successfully saved {len(saved_faces)} faces for image {image_id}")
 
             # Phase 2: Submit face_embedding jobs (after commit to avoid locks)
             if self.job_submission_service:
-                face_job_ids = []
+                face_job_ids: list[str] = []
                 for face_id, face_path in saved_faces:
                     try:
                         # Capture face_id in closure
@@ -326,21 +306,23 @@ class JobCallbackHandler:
 
                             job_id = await self.job_submission_service.submit_face_embedding(
                                 face=f_obj,
-                                entity=entity, # Passing ORM entity
+                                entity=entity,  # Passing ORM entity
                                 on_complete_callback=face_embedding_callback,
                             )
                             if job_id:
                                 face_job_ids.append(job_id)
 
                     except Exception as e:
-                        logger.error(
-                            f"Failed to submit face_embedding job for face {face_id}: {e}"
-                        )
+                        logger.error(f"Failed to submit face_embedding job for face {face_id}: {e}")
 
                 # Update ImageIntelligence with job IDs
                 if face_job_ids:
                     try:
-                        intelligence = db.query(ImageIntelligence).filter(ImageIntelligence.image_id == image_id).first()
+                        intelligence = (
+                            db.query(ImageIntelligence)
+                            .filter(ImageIntelligence.image_id == image_id)
+                            .first()
+                        )
                         if intelligence:
                             current_ids = intelligence.face_embedding_job_ids or []
                             # Use casting or direct assignment
@@ -348,20 +330,20 @@ class JobCallbackHandler:
                             new_ids = list(current_ids) + face_job_ids
                             intelligence.face_embedding_job_ids = new_ids
                             db.commit()
-                            logger.info(f"Updated ImageIntelligence for {image_id} with {len(face_job_ids)} face embedding jobs")
+                            logger.info(
+                                f"Updated ImageIntelligence for {image_id} with {len(face_job_ids)} face embedding jobs"
+                            )
                     except Exception as e:
-                        logger.error(f"Failed to update ImageIntelligence with face job IDs for {image_id}: {e}")
+                        logger.error(
+                            f"Failed to update ImageIntelligence with face job IDs for {image_id}: {e}"
+                        )
         except Exception as e:
-            logger.error(
-                f"Failed to handle face detection completion for image {image_id}: {e}"
-            )
+            logger.error(f"Failed to handle face detection completion for image {image_id}: {e}")
             db.rollback()
         finally:
             db.close()
 
-    async def handle_clip_embedding_complete(
-        self, image_id: int, job: JobResponse
-    ) -> None:
+    async def handle_clip_embedding_complete(self, image_id: int, job: JobResponse) -> None:
         """Handle CLIP embedding job completion.
 
         Extracts embedding and stores in Qdrant with image_id as point_id.
@@ -411,9 +393,7 @@ class JobCallbackHandler:
                 # Load .npy file (numpy binary format)
                 import numpy as np
 
-                embedding: NDArray[np.float32] = cast(
-                    NDArray[np.float32], np.load(tmp_path)
-                )
+                embedding: NDArray[np.float32] = cast(NDArray[np.float32], np.load(tmp_path))
 
                 # Validate embedding dimension
                 if embedding.shape[0] != 512:
@@ -436,18 +416,12 @@ class JobCallbackHandler:
                 )
             )
 
-            logger.info(
-                f"Successfully stored CLIP embedding for image {image_id} in Qdrant"
-            )
+            logger.info(f"Successfully stored CLIP embedding for image {image_id} in Qdrant")
 
         except Exception as e:
-            logger.error(
-                f"Failed to handle CLIP embedding completion for image {image_id}: {e}"
-            )
+            logger.error(f"Failed to handle CLIP embedding completion for image {image_id}: {e}")
 
-    async def handle_dino_embedding_complete(
-        self, image_id: int, job: JobResponse
-    ) -> None:
+    async def handle_dino_embedding_complete(self, image_id: int, job: JobResponse) -> None:
         """Handle DINOv2 embedding job completion.
 
         Extracts embedding and stores in Qdrant (DINO collection) with image_id as point_id.
@@ -496,9 +470,7 @@ class JobCallbackHandler:
                 # Load .npy file
                 import numpy as np
 
-                embedding: NDArray[np.float32] = cast(
-                    NDArray[np.float32], np.load(tmp_path)
-                )
+                embedding: NDArray[np.float32] = cast(NDArray[np.float32], np.load(tmp_path))
 
                 # Validate embedding dimension (DINOv2-S is 384)
                 if embedding.shape[0] != 384:
@@ -521,14 +493,10 @@ class JobCallbackHandler:
                 )
             )
 
-            logger.info(
-                f"Successfully stored DINO embedding for image {image_id} in Qdrant"
-            )
+            logger.info(f"Successfully stored DINO embedding for image {image_id} in Qdrant")
 
         except Exception as e:
-            logger.error(
-                f"Failed to handle DINO embedding completion for image {image_id}: {e}"
-            )
+            logger.error(f"Failed to handle DINO embedding completion for image {image_id}: {e}")
 
     async def handle_face_embedding_complete(
         self, face_id: int, image_id: int, job: JobResponse
@@ -588,9 +556,7 @@ class JobCallbackHandler:
                 # Load .npy file (numpy binary format)
                 import numpy as np
 
-                embedding: NDArray[np.float32] = cast(
-                    NDArray[np.float32], np.load(tmp_path)
-                )
+                embedding: NDArray[np.float32] = cast(NDArray[np.float32], np.load(tmp_path))
 
                 # Validate embedding dimension
                 if embedding.shape[0] != self.config.face_vector_size:
@@ -603,9 +569,6 @@ class JobCallbackHandler:
                 # Cleanup temporary file
                 if tmp_path.exists():
                     tmp_path.unlink()
-
-            # Search face store for similar faces (get multiple matches for analysis)
-            from .vector_stores import SearchPreferences
 
             similar_faces = self.face_store.search(
                 query_vector=embedding,
@@ -629,9 +592,7 @@ class JobCallbackHandler:
                 max_retries = 3
                 for retry in range(max_retries):
                     for match in similar_faces:
-                        candidate_face = (
-                            db.query(Face).filter(Face.id == match.id).first()
-                        )
+                        candidate_face = db.query(Face).filter(Face.id == match.id).first()
                         if candidate_face:
                             valid_best_face = candidate_face
                             # Link to this face's KnownPerson if it has one
@@ -648,7 +609,7 @@ class JobCallbackHandler:
 
                     if retry < max_retries - 1:
                         logger.debug(
-                            f"Matches found for face {face_id} but no known_person_id assigned yet. Retrying {retry+1}/{max_retries}..."
+                            f"Matches found for face {face_id} but no known_person_id assigned yet. Retrying {retry + 1}/{max_retries}..."
                         )
                         await asyncio.sleep(1.0)
                         db.refresh(face)  # Ensure we have latest data
@@ -687,9 +648,7 @@ class JobCallbackHandler:
                     db.flush()  # Get ID
 
                     face.known_person_id = known_person.id
-                    logger.info(
-                        f"Created new known person {known_person.id} for face {face_id}"
-                    )
+                    logger.info(f"Created new known person {known_person.id} for face {face_id}")
 
             # Add face embedding to face store
             import numpy as np
@@ -710,9 +669,7 @@ class JobCallbackHandler:
             logger.info(f"Successfully processed face embedding for face {face_id}")
 
         except Exception as e:
-            logger.error(
-                f"Failed to handle face embedding completion for face {face_id}: {e}"
-            )
+            logger.error(f"Failed to handle face embedding completion for face {face_id}: {e}")
             db.rollback()
         finally:
             db.close()

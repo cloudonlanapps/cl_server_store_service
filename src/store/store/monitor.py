@@ -1,22 +1,24 @@
 from __future__ import annotations
 
-import json
-import time
-from typing import Any
+from typing import cast
 
-from cl_ml_tools import get_broadcaster
+from cl_ml_tools import BroadcasterBase, get_broadcaster
 from loguru import logger
+
+from store.common.schemas import MInsightStatus
+
+from .config import StoreConfig
 
 
 class MInsightMonitor:
-    """Monitors MInsight process status via MQTT."""
+    """Monitors MInsight process status via MQTT for the configured store port."""
 
-    def __init__(self, config: Any):
-        self.config = config
-        self.broadcaster = None
-        self.statuses: dict[int, dict[str, Any]] = {}  # port -> status dict
+    def __init__(self, config: StoreConfig):
+        self.config: StoreConfig = config
+        self.broadcaster: BroadcasterBase | None = None
+        self.process_status: MInsightStatus | None = None
 
-    def start(self):
+    def start(self) -> None:
         """Start monitoring."""
         if not self.config.mqtt_port:
             logger.warning("MQTT disabled, MInsightMonitor not starting")
@@ -25,99 +27,67 @@ class MInsightMonitor:
         try:
             self.broadcaster = get_broadcaster(
                 broadcast_type="mqtt",
-                broker=self.config.mqtt_server,
+                broker=self.config.mqtt_broker,
                 port=self.config.mqtt_port,
             )
 
             # Access underlying Paho client
-            if hasattr(self.broadcaster, "client"):
-                client = self.broadcaster.client
+            client = getattr(self.broadcaster, "client", None)
+            if client:
                 client.on_message = self._on_message
 
-                # Subscribe to topics
-                # mInsight/<port>/started -> reconciling
-                # mInsight/<port>/ended -> completed/idle
-                # mInsight/<port>/status -> heartbeat (running/offline)
-                client.subscribe("mInsight/+/started")
-                client.subscribe("mInsight/+/ended")
-                client.subscribe("mInsight/+/status")
+                # Subscribe to unified status topic
+                port = self.config.port
+                _ = cast(object, client.subscribe(f"mInsight/{port}/status"))  # pyright: ignore[reportAny]
 
-                # Start background loop if not already started by cl_ml_tools
-                # Note: cl_ml_tools might start it, but calling loop_start again is generally safe/idempotent in Paho
-                # if checking internal state, but safer to just let it be if it works.
-                # However, to be sure we receive messages in this process:
-                client.loop_start()
+                # Start background loop
+                _ = cast(object, client.loop_start())  # pyright: ignore[reportAny]
 
-                logger.info("MInsightMonitor started listening on MQTT")
+                logger.info(f"MInsightMonitor started listening on MQTT for port {port}")
         except Exception as e:
             logger.error(f"Failed to start MInsightMonitor: {e}")
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop monitoring."""
-        if self.broadcaster and hasattr(self.broadcaster, "client"):
-            try:
-                self.broadcaster.client.loop_stop()
-                self.broadcaster.client.disconnect()
-            except Exception as e:
-                logger.error(f"Error stopping MInsightMonitor: {e}")
+        if self.broadcaster:
+            client = getattr(self.broadcaster, "client", None)
+            if client:
+                try:
+                    _ = cast(object, client.loop_stop())  # pyright: ignore[reportAny]
+                    _ = cast(object, client.disconnect())  # pyright: ignore[reportAny]
+                except Exception as e:
+                    logger.error(f"Error stopping MInsightMonitor: {e}")
 
-    def _on_message(self, client: Any, userdata: Any, msg: Any):
+    def _on_message(self, client: object, userdata: object, msg: object) -> None:
         """Handle incoming MQTT messages."""
+        _ = client
+        _ = userdata
         try:
-            topic = msg.topic  # mInsight/<port>/<type>
+            topic = cast(str, getattr(msg, "topic"))  # mInsight/<port>/status
             parts = topic.split("/")
             if len(parts) < 3:
                 return
 
-            # parts[0] = "mInsight"
-            port_str = parts[1]
-            msg_type = parts[2]
-
+            # parts[0] = "mInsight", parts[1] = <port>, parts[2] = status
             try:
-                port = int(port_str)
+                msg_port = int(parts[1])
             except ValueError:
                 return
 
-            try:
-                payload = json.loads(msg.payload.decode())
-            except json.JSONDecodeError:
-                logger.warning(f"Invalid JSON payload on {topic}")
+            if msg_port != self.config.port:
                 return
 
-            if port not in self.statuses:
-                self.statuses[port] = {
-                    "status": "unknown",
-                    "last_update": 0,
-                    "port": port
-                }
+            payload_bytes = cast(bytes, getattr(msg, "payload"))
 
-            # Update generic metadata
-            current_time = int(time.time() * 1000)
-            self.statuses[port]["last_update"] = current_time
-            self.statuses[port].update(payload)
-
-            # Update derived status based on message type
-            if msg_type == "status":
-                # Heartbeat payload usually contains "status" field
-                pass
-            elif msg_type == "started":
-                self.statuses[port]["status"] = "running"
-            elif msg_type == "ended":
-                self.statuses[port]["status"] = "idle"
+            try:
+                self.process_status = MInsightStatus.model_validate_json(payload_bytes)
+            except Exception as ve:
+                logger.warning(f"Payload validation failed for {topic}: {ve}")
+                return
 
         except Exception as e:
             logger.error(f"Error processing monitor message: {e}")
 
-    def get_status(self, port: int | None = None) -> dict[str, Any] | dict[int, dict[str, Any]]:
-        """
-        Get status for a specific port or all known ports.
-        
-        Args:
-            port: Optional specific port to query
-            
-        Returns:
-            Status dictionary or dictionary of all statuses keyed by port
-        """
-        if port is not None:
-            return self.statuses.get(port, {"status": "unknown"})
-        return self.statuses
+    def get_status(self) -> MInsightStatus | None:
+        """Get the monitored process status."""
+        return self.process_status

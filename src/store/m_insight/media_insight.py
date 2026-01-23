@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import Session, configure_mappers
-from sqlalchemy_continuum import version_class
+from sqlalchemy_continuum import (
+    version_class,  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+)
 
 from store.common import StorageService, database
 
@@ -26,7 +28,7 @@ if TYPE_CHECKING:
 class MediaInsight:
     """Processor that handles image intelligence."""
 
-    def __init__(self, config: MInsightConfig, broadcaster: MInsightBroadcaster | None = None):
+    def __init__(self, config: MInsightConfig, broadcaster: MInsightBroadcaster):
         """Initialize m_insight processor.
 
         Args:
@@ -34,7 +36,7 @@ class MediaInsight:
             broadcaster: Optional MInsightBroadcaster for event publishing
         """
         self.config: MInsightConfig = config
-        self.broadcaster = broadcaster
+        self.broadcaster: MInsightBroadcaster = broadcaster
 
         # Resources initialized in initialize()
         self.compute_client: ComputeClient | None = None
@@ -42,7 +44,7 @@ class MediaInsight:
         self.storage_service: StorageService | None = None
         self.job_service: JobSubmissionService | None = None
         self.callback_handler: JobCallbackHandler | None = None
-        self._initialized = False
+        self._initialized: bool = False
 
         # Verify database is initialized
         if not database.SessionLocal:
@@ -50,7 +52,7 @@ class MediaInsight:
 
         # Get Entity version class
         configure_mappers()
-        self.EntityVersion: type[Any] = version_class(Entity)
+        self.EntityVersion: type[Any] = version_class(Entity)  # pyright: ignore[reportExplicitAny]
 
         logger.info(f"mInsight processor initialized (id: {config.id})")
 
@@ -66,12 +68,15 @@ class MediaInsight:
             self.storage_service = StorageService(str(self.config.media_storage_dir))
 
             # Initialize Compute Client & Session
-            server_config = ServerConfig(
-                auth_url=self.config.auth_service_url,
-                compute_url=self.config.compute_service_url,
-                mqtt_server=self.config.mqtt_server,
-                mqtt_port=self.config.mqtt_port,
-            )
+            if self.config.mqtt_port:
+                server_config = ServerConfig(
+                    auth_url=self.config.auth_service_url,
+                    compute_url=self.config.compute_service_url,
+                    mqtt_broker=self.config.mqtt_broker,
+                    mqtt_port=self.config.mqtt_port,
+                )
+            else:
+                raise Exception("MQTT port is required")
 
             self.compute_session = SessionManager(server_config=server_config)
             _ = await self.compute_session.login(
@@ -84,17 +89,17 @@ class MediaInsight:
             clip_store = get_clip_store(
                 url=self.config.qdrant_url,
                 collection_name=self.config.qdrant_collection,
-                vector_size=512 # Default for CLIP
+                vector_size=512,  # Default for CLIP
             )
             dino_store = get_dino_store(
                 url=self.config.qdrant_url,
                 collection_name=self.config.dino_collection,
-                vector_size=384 # Default for DINOv2-S
+                vector_size=384,  # Default for DINOv2-S
             )
             face_store = get_face_store(
                 url=self.config.qdrant_url,
                 collection_name=self.config.face_collection,
-                vector_size=self.config.face_vector_size
+                vector_size=self.config.face_vector_size,
             )
 
             # Initialize Services
@@ -176,9 +181,7 @@ class MediaInsight:
 
         session = database.SessionLocal()
         try:
-            stmt = select(ImageIntelligence).where(
-                ImageIntelligence.image_id == entity_version.id
-            )
+            stmt = select(ImageIntelligence).where(ImageIntelligence.image_id == entity_version.id)
             existing = session.execute(stmt).scalar_one_or_none()
 
             if existing is None:
@@ -205,8 +208,8 @@ class MediaInsight:
         file_path = entity_version.file_path
         transaction_id = entity_version.transaction_id
 
-        if not isinstance(entity_id, int) or not isinstance(md5, str):
-            logger.warning(f"Invalid entity version: id={entity_id}, md5={md5}")
+        if not isinstance(md5, str):
+            logger.warning(f"Invalid md5 for image {entity_id}: {md5}")
             return
 
         if not file_path:
@@ -257,11 +260,11 @@ class MediaInsight:
 
     async def _trigger_async_jobs(self, entity: EntityVersionData, session: Session) -> None:
         """Trigger face detection, CLIP, and DINO embedding jobs for an entity version.
-        
+
         Args:
             entity: Entity version data
             session: Active DB session (allows updating ImageIntelligence within same tx or new one)
-                     Note: If called from _enqueue_image, session is already committed. 
+                     Note: If called from _enqueue_image, session is already committed.
                      We should probably use a fresh session or reuse carefully.
                      Current design in processing_service used self.db which was passed in create().
         """
@@ -282,13 +285,15 @@ class MediaInsight:
         # Assuming it does based on prev edits.
 
         try:
-            if not self.storage_service: # Should be init by now
+            if not self.storage_service:  # Should be init by now
                 raise RuntimeError("Storage service not initialized")
 
             absolute_path = entity.get_file_path(self.storage_service)
         except (AttributeError, ValueError):
-             # Fallback if method missing or file_path missing
-             absolute_path = self.config.media_storage_dir / entity.file_path if entity.file_path else None
+            # Fallback if method missing or file_path missing
+            absolute_path = (
+                self.config.media_storage_dir / entity.file_path if entity.file_path else None
+            )
 
         if not absolute_path or not absolute_path.exists():
             logger.warning(f"File not found for entity {entity.id}: {absolute_path}")
@@ -318,8 +323,8 @@ class MediaInsight:
                 self.job_service.update_job_status(job.job_id, job.status, job.error_message)
 
         if not self.job_service:
-             logger.error("Job service not available")
-             return
+            logger.error("Job service not available")
+            return
 
         # Submit jobs
         face_job_id = await self.job_service.submit_face_detection(
@@ -339,7 +344,7 @@ class MediaInsight:
 
         logger.info(
             f"Submitted jobs for entity {entity.id}: "
-            f"face_detection={face_job_id}, clip_embedding={clip_job_id}, dino_embedding={dino_job_id}"
+            + f"face_detection={face_job_id}, clip_embedding={clip_job_id}, dino_embedding={dino_job_id}"
         )
 
         # Update ImageIntelligence with job IDs
@@ -350,7 +355,11 @@ class MediaInsight:
 
         try:
             # Re-query using primary key (image_id)
-            intelligence = session.query(ImageIntelligence).filter(ImageIntelligence.image_id == entity.id).first()
+            intelligence = (
+                session.query(ImageIntelligence)
+                .filter(ImageIntelligence.image_id == entity.id)
+                .first()
+            )
             if intelligence:
                 intelligence.face_detection_job_id = face_job_id
                 intelligence.clip_job_id = clip_job_id
@@ -360,7 +369,6 @@ class MediaInsight:
         except Exception as e:
             logger.error(f"Failed to update ImageIntelligence job IDs for {entity.id}: {e}")
             session.rollback()
-
 
     def _get_last_version(self) -> int:
         """Get last processed version from sync state."""
@@ -405,14 +413,14 @@ class MediaInsight:
         try:
             stmt = (
                 select(self.EntityVersion)
-                .where(self.EntityVersion.transaction_id > last_version)
-                .order_by(self.EntityVersion.transaction_id)
+                .where(self.EntityVersion.transaction_id > last_version)  # pyright: ignore[reportAny]
+                .order_by(self.EntityVersion.transaction_id)  # pyright: ignore[reportAny]
             )
             versions = session.execute(stmt).scalars().all()
 
             entity_map: dict[int, EntityVersionData] = {}
-            for version in versions:
-                entity_map[version.id] = EntityVersionData.model_validate(version)
+            for version in versions:  # pyright: ignore[reportAny]
+                entity_map[version.id] = EntityVersionData.model_validate(version)  # pyright: ignore[reportAny]
 
             return entity_map
         finally:
@@ -438,7 +446,12 @@ class MediaInsight:
 
         # Find max transaction_id
         max_transaction_id = max(
-            (version.transaction_id for version in entity_deltas.values() if version.transaction_id is not None), default=last_version
+            (
+                version.transaction_id
+                for version in entity_deltas.values()
+                if version.transaction_id is not None
+            ),
+            default=last_version,
         )
 
         if self.broadcaster:

@@ -20,18 +20,17 @@ from types import FrameType
 
 from loguru import logger
 
+from .m_insight.broadcaster import MInsightBroadcaster
+
 # Global shutdown event and signal counter
 shutdown_event = asyncio.Event()
 reconciliation_trigger = asyncio.Event()
 shutdown_signal_count = 0
 
 
-from .m_insight.broadcaster import MInsightBroadcaster
-
-
 def signal_handler(signum: int, _frame: FrameType | None) -> None:
     """Handle shutdown signals (SIGINT, SIGTERM).
-    
+
     First signal: Initiates graceful shutdown
     Second signal: Forces immediate exit
     """
@@ -52,22 +51,19 @@ def signal_handler(signum: int, _frame: FrameType | None) -> None:
         sys.exit(1)
 
 
-
-
-
 async def heartbeat_task(broadcaster: MInsightBroadcaster):
     """Periodic heartbeat task."""
     try:
         while not shutdown_event.is_set():
             broadcaster.publish_status("running")
-            await asyncio.sleep(5) # 5 second heartbeat
+            await asyncio.sleep(5)  # 5 second heartbeat
     except asyncio.CancelledError:
         pass
 
 
 async def mqtt_listener_task(config, processor) -> None:
     """Background task to listen for MQTT wake-up signals.
-    
+
     Args:
         config: MInsightConfig instance
         processor: mInsight instance
@@ -81,7 +77,7 @@ async def mqtt_listener_task(config, processor) -> None:
 
         broadcaster = get_broadcaster(
             broadcast_type="mqtt",
-            broker=config.mqtt_server,
+            broker=config.mqtt_broker,
             port=config.mqtt_port,
         )
 
@@ -108,7 +104,7 @@ async def mqtt_listener_task(config, processor) -> None:
 
 async def run_loop(config) -> None:
     """Main run loop for m_insight process.
-    
+
     Args:
         config: MInsightConfig instance
     """
@@ -181,91 +177,91 @@ async def run_loop(config) -> None:
 
 def main() -> int:
     """CLI entry point for m_insight worker."""
-    parser = ArgumentParser(
+    _ = parser = ArgumentParser(
         prog="m-insight-process",
         description="mInsight worker for image intelligence tracking",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--m-insight-process-id",
         "-i",
         default="m-insight-default",
         dest="id",
         help="Unique process identifier (default: m-insight-default)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--log-level",
         "-l",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level (default: INFO)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--mqtt-broker",
         "-b",
         default="localhost",
         help="MQTT broker address (default: localhost)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--mqtt-port",
         "-p",
         type=int,
         default=1883,
         help="MQTT broker port (default: 1883)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--mqtt-topic",
         "-t",
         default=None,
         help="MQTT topic for wake-up signals (default: store/{store_port}/items)",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--store-port",
         type=int,
         default=8001,
         help="Port of the store service (default: 8001)",
     )
     # ML Service URLs
-    parser.add_argument(
+    _ = parser.add_argument(
         "--auth-url",
         default="http://localhost:8010",
         help="Auth service URL",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--compute-url",
         default="http://localhost:8012",
         help="Compute service URL",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--compute-username",
         default="admin",
         help="Compute service username",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--compute-password",
         default="admin",
         help="Compute service password",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--qdrant-url",
         default="http://localhost:6333",
         help="Qdrant service URL",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--qdrant-collection",
         default="image_embeddings",
         help="Qdrant collection for CLIP embeddings",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--dino-collection",
         default="dino_embeddings",
         help="Qdrant collection for DINOv2 embeddings",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--face-collection",
         default="face_embeddings",
         help="Qdrant collection for face embeddings",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--no-auth",
         action="store_true",
         help="Disable authentication for compute service",
@@ -274,16 +270,18 @@ def main() -> int:
     from .m_insight.config import MInsightConfig
 
     config = MInsightConfig()
-    _ = parser.parse_args(namespace=config)
+    args = parser.parse_args()
+    config = MInsightConfig.model_validate(args)
     config.finalize()
 
     # Initialize Database (Worker needs access to DB)
     from .common import database
-    database.init_db(config)
+
+    database.init_db()
 
     # Print startup info
     print(f"Starting m_insight process: {config.id}")
-    print(f"MQTT broker: {config.mqtt_server}:{config.mqtt_port}")
+    print(f"MQTT broker: {config.mqtt_broker}:{config.mqtt_port}")
     print(f"MQTT topic: {config.mqtt_topic}")
     print(f"Log level: {config.log_level}")
     print(f"Database: {config.cl_server_dir}/store.db")
@@ -306,6 +304,7 @@ def main() -> int:
     finally:
         # Cleanup
         from cl_ml_tools import shutdown_broadcaster
+
         shutdown_broadcaster()
 
 
