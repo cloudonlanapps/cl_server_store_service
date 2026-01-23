@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from store.common import database
 from store.common.models import Entity
+from store.common.schemas import MInsightStatus
 from store.m_insight.broadcaster import MInsightBroadcaster
 from store.m_insight.config import MInsightConfig
 from store.m_insight.media_insight import MediaInsight
@@ -58,7 +59,12 @@ def test_m_insight_worker(
     # Update config with valid port
     config.mqtt_port = port
 
-    worker = MediaInsight(config=config)
+    # Initialize broadcaster
+    broadcaster = MInsightBroadcaster(config)
+    broadcaster.init()
+
+    # Create worker with broadcaster
+    worker = MediaInsight(config=config, broadcaster=broadcaster)
     yield worker
 
 
@@ -68,22 +74,17 @@ async def test_m_insight_lifecycle_events(
     test_m_insight_worker,
     test_db_session,
 ):
-    """Test that mInsight worker publishes started/ended events."""
+    """Test that mInsight worker publishes unified status events during lifecycle."""
     subscriber, messages = test_subscriber
     worker = test_m_insight_worker
 
     topic_base = f"mInsight/{worker.config.store_port}"
-    subscriber.subscribe(f"{topic_base}/#")
+    # All events now go to /status topic
+    subscriber.subscribe(f"{topic_base}/status")
 
-    # Initialize broadcaster
-    broadcaster = MInsightBroadcaster(worker.config)
-    broadcaster.init()
-
-    # Attach to worker
-    worker.broadcaster = broadcaster
-
-    # Wait for subscription using paho client state or just sleep
-    time.sleep(0.5)
+    # Wait for subscription and clear any retained messages
+    time.sleep(1.0)
+    messages.clear()
 
     # Create an entity to trigger processing
     entity = Entity(
@@ -108,19 +109,30 @@ async def test_m_insight_lifecycle_events(
     # Wait for messages
     time.sleep(1.0)
 
-    # Verify 'started' message
-    started_msgs = [m for m in messages if m.topic.endswith("/started")]
-    assert len(started_msgs) >= 1, "Did not receive 'started' message"
-    started_payload = json.loads(started_msgs[-1].payload)
-    assert "version_start" in started_payload
-    assert "version_end" in started_payload
+    # Verify messages on status topic
+    status_msg_payloads = [
+        MInsightStatus.model_validate_json(m.payload)
+        for m in messages
+        if m.topic == f"{topic_base}/status"
+    ]
+    
+    assert len(status_msg_payloads) >= 2, f"Expected at least 2 status messages, got {len(status_msg_payloads)}"
 
-    # Verify 'ended' message
-    ended_msgs = [m for m in messages if m.topic.endswith("/ended")]
-    assert len(ended_msgs) >= 1, "Did not receive 'ended' message"
-    ended_payload = json.loads(ended_msgs[-1].payload)
-    assert "processed_count" in ended_payload
-    assert ended_payload["processed_count"] == processed
+    # Sort by timestamp to ensure correct order
+    status_msg_payloads.sort(key=lambda s: s.timestamp)
+
+    # Last message should be 'idle' (published at end of run_once)
+    assert status_msg_payloads[-1].status == "idle"
+    assert status_msg_payloads[-1].processed_count == processed
+
+    # One of the messages should be 'running' (published at start of run_once)
+    running_msgs = [s for s in status_msg_payloads if s.status == "running"]
+    assert len(running_msgs) >= 1, "Did not receive 'running' status message"
+    # The one from publish_start should have version info set
+    running_with_info = [s for s in running_msgs if s.version_start is not None]
+    assert len(running_with_info) >= 1, "Did not receive 'running' status with version info"
+    assert running_with_info[0].version_start is not None
+    assert running_with_info[0].version_end is not None
 
 
 def test_m_insight_heartbeat_status(
@@ -130,9 +142,6 @@ def test_m_insight_heartbeat_status(
 ):
     """Test explicit status publishing (heartbeat logic)."""
     subscriber, messages = test_subscriber
-
-    # Create config just for broadcaster
-    from store.m_insight.config import MInsightConfig
 
     port = integration_config.mqtt_port or 1883
 
@@ -149,6 +158,7 @@ def test_m_insight_heartbeat_status(
     topic_base = f"mInsight/{config.store_port}"
     subscriber.subscribe(f"{topic_base}/status")
     time.sleep(0.5)
+    messages.clear()
 
     broadcaster = MInsightBroadcaster(config)
     broadcaster.init()
@@ -159,6 +169,5 @@ def test_m_insight_heartbeat_status(
 
     status_msgs = [m for m in messages if m.topic == f"{topic_base}/status"]
     assert len(status_msgs) >= 1
-    payload = json.loads(status_msgs[-1].payload)
-    assert payload["status"] == "running"
-
+    status_obj = MInsightStatus.model_validate_json(status_msgs[-1].payload)
+    assert status_obj.status == "running"

@@ -20,7 +20,6 @@ class MInsightBroadcaster:
         self.topic_base: str = f"mInsight/{self.port}"
         from .schemas import MInsightStatus
         self.current_status: MInsightStatus = MInsightStatus(
-            port=self.port,
             status="unknown",
             timestamp=int(time.time() * 1000)
         )
@@ -67,7 +66,7 @@ class MInsightBroadcaster:
         self.current_status.status = "running"
         self.current_status.version_start = version_start
         self.current_status.version_end = version_end
-        self.current_status.processed_count = -1 # doesn't make sense to preserve last processed_count
+        self.current_status.processed_count = -1 
         self._broadcast()
 
     def publish_end(self, processed_count: int) -> None:

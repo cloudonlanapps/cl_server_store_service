@@ -20,6 +20,8 @@ from types import FrameType
 
 from loguru import logger
 
+from store.m_insight import MediaInsight, MInsightConfig
+
 from .m_insight.broadcaster import MInsightBroadcaster
 
 # Global shutdown event and signal counter
@@ -61,7 +63,7 @@ async def heartbeat_task(broadcaster: MInsightBroadcaster):
         pass
 
 
-async def mqtt_listener_task(config, processor) -> None:
+async def mqtt_listener_task(config: MInsightConfig) -> None:
     """Background task to listen for MQTT wake-up signals.
 
     Args:
@@ -89,6 +91,8 @@ async def mqtt_listener_task(config, processor) -> None:
             reconciliation_trigger.set()
 
         # Type ignore: broadcaster.client is dynamically typed from cl_ml_tools
+        if not broadcaster or not broadcaster.client:
+            raise ValueError("Broadcaster not initialized")
         _ = broadcaster.client.subscribe(config.mqtt_topic)
         broadcaster.client.on_message = on_message
 
@@ -102,13 +106,12 @@ async def mqtt_listener_task(config, processor) -> None:
         logger.error(f"MQTT listener error: {e}", exc_info=True)
 
 
-async def run_loop(config) -> None:
+async def run_loop(config: MInsightConfig) -> None:
     """Main run loop for m_insight process.
 
     Args:
         config: MInsightConfig instance
     """
-    from .m_insight.media_insight import MediaInsight
 
     # Initialize Broadcaster
     broadcaster = MInsightBroadcaster(config)
@@ -119,12 +122,12 @@ async def run_loop(config) -> None:
 
     logger.info(f"mInsight process {config.id} starting...")
 
+    if not config.mqtt_port:
+        raise ValueError("MQTT port is not set")
+
     # Start background tasks
-    mqtt_task = None
-    hb_task = None
-    if config.mqtt_port:
-        mqtt_task = asyncio.create_task(mqtt_listener_task(config, processor))
-        hb_task = asyncio.create_task(heartbeat_task(broadcaster))
+    mqtt_task = asyncio.create_task(mqtt_listener_task(config))
+    hb_task = asyncio.create_task(heartbeat_task(broadcaster))
 
     try:
         # Loop until shutdown
@@ -148,7 +151,7 @@ async def run_loop(config) -> None:
 
             # Cleanup pending trigger/shutdown tasks
             for task in pending:
-                task.cancel()
+                _ = task.cancel()
     finally:
         logger.info(f"mInsight process {config.id} shutting down...")
 
@@ -158,14 +161,14 @@ async def run_loop(config) -> None:
 
         # Cancel background tasks
         if mqtt_task:
-            mqtt_task.cancel()
+            _ = mqtt_task.cancel()
             try:
                 await mqtt_task
             except asyncio.CancelledError:
                 pass
 
         if hb_task:
-            hb_task.cancel()
+            _ = hb_task.cancel()
             try:
                 await hb_task
             except asyncio.CancelledError:
@@ -269,7 +272,6 @@ def main() -> int:
     # Initialize Config
     from .m_insight.config import MInsightConfig
 
-    config = MInsightConfig()
     args = parser.parse_args()
     config = MInsightConfig.model_validate(args)
     config.finalize()

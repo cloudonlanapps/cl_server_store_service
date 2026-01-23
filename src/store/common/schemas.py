@@ -112,7 +112,6 @@ class VersionInfo(BaseModel):
 class MInsightStatus(BaseModel):
     """Unified status information for a monitored MInsight process."""
 
-    port: int = Field(..., description="Process port")
     status: str = Field(..., description="Process status (unknown, running, idle, offline)")
     timestamp: int = Field(..., description="Event timestamp (milliseconds)")
     version_start: int | None = Field(default=None, description="Start version for current/last job")
@@ -120,5 +119,3 @@ class MInsightStatus(BaseModel):
     processed_count: int | None = Field(default=None, description="Items processed in last job")
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore", from_attributes=True)
-
-

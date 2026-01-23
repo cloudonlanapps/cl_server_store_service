@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, Engine
 from sqlalchemy.orm import Session
 
 from store.common import EntitySyncState, ImageIntelligence, database
@@ -66,6 +66,7 @@ def m_insight_worker(
     from sqlalchemy.orm import sessionmaker
 
     from store.m_insight.config import MInsightConfig
+    from store.m_insight.broadcaster import MInsightBroadcaster
 
     # Create config
     config = MInsightConfig(
@@ -82,8 +83,12 @@ def m_insight_worker(
     # This ensures worker uses the same in-memory database as tests
     database.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
+    # Create broadcaster
+    broadcaster = MInsightBroadcaster(config)
+    broadcaster.init()
+
     # Create worker
-    worker = MediaInsight(config=config)
+    worker = MediaInsight(config=config, broadcaster=broadcaster)
 
     yield worker
 
@@ -407,7 +412,10 @@ async def test_restart_does_not_reinsert_deleted(
     m_insight_processor_mock.clear()
 
     # Simulate restart: create new worker and reconcile
-    new_worker = MediaInsight(config=m_insight_worker.config)
+    from store.m_insight.broadcaster import MInsightBroadcaster
+    broadcaster = MInsightBroadcaster(m_insight_worker.config)
+    broadcaster.init()
+    new_worker = MediaInsight(config=m_insight_worker.config, broadcaster=broadcaster)
 
     processed_count = await new_worker.run_once()
 

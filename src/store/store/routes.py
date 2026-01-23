@@ -284,8 +284,8 @@ async def patch_entity(
     entity_id: int,
     label: str | None = Form(None, title="Label"),
     description: str | None = Form(None, title="Description"),
-    _parent_id: str = Form("__UNSET__", title="Parent Id"),
-    _is_deleted: str = Form("__UNSET__", title="Is Deleted"),
+    parent_id: str = Form("__UNSET__", title="Parent Id"),
+    is_deleted: str = Form("__UNSET__", title="Is Deleted"),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
 ) -> schemas.Item:
@@ -304,6 +304,7 @@ async def patch_entity(
     if description is not None:
         patch_data["description"] = description
     # Check if parent_id was actually sent (even as empty string)
+    _ = parent_id
     if "parent_id" in form_keys:
         # Empty string means set to None, otherwise parse as int
         parent_id_val = form_data.get("parent_id")
@@ -312,6 +313,7 @@ async def patch_entity(
         else:
             patch_data["parent_id"] = None
     # Check if is_deleted was actually sent
+    _ = is_deleted
     if "is_deleted" in form_keys:
         # Convert string boolean to actual boolean
         is_deleted_val = form_data.get("is_deleted")

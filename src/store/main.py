@@ -10,7 +10,7 @@ from loguru import logger
 
 from .common import (
     database,
-    versioning,  # CRITICAL: Import versioning before database or models
+    versioning,  # CRITICAL: Import versioning before database or models  # pyright: ignore[reportUnusedImport]  # noqa: F401
 )
 from .store.config import StoreConfig
 from .store.media_metadata import validate_tools
@@ -74,7 +74,7 @@ def main() -> int:
 
     # Start server (blocks)
     try:
-        if args.reload:
+        if config.reload:
             # For reload, we accept we can't easily pass object.
             # We might need to rely on env vars we set above (CL_SERVER_DIR)
             # and let the app strictly re-initialize?
@@ -93,16 +93,16 @@ def main() -> int:
 
             uvicorn.run(
                 app,
-                host=args.host,
-                port=args.port,
-                log_level=args.log_level,
+                host=config.host,
+                port=config.port,
+                log_level=config.log_level,
             )
         else:
             uvicorn.run(
                 app,
-                host=args.host,
-                port=args.port,
-                log_level=args.log_level,
+                host=config.host,
+                port=config.port,
+                log_level=config.log_level,
             )
 
     except Exception as exc:
