@@ -25,7 +25,7 @@ from qdrant_client.models import (
 
 
 class StoreItem(BaseModel):
-    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)  # pyright: ignore[reportIncompatibleVariableOverride]
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
     id: StrictInt
     embedding: NDArray[np.float32]
     payload: Payload | None
@@ -38,7 +38,7 @@ class SearchPreferences(BaseModel):
 
 
 class SearchResult(BaseModel):
-    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)  # pyright: ignore[reportIncompatibleVariableOverride]
+    model_config: ConfigDict = ConfigDict(arbitrary_types_allowed=True)
     id: int
     embedding: NDArray[np.float32]
     score: float

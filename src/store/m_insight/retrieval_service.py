@@ -136,7 +136,7 @@ class IntelligenceRetrieveService:
             if result.id != entity_id:
                 filtered_results.append(
                     schemas.SimilarImageResult(
-                        image_id=int(result.id),  # type: ignore[arg-type]
+                        image_id=int(result.id),
                         score=float(result.score),
                         entity=None,  # Will be populated by route handler if requested
                     )
@@ -348,7 +348,7 @@ class IntelligenceRetrieveService:
 
                 filtered_results.append(
                     schemas.SimilarFacesResult(
-                        face_id=int(result.id),  # type: ignore[arg-type]
+                        face_id=int(result.id),
                         score=float(result.score),
                         known_person_id=(
                             result.payload.get("known_person_id") if result.payload else None

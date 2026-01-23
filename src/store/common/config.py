@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from argparse import Namespace
 from pathlib import Path
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -9,7 +10,9 @@ from pydantic import BaseModel, ConfigDict
 class BaseConfig(BaseModel, Namespace):
     """Base configuration shared between Store and MInsight, compliant with Namespace."""
 
-    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        arbitrary_types_allowed=True, validate_assignment=True
+    )
 
     def __init__(self, **kwargs):
         # Satisfy both BaseModel and Namespace

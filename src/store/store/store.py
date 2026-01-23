@@ -60,10 +60,13 @@ async def lifespan(app: FastAPI):
         yield  # ---- application runs here ----
     finally:
         # -------- Shutdown --------
-        if hasattr(app.state, "monitor"):
-             app.state.monitor.stop()
-        if hasattr(app.state, "broadcaster") and hasattr(app.state.broadcaster, "disconnect"):
-             app.state.broadcaster.disconnect()
+        monitor = getattr(app.state, "monitor", None)
+        if monitor:
+             monitor.stop()
+
+        broadcaster = getattr(app.state, "broadcaster", None)
+        if broadcaster and hasattr(broadcaster, "disconnect"):
+             broadcaster.disconnect()
         logger.info("Store service shutdown complete")
 
 

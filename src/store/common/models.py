@@ -13,7 +13,7 @@ class Base(DeclarativeBase):
     pass
 
 
-from sqlalchemy import (  # noqa: E402
+from sqlalchemy import ( 
     JSON,
     BigInteger,
     Boolean,
@@ -23,12 +23,15 @@ from sqlalchemy import (  # noqa: E402
     String,
     Text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship  # noqa: E402
+from sqlalchemy.orm import Mapped, mapped_column, relationship 
 
 # CRITICAL: Import versioning BEFORE defining models with __versioned__
-import store.common.versioning as _versioning  # noqa: E402, F401
+# Using absolute import to avoid circular dependency
+import store.common.versioning as _versioning
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from typings.sqlalchemy_continuum import VersionsRelationship
 
     from .storage import StorageService
@@ -37,14 +40,14 @@ if TYPE_CHECKING:
 class Entity(Base):
     """SQLAlchemy model for media entities."""
 
-    __tablename__ = "entities"  # pyright: ignore[reportUnannotatedClassAttribute]
-    __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning  # pyright: ignore[reportUnannotatedClassAttribute]
+    __tablename__: str = "entities"
+    __versioned__: dict[object, object] = {}  # Enable SQLAlchemy-Continuum versioning
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Core fields
-    is_collection: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    is_collection: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     label: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     parent_id: Mapped[int | None] = mapped_column(
@@ -74,7 +77,7 @@ class Entity(Base):
     file_path: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Soft delete flag
-    is_deleted: Mapped[bool | None] = mapped_column(Boolean, default=False, nullable=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Intelligence Relationships
     faces: Mapped[list[Face]] = relationship(
@@ -89,9 +92,8 @@ class Entity(Base):
 
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:
-        from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
 
-        versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
+        versions: VersionsRelationship[Any]
 
     @override
     def __repr__(self) -> str:
@@ -101,7 +103,7 @@ class Entity(Base):
 class ServiceConfig(Base):
     """SQLAlchemy model for service configuration."""
 
-    __tablename__ = "service_config"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __tablename__: str = "service_config"
 
     # Primary key
     key: Mapped[str] = mapped_column(String, primary_key=True)
@@ -124,7 +126,7 @@ class EntitySyncState(Base):
     This is a singleton table with only one row (id=1).
     """
 
-    __tablename__ = "entity_sync_state"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __tablename__: str = "entity_sync_state"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     last_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -141,7 +143,7 @@ class ImageIntelligence(Base):
     Cascade deletes when parent entity is deleted.
     """
 
-    __tablename__ = "image_intelligence"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __tablename__: str = "image_intelligence"
 
     image_id: Mapped[int] = mapped_column(
         Integer,
@@ -197,7 +199,7 @@ class ImageIntelligence(Base):
 class Face(Base):
     """SQLAlchemy model for detected faces."""
 
-    __tablename__ = "faces"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __tablename__: str = "faces"
 
     # Primary key (derived from image_id and face index)
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -237,9 +239,7 @@ class Face(Base):
 
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:
-        from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
-
-        versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
+        versions: VersionsRelationship[Any]
 
     @override
     def __repr__(self) -> str:
@@ -262,7 +262,7 @@ class Face(Base):
 class EntityJob(Base):
     """Relationship table connecting entities to compute jobs."""
 
-    __tablename__ = "entity_jobs"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __tablename__: str = "entity_jobs"
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -304,8 +304,8 @@ class EntityJob(Base):
 class KnownPerson(Base):
     """Person identified by face embeddings."""
 
-    __tablename__ = "known_persons"  # pyright: ignore[reportUnannotatedClassAttribute]
-    __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning  # pyright: ignore[reportUnannotatedClassAttribute]
+    __tablename__: str = "known_persons"
+    __versioned__: dict[object, object] = {}  # Enable SQLAlchemy-Continuum versioning
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -322,9 +322,8 @@ class KnownPerson(Base):
 
     # SQLAlchemy-Continuum adds this relationship dynamically
     if TYPE_CHECKING:
-        from typing import Any  # pyright: ignore[reportUnannotatedClassAttribute]
 
-        versions: VersionsRelationship[Any]  # pyright: ignore[reportExplicitAny, reportUninitializedInstanceVariable]
+        versions: VersionsRelationship[Any]
 
     @override
     def __repr__(self) -> str:
@@ -334,7 +333,7 @@ class KnownPerson(Base):
 class FaceMatch(Base):
     """Track face similarity matches for audit and debugging."""
 
-    __tablename__ = "face_matches"  # pyright: ignore[reportUnannotatedClassAttribute]
+    __tablename__: str = "face_matches"
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

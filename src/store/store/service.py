@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from .config import StoreConfig
@@ -10,8 +10,9 @@ from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..common.models import Entity, ImageIntelligence
-from ..common.schemas import (
+from store.common.models import Entity, ImageIntelligence
+from store.common import schemas
+from store.common.schemas import (
     BodyCreateEntity,
     BodyPatchEntity,
     BodyUpdateEntity,
@@ -72,7 +73,7 @@ class EntityService:
     def _validate_parent_id(
         self,
         parent_id: int | None,
-        is_collection: bool,
+        _is_collection: bool,
         entity_id: int | None = None,
     ) -> None:
         """
@@ -104,7 +105,7 @@ class EntityService:
         if not parent.is_collection:
             raise ValueError(
                 f"Cannot set parent_id to {parent_id}: parent entity must be a collection. "
-                f"Entity {parent_id} is not a collection."
+                + f"Entity {parent_id} is not a collection."
             )
 
         # Rule: Parent must not be soft-deleted
@@ -121,7 +122,7 @@ class EntityService:
                 if current_parent in visited:
                     raise ValueError(
                         f"Circular hierarchy detected: entity {parent_id} is already "
-                        f"a descendant of {entity_id}"
+                        + f"a descendant of {entity_id}"
                     )
                 visited.add(current_parent)
                 parent_entity = (
@@ -130,21 +131,20 @@ class EntityService:
                 current_parent = parent_entity.parent_id if parent_entity else None
 
         # Rule: Max hierarchy depth check (max 10 levels)
-        if parent_id is not None:
-            depth = 1  # Starting at depth 1 (the parent)
-            current_check = parent_id
-            while current_check is not None:
-                parent_ent = (
-                    self.db.query(Entity).filter(Entity.id == current_check).first()
+        depth = 1  # Starting at depth 1 (the parent)
+        current_check = parent_id
+        while current_check is not None:
+            parent_ent = (
+                self.db.query(Entity).filter(Entity.id == current_check).first()
+            )
+            if not parent_ent:
+                break
+            current_check = parent_ent.parent_id
+            depth += 1
+            if depth > 10:
+                raise ValueError(
+                    "Maximum hierarchy depth exceeded. Max allowed depth is 10 levels."
                 )
-                if not parent_ent:
-                    break
-                current_check = parent_ent.parent_id
-                depth += 1
-                if depth > 10:
-                    raise ValueError(
-                        "Maximum hierarchy depth exceeded. Max allowed depth is 10 levels."
-                    )
 
     def _check_ancestor_deleted(self, entity: Entity) -> bool:
         """
@@ -222,8 +222,8 @@ class EntityService:
         page: int = 1,
         page_size: int = 20,
         version: int | None = None,
-        filter_param: str | None = None,  # pyright: ignore[reportUnusedParameter]
-        search_query: str | None = None,  # pyright: ignore[reportUnusedParameter]
+        _filter_param: str | None = None,
+        _search_query: str | None = None,
         exclude_deleted: bool = False,
     ) -> tuple[list[Item], int]:
         """
@@ -247,7 +247,7 @@ class EntityService:
 
         # Apply deleted filter
         if exclude_deleted:
-            query = query.filter(Entity.is_deleted == False)  # noqa: E712
+            query = query.filter(Entity.is_deleted == False) 
 
         # TODO: Implement filtering and search logic
 
@@ -258,19 +258,20 @@ class EntityService:
         offset = (page - 1) * page_size
         query = query.order_by(Entity.id.asc()).offset(offset).limit(page_size)
 
-        results = query.all()
+        results = cast(list[tuple[Entity, str | None]], query.all())
 
         # If version is specified, get that version of each entity
         if version is not None:
-            items: list[Item] = []
+            items_list: list[Item] = []
             for entity, _ in results:
                 versioned_item = self.get_entity_version(entity.id, version)
                 if versioned_item:  # Only include if version exists
-                    items.append(versioned_item)
-        else:
-            items: list[Item] = []
-            for entity, status in results:
-                items.append(self._entity_to_item(entity, intelligence_status=status))
+                    items_list.append(versioned_item)
+            return items_list, total_count
+
+        items: list[Item] = []
+        for entity, status in results:
+            items.append(self._entity_to_item(entity, intelligence_status=status))
 
         return items, total_count
 
@@ -288,11 +289,12 @@ class EntityService:
         if version is not None:
             return self.get_entity_version(entity_id, version)
 
-        result = (
+        result = cast(
+            tuple[Entity, str | None] | None,
             self.db.query(Entity, ImageIntelligence.status)
             .outerjoin(ImageIntelligence, Entity.id == ImageIntelligence.image_id)
             .filter(Entity.id == entity_id)
-            .first()
+            .first(),
         )
 
         if result:
@@ -319,19 +321,19 @@ class EntityService:
         # Get the specific version
         # SQLAlchemy-Continuum creates a versions relationship on the model
         if hasattr(entity, "versions"):
-            versions_list = entity.versions.all()
+            versions_list = cast(list[Entity], entity.versions.all())
             # Versions are 1-indexed for the API
             if 1 <= version <= len(versions_list):
-                version_entity = versions_list[  # pyright: ignore[reportAny]
+                version_entity = versions_list[
                     version - 1
                 ]
                 return self._entity_to_item(
-                    version_entity  # pyright: ignore[reportAny]
+                    version_entity
                 )
 
         return None
 
-    def get_entity_versions(self, entity_id: int) -> list[dict[str, int | None]]:
+    def get_entity_versions(self, entity_id: int) -> list[schemas.VersionInfo]:
         """
         Get all versions of an entity with metadata.
 
@@ -348,24 +350,14 @@ class EntityService:
         if not hasattr(entity, "versions"):
             return []
 
-        versions_list = entity.versions.all()
-        result: list[dict[str, int | None]] = []
-        for idx, version in enumerate(  # pyright: ignore[reportAny]
-            versions_list, start=1
-        ):
-            version_info: dict[str, int | None] = {
-                "version": idx,
-                "transaction_id": (
-                    version.transaction_id  # pyright: ignore[reportAny]
-                    if hasattr(version, "transaction_id")  # pyright: ignore[reportAny]
-                    else None
-                ),
-                "updated_date": (
-                    version.updated_date  # pyright: ignore[reportAny]
-                    if hasattr(version, "updated_date")  # pyright: ignore[reportAny]
-                    else None
-                ),
-            }
+        versions_list = cast(list[Any], entity.versions.all())
+        result: list[schemas.VersionInfo] = []
+        for idx, version in enumerate(versions_list, start=1):
+            # SQLAlchemy-Continuum version objects can be validated via model_validate
+            # with from_attributes=True enabled in the schema
+            version_info = schemas.VersionInfo.model_validate(version)
+            # Ensure the 1-indexed version number matches our API expectation
+            version_info.version = idx
             result.append(version_info)
 
         return result
@@ -407,7 +399,7 @@ class EntityService:
         # Validation: parent_id must follow hierarchy rules
         self._validate_parent_id(
             parent_id=body.parent_id,
-            is_collection=body.is_collection,
+            _is_collection=body.is_collection,
             entity_id=None,  # Creating new entity
         )
 
@@ -534,7 +526,7 @@ class EntityService:
             # Validation: parent_id must follow hierarchy rules
             self._validate_parent_id(
                 parent_id=body.parent_id,
-                is_collection=entity.is_collection,  # Use existing is_collection (immutable)
+                _is_collection=entity.is_collection,  # Use existing is_collection (immutable)
                 entity_id=entity_id,
             )
 
@@ -615,7 +607,7 @@ class EntityService:
             # Validate the new parent_id (includes circular check and all other rules)
             self._validate_parent_id(
                 parent_id=new_parent_id,
-                is_collection=entity.is_collection,
+                _is_collection=entity.is_collection,
                 entity_id=entity_id,
             )
 
@@ -663,7 +655,7 @@ class EntityService:
         if not _from_parent and not entity.is_deleted:
             raise ValueError(
                 f"Cannot delete entity {entity_id}: entity must be soft-deleted first. "
-                "Call soft_delete_entity() before deletion."
+                + "Call soft_delete_entity() before deletion."
             )
 
         # Recursive call from parent: soft-delete if not already
@@ -676,7 +668,7 @@ class EntityService:
         if children:
             for child in children:
                 # Recursively delete child (will auto-soft-delete via _from_parent=True)
-                self.delete_entity(child.id, _from_parent=True)
+                _ = self.delete_entity(child.id, _from_parent=True)
 
         # Hard delete this entity - remove file and database record
         if entity.file_path:

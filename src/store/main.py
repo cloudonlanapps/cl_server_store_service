@@ -10,7 +10,7 @@ from loguru import logger
 
 from .common import (
     database,
-    versioning,  # CRITICAL: Import versioning before database or models  # noqa: F401  # pyright: ignore[reportUnusedImport]
+    versioning,  # CRITICAL: Import versioning before database or models  
 )
 from .store.config import StoreConfig
 from .store.media_metadata import validate_tools

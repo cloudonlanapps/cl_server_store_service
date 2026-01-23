@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput
 from loguru import logger
@@ -29,6 +29,7 @@ class JobCallbackHandler:
     clip_store: QdrantVectorStore
     dino_store: QdrantVectorStore
     face_store: QdrantVectorStore
+    config: MInsightConfig
 
     def __init__(
         self,
@@ -105,7 +106,7 @@ class JobCallbackHandler:
         # Create directory structure: {MEDIA_STORAGE_DIR}/faces/YYYY/MM/DD/
         base_dir = self.config.media_storage_dir
         dir_path = base_dir / "faces" / year / month / day
-        dir_path.mkdir(parents=True, exist_ok=True)
+        _ = dir_path.mkdir(parents=True, exist_ok=True)
 
         # Filename: {image_id}_face_{index}.png
         filename = f"{image_id}_face_{face_index}.png"

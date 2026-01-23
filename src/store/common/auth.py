@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, cast
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -113,7 +113,7 @@ async def get_current_user(
     """Validate the JWT and return the user payload."""
 
     # Get config from app state
-    config: BaseConfig = request.app.state.config  # pyright: ignore[reportAny]
+    config = cast(BaseConfig, request.app.state.config)
 
     if config.no_auth:
         return None
@@ -167,7 +167,7 @@ def require_permission(permission: Permission):
         current_user: UserPayload | None = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> UserPayload | None:
-        config: BaseConfig = request.app.state.config  # pyright: ignore[reportAny]
+        config = cast(BaseConfig, request.app.state.config)
 
         if config.no_auth:
             return current_user
@@ -203,7 +203,7 @@ async def require_admin(
     request: Request,
     current_user: UserPayload | None = Depends(get_current_user),
 ) -> UserPayload | None:
-    config: BaseConfig = request.app.state.config  # pyright: ignore[reportAny]
+    config = cast(BaseConfig, request.app.state.config)
 
     if config.no_auth:
         return current_user

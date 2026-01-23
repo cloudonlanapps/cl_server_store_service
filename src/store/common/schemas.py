@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import ClassVar
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BodyCreateEntity(BaseModel):
@@ -96,3 +97,30 @@ class UpdateReadAuthConfig(BaseModel):
     """Request schema for updating read authentication configuration."""
 
     enabled: bool = Field(..., description="Whether to enable read authentication")
+
+
+class VersionInfo(BaseModel):
+    """Information about an entity version."""
+
+    version: int = Field(..., description="Version number (1-indexed)")
+    transaction_id: int | None = Field(None, description="Transaction ID of the version")
+    updated_date: int | None = Field(None, description="Last update timestamp (milliseconds)")
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+
+
+class MInsightProcessStatus(BaseModel):
+    """Status information for a single MInsight process."""
+
+    status: str = Field(..., description="Process status (unknown, running, idle)")
+    last_update: int = Field(..., description="Last update timestamp (milliseconds)")
+    port: int = Field(..., description="Process port")
+    # MQTT heartbeat can include more fields
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow", from_attributes=True)
+
+
+class MInsightStatusResponse(BaseModel):
+    """Response schema for MInsight process status."""
+
+    # Using a list instead of dict for better API compatibility and typing
+    processes: list[MInsightProcessStatus] = Field(..., description="List of monitored processes")

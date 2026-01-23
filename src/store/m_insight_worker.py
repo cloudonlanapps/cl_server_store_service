@@ -93,8 +93,8 @@ async def mqtt_listener_task(config, processor) -> None:
             reconciliation_trigger.set()
 
         # Type ignore: broadcaster.client is dynamically typed from cl_ml_tools
-        _ = broadcaster.client.subscribe(config.mqtt_topic)  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue, reportUnknownMemberType]
-        broadcaster.client.on_message = on_message  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
+        _ = broadcaster.client.subscribe(config.mqtt_topic)
+        broadcaster.client.on_message = on_message
 
         logger.info(f"MQTT listener started on topic: {config.mqtt_topic}")
 

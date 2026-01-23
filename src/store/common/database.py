@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 # CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
 # Using absolute import to avoid circular dependency
-import store.common.versioning as _versioning  # noqa: F401
+import store.common.versioning as _versioning  
 
 from .utils import get_db_url
 
@@ -38,7 +38,7 @@ def enable_wal_mode(
         db_list = cursor.fetchall()
         # db_list format: [(seq, name, file), ...]
         # For in-memory: file is '' (empty string)
-        is_memory = any(row[2] == "" for row in db_list)  # pyright: ignore[reportAny]
+        is_memory = any(row[2] == "" for row in db_list)
 
         if not is_memory:
             # Only set WAL mode for file-based databases
@@ -104,7 +104,7 @@ def create_db_engine(
             }
         )
 
-    engine = create_engine(db_url, **kwargs)  # type: ignore[arg-type]
+    engine = create_engine(db_url, **kwargs)
 
     # Register WAL mode listener for SQLite
     if db_url.lower().startswith("sqlite"):

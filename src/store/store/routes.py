@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import (
     APIRouter,
@@ -40,6 +41,7 @@ router = APIRouter()
     responses={200: {"model": schemas.PaginatedResponse, "description": "Successful Response"}},
 )
 async def get_entities(
+    request: Request,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
     version: int | None = Query(
@@ -56,13 +58,12 @@ async def get_entities(
     ),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.PaginatedResponse:
     """
     Get all entities with pagination.
     """
     _ = user
-    config: StoreConfig = request.app.state.config
+    config = cast(StoreConfig, request.app.state.config)
     service = EntityService(db, config)
     items, total_count = service.get_entities(
         page=page,
@@ -102,6 +103,7 @@ async def get_entities(
     responses={201: {"model": schemas.Item, "description": "Successful Response"}},
 )
 async def create_entity(
+    request: Request,
     is_collection: bool = Form(..., title="Is Collection"),
     label: str | None = Form(None, title="Label"),
     description: str | None = Form(None, title="Description"),
@@ -109,9 +111,8 @@ async def create_entity(
     image: UploadFile | None = File(None, title="Image"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.Item:
-    config: StoreConfig = request.app.state.config
+    config = cast(StoreConfig, request.app.state.config)
     service = EntityService(db, config)
 
     # Extract user_id from JWT payload (None in demo mode)
@@ -171,12 +172,12 @@ async def create_entity(
     responses={204: {"description": "All entities deleted successfully"}},
 )
 async def delete_collection(
+    request: Request,
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ):
     _ = user
-    config: StoreConfig = request.app.state.config
+    config = cast(StoreConfig, request.app.state.config)
     service = EntityService(db, config)
     service.delete_all_entities()
     # No return statement - FastAPI will return 204 automatically
@@ -191,16 +192,16 @@ async def delete_collection(
     responses={200: {"model": schemas.Item, "description": "Successful Response"}},
 )
 async def get_entity(
+    request: Request,
     entity_id: int = Path(..., title="Entity Id"),
     version: int | None = Query(
         None, title="Version", description="Optional version number to retrieve"
     ),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.Item:
     _ = user
-    config: StoreConfig = request.app.state.config
+    config = cast(StoreConfig, request.app.state.config)
     service = EntityService(db, config)
     item = service.get_entity_by_id(entity_id, version=version)
     if not item:
@@ -222,6 +223,7 @@ async def get_entity(
     responses={200: {"model": schemas.Item, "description": "Successful Response"}},
 )
 async def put_entity(
+    request: Request,
     entity_id: int = Path(..., title="Entity Id"),
     is_collection: bool = Form(..., title="Is Collection"),
     label: str = Form(..., title="Label"),
@@ -230,9 +232,8 @@ async def put_entity(
     image: UploadFile | None = File(None, title="Image"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ) -> schemas.Item:
-    config: StoreConfig = request.app.state.config
+    config = cast(StoreConfig, request.app.state.config)
     service = EntityService(db, config)
 
     # Extract user_id from JWT payload (None in demo mode)
@@ -305,12 +306,12 @@ async def patch_entity(
     entity_id: int,
     label: str | None = Form(None, title="Label"),
     description: str | None = Form(None, title="Description"),
-    parent_id: str = Form("__UNSET__", title="Parent Id"),
-    is_deleted: str = Form("__UNSET__", title="Is Deleted"),
+    _parent_id: str = Form("__UNSET__", title="Parent Id"),
+    _is_deleted: str = Form("__UNSET__", title="Is Deleted"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
 ) -> schemas.Item:
-    config: StoreConfig = request.app.state.config
+    config = cast(StoreConfig, request.app.state.config)
     service = EntityService(db, config)
 
     # Extract user_id from JWT payload (None in demo mode)
@@ -330,16 +331,20 @@ async def patch_entity(
     # Check if parent_id was actually sent (even as empty string)
     if "parent_id" in form_keys:
         # Empty string means set to None, otherwise parse as int
-        parent_id_value = form_data.get("parent_id", "")
-        patch_data["parent_id"] = None if parent_id_value == "" else int(parent_id_value)
+        parent_id_val = form_data.get("parent_id")
+        if isinstance(parent_id_val, str) and parent_id_val != "":
+             patch_data["parent_id"] = int(parent_id_val)
+        else:
+             patch_data["parent_id"] = None
     # Check if is_deleted was actually sent
     if "is_deleted" in form_keys:
         # Convert string boolean to actual boolean
-        is_deleted_value = form_data.get("is_deleted", "false")
-        patch_data["is_deleted"] = is_deleted_value.lower() in ("true", "1", "yes")
+        is_deleted_val = form_data.get("is_deleted")
+        if isinstance(is_deleted_val, str):
+            patch_data["is_deleted"] = is_deleted_val.lower() in ("true", "1", "yes")
 
     # Use model_construct to preserve explicit None values as "set"
-    body = schemas.BodyPatchEntity.model_construct(**patch_data, _fields_set=set(patch_data.keys()))
+    body = schemas.BodyPatchEntity.model_construct(**patch_data, _fields_set=set(cast(dict[str, object], patch_data).keys()))
 
     item = service.patch_entity(entity_id, body, user_id)
     if not item:
@@ -360,13 +365,13 @@ async def patch_entity(
     },
 )
 async def delete_entity(
+    request: Request,
     entity_id: int,
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
 ):
     _ = user
-    config: StoreConfig = request.app.state.config
+    config = cast(StoreConfig, request.app.state.config)
     service = EntityService(db, config)
 
     # Delete entity (will raise ValueError if not soft-deleted first)
@@ -383,16 +388,16 @@ async def delete_entity(
     summary="Get Entity Versions",
     description="Retrieves all versions of a specific entity.",
     operation_id="get_entity_versions",
-    responses={200: {"description": "Successful Response"}},
+    response_model=list[schemas.VersionInfo],
 )
 async def get_entity_versions(
+    request: Request,
     entity_id: int = Path(..., title="Entity Id"),
     db: Session = Depends(get_db),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
-    request: Request = None,  # pyright: ignore[reportGeneralTypeIssues]
-) -> list[dict[str, int | None]]:
+) -> list[schemas.VersionInfo]:
     _ = user
-    config: StoreConfig = request.app.state.config
+    config = cast(StoreConfig, request.app.state.config)
     service = EntityService(db, config)
     versions = service.get_entity_versions(entity_id)
     if not versions:
@@ -512,15 +517,23 @@ async def root(db: Session = Depends(get_db)):
     summary="Get MInsight Status",
     description="Get current status of MInsight processes.",
     operation_id="get_m_insight_status",
+    response_model=schemas.MInsightStatusResponse,
 )
-async def get_m_insight_status(request: Request) -> dict:
+async def get_m_insight_status(request: Request) -> schemas.MInsightStatusResponse:
     """Get MInsight process status."""
     if hasattr(request.app.state, "monitor"):
-        return request.app.state.monitor.get_status()
-    # Logic to return default/offline status if monitor is not present (e.g. during tests)
-    # The monitor is initialized in lifespan, but if mqtt_port is None, it might be running but disconnected?
-    # Actually monitor.start() checks mqtt_port.
-    # If monitor is present but empty, it returns {}.
-    return {}
+        from .monitor import MInsightMonitor
+        monitor = cast(MInsightMonitor, request.app.state.monitor)
+        status_data = monitor.get_status()
+        
+        processes: list[schemas.MInsightProcessStatus] = []
+        if isinstance(status_data, dict):
+            # If status_data is dict[int, dict], iterate values
+            for data in status_data.values():
+                if isinstance(data, dict):
+                    processes.append(schemas.MInsightProcessStatus.model_validate(data))
+        
+        return schemas.MInsightStatusResponse(processes=processes)
+    return schemas.MInsightStatusResponse(processes=[])
 
 

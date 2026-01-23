@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import Session, configure_mappers
-from sqlalchemy_continuum import version_class  # pyright: ignore[reportAttributeAccessIssue]
+from sqlalchemy_continuum import version_class
 
 from store.common import StorageService, database
 
@@ -74,7 +74,7 @@ class MediaInsight:
             )
 
             self.compute_session = SessionManager(server_config=server_config)
-            await self.compute_session.login(
+            _ = await self.compute_session.login(
                 username=self.config.compute_username,
                 password=self.config.compute_password,
             )
