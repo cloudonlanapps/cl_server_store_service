@@ -61,10 +61,10 @@ def test_broadcaster_publish_methods(mock_get_broadcaster, mock_config):
     broadcaster.init()
 
     broadcaster.publish_start(100, 105)
-    mock_mqtt_broadcaster.publish_event.assert_called()
+    mock_mqtt_broadcaster.publish_retained.assert_called()
 
     broadcaster.publish_end(10)
-    mock_mqtt_broadcaster.publish_event.assert_called()
+    mock_mqtt_broadcaster.publish_retained.assert_called()
 
     broadcaster.publish_status("online")
     mock_mqtt_broadcaster.publish_retained.assert_called()

@@ -175,21 +175,17 @@ async def test_search_similar_images_with_details(client, mock_db):
     mock_service = MagicMock()
     client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
 
-    with patch("store.store.service.EntityService") as mock_entity_service_class:
-        # Ensure entity check passes
-        mock_entity = MagicMock(spec=common_models.Entity)
-        mock_entity.id = 1
-        mock_entity.is_collection = False
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_entity
-
+    with patch("store.store.service.EntityService"):
         # mock_service = mock_service_class.return_value
         # MUST use actual schema object or dict because Pydantic validation expects it
-        mock_result = SimilarImageResult(image_id=2, score=0.9, entity=None)
+        # Fix: The logic to populate entity details is inside search_similar_images,
+        # but since we mocked it, we must return the result AS IF logic ran.
+        mock_result = SimilarImageResult(
+            image_id=2, 
+            score=0.9, 
+            entity={"id": 2, "label": "Detail", "is_collection": False}
+        )
         mock_service.search_similar_images.return_value = [mock_result]
-
-        from store.common.schemas import Item
-        mock_entity_service = mock_entity_service_class.return_value
-        mock_entity_service.get_entity_by_id.return_value = Item(id=2, label="Detail", is_collection=False)
 
         response = client.get("/intelligence/entities/1/similar?include_details=true")
         assert response.status_code == 200
@@ -202,23 +198,45 @@ async def test_search_similar_images_with_details(client, mock_db):
 @pytest.mark.asyncio
 async def test_get_entity_jobs_404(client, mock_db):
     """Test get_entity_jobs route returns 404 when entity missing."""
-    mock_db.query.return_value.filter.return_value.scalar.return_value = None
+    from store.m_insight.dependencies import get_intelligence_service
+    from store.m_insight.retrieval_service import ResourceNotFoundError
+    
+    mock_service = MagicMock()
+    # Fix: Mock service raising exception instead of DB returning None
+    mock_service.get_entity_jobs.side_effect = ResourceNotFoundError()
+    client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
+
     response = client.get("/intelligence/entities/999/jobs")
     assert response.status_code == 404
+    client.app.dependency_overrides.clear()
 
 @pytest.mark.asyncio
 async def test_find_similar_faces_404(client, mock_db):
     """Test find_similar_faces route returns 404 when face missing."""
-    mock_db.query.return_value.filter.return_value.scalar.return_value = None
+    from store.m_insight.dependencies import get_intelligence_service
+    from store.m_insight.retrieval_service import ResourceNotFoundError
+
+    mock_service = MagicMock()
+    mock_service.search_similar_faces_by_id.side_effect = ResourceNotFoundError()
+    client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
+
     response = client.get("/intelligence/faces/999/similar")
     assert response.status_code == 404
+    client.app.dependency_overrides.clear()
 
 @pytest.mark.asyncio
 async def test_get_face_matches_404(client, mock_db):
     """Test get_face_matches route returns 404 when face missing."""
-    mock_db.query.return_value.filter.return_value.scalar.return_value = None
+    from store.m_insight.dependencies import get_intelligence_service
+    from store.m_insight.retrieval_service import ResourceNotFoundError
+
+    mock_service = MagicMock()
+    mock_service.get_face_matches.side_effect = ResourceNotFoundError()
+    client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
+
     response = client.get("/intelligence/faces/999/matches")
     assert response.status_code == 404
+    client.app.dependency_overrides.clear()
 
 @pytest.mark.asyncio
 async def test_get_known_person_404(client):
@@ -235,16 +253,30 @@ async def test_get_known_person_404(client):
 @pytest.mark.asyncio
 async def test_get_person_faces_404(client, mock_db):
     """Test get_person_faces route returns 404 when person missing."""
-    mock_db.query.return_value.filter.return_value.scalar.return_value = None
+    from store.m_insight.dependencies import get_intelligence_service
+    from store.m_insight.retrieval_service import ResourceNotFoundError
+
+    mock_service = MagicMock()
+    mock_service.get_known_person_faces.side_effect = ResourceNotFoundError()
+    client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
+
     response = client.get("/intelligence/known-persons/999/faces")
     assert response.status_code == 404
+    client.app.dependency_overrides.clear()
 
 @pytest.mark.asyncio
 async def test_find_similar_images_404(client, mock_db):
     """Test find_similar_images route returns 404 when entity missing."""
-    mock_db.query.return_value.filter.return_value.scalar.return_value = None
+    from store.m_insight.dependencies import get_intelligence_service
+    from store.m_insight.retrieval_service import ResourceNotFoundError
+
+    mock_service = MagicMock()
+    mock_service.search_similar_images.side_effect = ResourceNotFoundError()
+    client.app.dependency_overrides[get_intelligence_service] = lambda: mock_service
+
     response = client.get("/intelligence/entities/999/similar")
     assert response.status_code == 404
+    client.app.dependency_overrides.clear()
 
 @pytest.mark.asyncio
 async def test_find_similar_images_no_results(client, mock_db):

@@ -35,11 +35,12 @@ def mock_config():
 
 @pytest.fixture
 async def processor(mock_config):
-    with patch("store.common.database.SessionLocal"), \
+    with patch("store.common.database.SessionLocal", create=True), \
          patch("store.m_insight.media_insight.version_class"), \
          patch("store.m_insight.media_insight.configure_mappers"):
 
-        p = MediaInsight(mock_config)
+        mock_broadcaster = MagicMock()
+        p = MediaInsight(mock_config, broadcaster=mock_broadcaster)
 
         # Manually initialize services mocks to bypass external calls
         p.storage_service = MagicMock(spec=StorageService)

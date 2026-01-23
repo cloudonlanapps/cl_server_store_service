@@ -340,9 +340,13 @@ class EntityService:
         for idx, version in enumerate(versions_list, start=1):  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
             # SQLAlchemy-Continuum version objects can be validated via model_validate
             # with from_attributes=True enabled in the schema
-            version_info = schemas.VersionInfo.model_validate(version)
-            # Ensure the 1-indexed version number matches our API expectation
-            version_info.version = idx
+            # Create dictionary with required fields
+            version_data = {
+                "transaction_id": version.transaction_id,
+                "updated_date": version.updated_date,
+                "version": idx
+            }
+            version_info = schemas.VersionInfo.model_validate(version_data)
             result.append(version_info)
 
         return result

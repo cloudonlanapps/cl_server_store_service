@@ -164,7 +164,8 @@ class TestEntityVersioning:
                 data={
                     "is_collection": "false",
                     "label": f"Version {i}"
-                }
+                },
+                files={}
             )
 
         # List all versions

@@ -84,7 +84,7 @@ class TestUserTracking:
         # Patch the entity
         response = client.patch(
             f"/entities/{entity_id}",
-            json={"body": {"label": "patched label"}}
+            data={"label": "patched label"}
         )
 
         assert response.status_code == 200
@@ -117,13 +117,13 @@ class TestUserTracking:
         # Patch multiple times
         response = client.patch(
             f"/entities/{entity_id}",
-            json={"body": {"label": "v2"}}
+            data={"label": "v2"}
         )
         assert response.status_code == 200
 
         response = client.patch(
             f"/entities/{entity_id}",
-            json={"body": {"label": "v3"}}
+            data={"label": "v3"}
         )
         assert response.status_code == 200
         final_entity = Item.model_validate(response.json())
@@ -154,7 +154,7 @@ class TestUserTracking:
         # Update the entity
         response = client.patch(
             f"/entities/{entity_id}",
-            json={"body": {"label": "v2"}}
+            data={"label": "v2"}
         )
         assert response.status_code == 200
 

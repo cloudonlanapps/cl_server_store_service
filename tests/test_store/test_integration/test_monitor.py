@@ -64,46 +64,39 @@ def test_monitor_on_message_variants(mock_store_config):
 
     # 1. Invalid topic length
     monitor._on_message(None, None, create_msg("short", "{}"))
-    assert not monitor.statuses
+    assert monitor.process_status is None
 
     # 2. Invalid port
     monitor._on_message(None, None, create_msg("mInsight/abc/started", "{}"))
-    assert not monitor.statuses
+    assert monitor.process_status is None
 
     # 3. Invalid JSON
     monitor._on_message(None, None, create_msg("mInsight/8011/started", "invalid{"))
-    assert not monitor.statuses
+    assert monitor.process_status is None
 
     # 4. Valid 'started' message
-    monitor._on_message(None, None, create_msg("mInsight/8011/started", '{"version_start":1}'))
-    assert 8011 in monitor.statuses
-    assert monitor.statuses[8011]["status"] == "running"
-    assert monitor.statuses[8011]["version_start"] == 1
+    monitor._on_message(None, None, create_msg("mInsight/8011/started", '{"version_start":1, "status": "running", "timestamp": 1234567890}'))
+    assert monitor.process_status is not None
+    assert monitor.process_status.status == "running"
+    assert monitor.process_status.version_start == 1
 
     # 5. Valid 'ended' message
-    monitor._on_message(None, None, create_msg("mInsight/8011/ended", '{"processed_count":5}'))
-    assert monitor.statuses[8011]["status"] == "idle"
-    assert monitor.statuses[8011]["processed_count"] == 5
+    monitor._on_message(None, None, create_msg("mInsight/8011/ended", '{"processed_count":5, "status": "idle", "timestamp": 1234567895}'))
+    assert monitor.process_status.status == "idle"
+    assert monitor.process_status.processed_count == 5
 
     # 6. Valid 'status' message
-    monitor._on_message(None, None, create_msg("mInsight/8011/status", '{"status":"custom"}'))
-    # status message update logic in code: self.statuses[port].update(payload)
-    # so if msg_type == 'status', no extra status override happens unless in payload
-    assert monitor.statuses[8011]["status"] == "custom"
+    monitor._on_message(None, None, create_msg("mInsight/8011/status", '{"status":"custom", "timestamp": 1234567900}'))
+    assert monitor.process_status.status == "custom"
 
 def test_monitor_get_status(mock_store_config):
     """Test get_status logic."""
     monitor = MInsightMonitor(mock_store_config)
-    monitor.statuses[8011] = {"status": "ok", "port": 8011}
+    from store.common.schemas import MInsightStatus
+    monitor.process_status = MInsightStatus(status="ok", timestamp=0)
 
-    # Generic specific port
-    assert monitor.get_status(8011)["status"] == "ok"
-
-    # Unknown port
-    assert monitor.get_status(9999)["status"] == "unknown"
-
-    # All ports
-    assert 8011 in monitor.get_status()
+    # Get status
+    assert monitor.get_status().status == "ok"
 
 def test_monitor_stop(mock_store_config):
     """Test stop logic."""
