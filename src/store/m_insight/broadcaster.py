@@ -19,7 +19,7 @@ class MInsightBroadcaster:
         self.broadcaster: BroadcasterBase | None = None
         self.port: int = config.store_port
         self.topic_base: str = f"mInsight/{self.port}"
-        self.topic_base: str = f"mInsight/{self.port}"
+        
         self.current_status: MInsightStatus = MInsightStatus(
             status="unknown",
             timestamp=int(time.time() * 1000)
