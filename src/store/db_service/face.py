@@ -79,6 +79,69 @@ class FaceDBService(BaseDBService[FaceSchema]):
         finally:
             db.close()
 
+    def _prepare_data(self, data: FaceSchema) -> dict:
+        """Prepare dict for DB with serialized JSON fields."""
+        data_dict = data.model_dump(exclude_unset=True)
+        if hasattr(data.bbox, "model_dump_json"):
+            data_dict["bbox"] = data.bbox.model_dump_json()
+        if hasattr(data.landmarks, "model_dump_json"):
+            data_dict["landmarks"] = data.landmarks.model_dump_json()
+        return data_dict
+
+    @timed
+    @with_retry(max_retries=10)
+    def create(self, data: FaceSchema, ignore_exception: bool = False) -> FaceSchema | None:
+        """Create face (overridden to handle JSON serialization)."""
+        db = database.SessionLocal()
+        try:
+            # Check entity exists
+            entity_exists = db.query(Entity.id).filter(Entity.id == data.entity_id).scalar() is not None
+            if not entity_exists:
+                if ignore_exception:
+                    return None
+                raise ValueError(f"Entity {data.entity_id} does not exist")
+
+            data_dict = self._prepare_data(data)
+            obj = Face(**data_dict)
+            db.add(obj)
+            db.commit()
+            db.refresh(obj)
+            return self._to_schema(obj)
+        except Exception as e:
+            db.rollback()
+            if ignore_exception:
+                logger.debug(f"Ignoring exception for Face create: {e}")
+                return None
+            logger.error(f"Failed to create Face: {e}")
+            raise
+        finally:
+            db.close()
+
+    @timed
+    @with_retry(max_retries=10)
+    def update(self, id: int, data: FaceSchema, ignore_exception: bool = False) -> FaceSchema | None:
+        """Update face (overridden to handle JSON serialization)."""
+        db = database.SessionLocal()
+        try:
+            obj = db.query(Face).filter(Face.id == id).first()
+            if not obj:
+                return None
+
+            data_dict = self._prepare_data(data)
+            for key, value in data_dict.items():
+                setattr(obj, key, value)
+
+            db.commit()
+            db.refresh(obj)
+            return self._to_schema(obj)
+        except Exception as e:
+            db.rollback()
+            if ignore_exception:
+                return None
+            raise
+        finally:
+            db.close()
+
     @timed
     @with_retry(max_retries=10)
     def create_or_update(self, data: FaceSchema, ignore_exception: bool = False) -> FaceSchema | None:
@@ -98,17 +161,19 @@ class FaceDBService(BaseDBService[FaceSchema]):
                     return None
                 raise ValueError(f"Entity {data.entity_id} does not exist")
 
+            data_dict = self._prepare_data(data)
+
             logger.debug(f"Creating/updating Face id={data.id} for entity_id={data.entity_id}")
             obj = db.query(Face).filter(Face.id == data.id).first()
             if obj:
                 # Update existing
                 logger.debug(f"Updating existing Face id={data.id}")
-                for key, value in data.model_dump(exclude_unset=True).items():
+                for key, value in data_dict.items():
                     setattr(obj, key, value)
             else:
                 # Create new
                 logger.debug(f"Creating new Face id={data.id}")
-                obj = Face(**data.model_dump(exclude_unset=True))
+                obj = Face(**data_dict)
                 db.add(obj)
 
             db.commit()

@@ -1,4 +1,5 @@
 from store.db_service import EntitySchema, FaceSchema, FaceMatchSchema, KnownPersonSchema
+from cl_ml_tools import BBox, FaceLandmarks
 
 def test_face_cascade(db_service):
     """Test standard cascade from Entity -> Face -> FaceMatch."""
@@ -10,9 +11,12 @@ def test_face_cascade(db_service):
     face = db_service.face.create(FaceSchema(
         id=100, 
         entity_id=1, 
-        bbox="[0,0,1,1]", 
+        bbox=BBox(x1=0, y1=0, x2=1, y2=1), 
         confidence=0.9, 
-        landmarks="[]", 
+        landmarks=FaceLandmarks(
+            right_eye=(0.0,0.0), left_eye=(0.0,0.0), nose_tip=(0.0,0.0), 
+            mouth_right=(0.0,0.0), mouth_left=(0.0,0.0)
+        ), 
         file_path="face.jpg",
         created_at=12345
     ))
@@ -21,9 +25,12 @@ def test_face_cascade(db_service):
     face2 = db_service.face.create(FaceSchema(
         id=101, 
         entity_id=1, 
-        bbox="[0,0,1,1]", 
+        bbox=BBox(x1=0, y1=0, x2=1, y2=1), 
         confidence=0.8, 
-        landmarks="[]", 
+        landmarks=FaceLandmarks(
+            right_eye=(0.0,0.0), left_eye=(0.0,0.0), nose_tip=(0.0,0.0), 
+            mouth_right=(0.0,0.0), mouth_left=(0.0,0.0)
+        ), 
         file_path="face2.jpg",
         created_at=12345
     ))
@@ -38,6 +45,11 @@ def test_face_cascade(db_service):
     # Verify creation
     assert db_service.face.get(100) is not None
     assert len(db_service.face_match.get_by_face_id(100)) == 1
+    
+    # Check proper deserialization
+    retrieved = db_service.face.get(100)
+    assert isinstance(retrieved.bbox, BBox)
+    assert isinstance(retrieved.landmarks, FaceLandmarks)
     
     # 4. Delete Entity
     db_service.entity.delete(1)
@@ -55,9 +67,12 @@ def test_known_person_linking(db_service):
     face = db_service.face.create(FaceSchema(
         id=200, 
         entity_id=2, 
-        bbox="[]", 
+        bbox=BBox(x1=0, y1=0, x2=1, y2=1), 
         confidence=0.9, 
-        landmarks="[]", 
+        landmarks=FaceLandmarks(
+            right_eye=(0.0,0.0), left_eye=(0.0,0.0), nose_tip=(0.0,0.0), 
+            mouth_right=(0.0,0.0), mouth_left=(0.0,0.0)
+        ), 
         file_path="f.jpg",
         created_at=1000
     ))
@@ -84,9 +99,12 @@ def test_known_person_delete_prevention(db_service):
     face = db_service.face.create(FaceSchema(
         id=300, 
         entity_id=3, 
-        bbox="[]", 
+        bbox=BBox(x1=0, y1=0, x2=1, y2=1), 
         confidence=0.9, 
-        landmarks="[]", 
+        landmarks=FaceLandmarks(
+            right_eye=(0.0,0.0), left_eye=(0.0,0.0), nose_tip=(0.0,0.0), 
+            mouth_right=(0.0,0.0), mouth_left=(0.0,0.0)
+        ), 
         file_path="f.jpg",
         created_at=1000,
         known_person_id=person.id

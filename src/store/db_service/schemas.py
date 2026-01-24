@@ -1,8 +1,28 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from cl_ml_tools import BBox, FaceLandmarks
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+
+
+def parse_bbox(v: Any) -> Any:
+    """Parse BBox from JSON string if needed."""
+    if isinstance(v, str):
+        return BBox.model_validate_json(v)
+    return v
+
+
+def parse_landmarks(v: Any) -> Any:
+    """Parse FaceLandmarks from JSON string if needed."""
+    if isinstance(v, str):
+        return FaceLandmarks.model_validate_json(v)
+    return v
+
+
+# Annotated types for handling JSON strings from DB
+BBoxField = Annotated[BBox, BeforeValidator(parse_bbox)]
+FaceLandmarksField = Annotated[FaceLandmarks, BeforeValidator(parse_landmarks)]
 
 
 class EntitySchema(BaseModel):
@@ -119,9 +139,9 @@ class FaceSchema(BaseModel):
     id: int
     entity_id: int
     known_person_id: int | None = None
-    bbox: str
+    bbox: BBoxField
     confidence: float
-    landmarks: str
+    landmarks: FaceLandmarksField
     file_path: str
     created_at: int
 
