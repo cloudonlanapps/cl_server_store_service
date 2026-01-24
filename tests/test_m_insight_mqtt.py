@@ -7,8 +7,8 @@ import paho.mqtt.client as mqtt
 import pytest
 from sqlalchemy.orm import sessionmaker
 
-from store.common import database
-from store.common.models import Entity
+from store.db_service.db_internals import database
+from store.db_service.db_internals import Entity
 from store.common.schemas import MInsightStatus
 from store.m_insight.broadcaster import MInsightBroadcaster
 from store.m_insight.config import MInsightConfig

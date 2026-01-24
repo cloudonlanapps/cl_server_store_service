@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..store.config_service import ConfigService
 
 from .config import BaseConfig
-from .database import get_db
+from ..db_service.db_internals import get_db
 
 # ─────────────────────────────────────
 # Permissions

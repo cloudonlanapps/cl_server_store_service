@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import select, Engine
 from sqlalchemy.orm import Session
 
-from store.common import EntitySyncState, ImageIntelligence, database
+from store.db_service.db_internals import EntitySyncState, ImageIntelligence, database
 from store.m_insight.media_insight import MediaInsight
 
 if TYPE_CHECKING:

@@ -8,9 +8,9 @@ import uvicorn
 from fastapi import FastAPI
 from loguru import logger
 
-from .common import (
+from .common import utils
+from .db_service.db_internals import (
     database,
-    utils,
     versioning,  # CRITICAL: Import versioning before database or models  # pyright: ignore[reportUnusedImport]  # noqa: F401
 )
 from .store.config import StoreConfig

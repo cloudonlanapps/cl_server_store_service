@@ -11,7 +11,8 @@ from unittest.mock import patch
 from sqlalchemy.orm import sessionmaker
 
 from cl_ml_tools import get_broadcaster
-from store.common import StorageService, database
+from store.common import StorageService
+from store.db_service.db_internals import database
 from store.m_insight import MediaInsight, MInsightConfig
 from store.m_insight.broadcaster import MInsightBroadcaster
 
@@ -143,7 +144,7 @@ async def test_m_insight_image_embedding_flow(
 
     try:
         # Patch SessionLocal to use our test engine
-        with patch("store.common.database.SessionLocal", side_effect=TestingSessionLocal):
+        with patch("store.db_service.database.SessionLocal", side_effect=TestingSessionLocal):
             
             # Initialize Processor inside patch context so it gets correct DB session
             processor = MediaInsight(config=min_config, broadcaster=proc_broadcaster)

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from store.common import (
+from store.db_service.db_internals import (
     EntityJob,
     Face,
     KnownPerson,
@@ -39,7 +39,7 @@ def retrieve_service(mock_db, mock_config):
 @pytest.fixture
 def client(mock_db, mock_config):
     app = create_app(mock_config)
-    from store.common.database import get_db
+    from store.db_service.db_internals import get_db
     app.dependency_overrides[get_db] = lambda: mock_db
     return TestClient(app)
 
@@ -168,7 +168,7 @@ def test_search_similar_faces_by_id(retrieve_service, mock_db):
 @pytest.mark.asyncio
 async def test_search_similar_images_with_details(client, mock_db):
     """Test find_similar_images route with include_details=True."""
-    from store import common as common_models
+    from store.db_service import db_internals as common_models
     from store.m_insight.dependencies import get_intelligence_service
     from store.m_insight.schemas import SimilarImageResult
 

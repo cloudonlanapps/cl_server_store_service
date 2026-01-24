@@ -1,7 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from store.common.database import get_db
+from store.db_service.db_internals import get_db
 from store.m_insight.retrieval_service import IntelligenceRetrieveService
 from store.store.config import StoreConfig
 

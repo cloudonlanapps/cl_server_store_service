@@ -5,13 +5,14 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import configure_mappers
-from sqlalchemy_continuum import (
-    version_class,  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
+from store.db_service.db_internals import (
+    Entity,
+    EntitySyncState,
+    ImageIntelligence,
+    database,
+    version_class,
 )
-
-from store.common import StorageService, database
-
-from ..common.models import Entity, EntitySyncState, ImageIntelligence
+from store.common.storage import StorageService
 from .config import MInsightConfig
 from .job_callbacks import JobCallbackHandler
 from .job_service import JobSubmissionService

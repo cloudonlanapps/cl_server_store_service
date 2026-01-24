@@ -15,13 +15,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 make_versioned(user_cls=None)
 
 # Configure mappers after models are imported
-# Configure mappers after models are imported
-from store.common.models import Base
+# Models are now consolidated in store.db_service.db_internals, so importing Base (and the module) registers them.
+from store.db_service.db_internals import Base  # noqa: E402
 
-# Models are now consolidated in store.common.models, so importing Base (and the module) registers them.
 configure_mappers()
 
-from store.common.utils import get_db_url
+from store.common.utils import get_db_url  # noqa: E402
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -87,9 +86,7 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            render_as_batch=True
+            connection=connection, target_metadata=target_metadata, render_as_batch=True
         )
 
         with context.begin_transaction():

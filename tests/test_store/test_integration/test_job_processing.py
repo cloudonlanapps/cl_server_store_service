@@ -6,8 +6,8 @@ import pytest
 from cl_client.models import JobResponse
 from sqlalchemy.orm import Session
 
-from store.common import database, models
-from store.common import models as intelligence_models
+from store.db_service.db_internals import database, models
+from store.db_service.db_internals import models as intelligence_models
 from store.m_insight import JobCallbackHandler, JobSubmissionService, MInsightConfig
 
 
@@ -15,14 +15,11 @@ from store.m_insight import JobCallbackHandler, JobSubmissionService, MInsightCo
 def override_session_local(test_engine):
     """Override database.SessionLocal to use the test engine."""
     from sqlalchemy.orm import sessionmaker
-    import store.common.database as db
-    original_session_local = getattr(db, "SessionLocal", None)
-    db.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    from store.db_service import database
+    original_session_local = database.SessionLocal
+    database.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     yield
-    if original_session_local:
-        db.SessionLocal = original_session_local
-    else:
-        del db.SessionLocal
+    database.SessionLocal = original_session_local
 
 class TestJobProcessing:
     @pytest.fixture

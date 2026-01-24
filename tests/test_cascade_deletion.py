@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from store.common.models import Entity
+from store.db_service.db_internals import Entity
 
 
 def test_soft_delete_collection_with_children(

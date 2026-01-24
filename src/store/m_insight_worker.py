@@ -24,7 +24,8 @@ from store.m_insight import MediaInsight, MInsightConfig
 
 from .m_insight.broadcaster import MInsightBroadcaster
 from cl_ml_tools import get_broadcaster, shutdown_broadcaster
-from .common import database, utils
+from .common import utils
+from .db_service.db_internals import database
 from .m_insight.config import MInsightConfig
 
 # Global shutdown event and signal counter

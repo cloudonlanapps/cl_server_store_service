@@ -65,7 +65,7 @@ async def test_callback_failed_job_status(callback_handler):
         created_at=1000
     )
 
-    with patch("store.common.database.SessionLocal") as mock_session_local:
+    with patch("store.db_service.database.SessionLocal") as mock_session_local:
         with patch("store.m_insight.job_callbacks.logger") as mock_logger:
             await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
             assert mock_logger.error.called
@@ -91,7 +91,7 @@ async def test_callback_missing_detections(callback_handler):
     )
     callback_handler.compute_client.get_job.return_value = full_job
 
-    with patch("store.common.database.SessionLocal") as mock_session_local:
+    with patch("store.db_service.database.SessionLocal") as mock_session_local:
         with patch("store.m_insight.job_callbacks.logger") as mock_logger:
             await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
             assert mock_logger.warning.called
@@ -129,7 +129,7 @@ async def test_callback_entity_not_found(callback_handler):
     )
     callback_handler.compute_client.get_job.return_value = full_job
 
-    with patch("store.common.database.SessionLocal") as mock_session_local:
+    with patch("store.db_service.database.SessionLocal") as mock_session_local:
         mock_db = mock_session_local.return_value
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
@@ -148,7 +148,7 @@ async def test_callback_database_error(callback_handler):
         created_at=1000
     )
 
-    with patch("store.common.database.SessionLocal") as mock_session_local:
+    with patch("store.db_service.database.SessionLocal") as mock_session_local:
         mock_db = MagicMock()
         mock_session_local.return_value = mock_db
         # Trigger exception inside the try block
@@ -179,7 +179,7 @@ async def test_callback_clip_malformed_output(callback_handler):
     )
     callback_handler.compute_client.get_job.return_value = full_job
 
-    with patch("store.common.database.SessionLocal") as mock_session_local:
+    with patch("store.db_service.database.SessionLocal") as mock_session_local:
         with patch("store.m_insight.job_callbacks.logger") as mock_logger:
             await callback_handler.handle_clip_embedding_complete(entity_id=1, job=job)
             assert mock_logger.error.called
@@ -191,7 +191,7 @@ async def test_callback_job_not_found(callback_handler):
     # Correctly reset and set return_value on the AsyncMock
     callback_handler.compute_client.get_job = AsyncMock(return_value=None)
 
-    with patch("store.common.database.SessionLocal"), \
+    with patch("store.db_service.database.SessionLocal"), \
          patch("store.m_insight.job_callbacks.logger") as mock_logger:
         await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
         assert mock_logger.warning.called
@@ -210,7 +210,7 @@ async def test_callback_validation_error(callback_handler):
     )
     callback_handler.compute_client.get_job = AsyncMock(return_value=full_job)
 
-    with patch("store.common.database.SessionLocal") as mock_session_local:
+    with patch("store.db_service.database.SessionLocal") as mock_session_local:
         db = mock_session_local.return_value
         db.query.return_value.filter.return_value.first.return_value = MagicMock(id=1, create_date=1000)
 
@@ -244,7 +244,7 @@ async def test_callback_entity_date_fallback(callback_handler):
     )
     callback_handler.compute_client.get_job = AsyncMock(return_value=full_job)
 
-    with patch("store.common.database.SessionLocal") as mock_session_local:
+    with patch("store.db_service.database.SessionLocal") as mock_session_local:
         db = mock_session_local.return_value
         mock_entity = MagicMock()
         mock_entity.id = 1

@@ -27,7 +27,7 @@ async def test_submit_face_detection(mock_entity_job_class, job_service, mock_co
     mock_response = MagicMock(job_id="job-123")
     mock_compute.face_detection.detect = AsyncMock(return_value=mock_response)
 
-    with patch("store.common.database.SessionLocal") as mock_session:
+    with patch("store.db_service.database.SessionLocal") as mock_session:
         db = mock_session.return_value
 
         mock_entity = MagicMock()
@@ -54,7 +54,7 @@ async def test_submit_clip_embedding(mock_entity_job_class, job_service, mock_co
     mock_response = MagicMock(job_id="clip-123")
     mock_compute.clip_embedding.embed_image = AsyncMock(return_value=mock_response)
 
-    with patch("store.common.database.SessionLocal") as mock_session:
+    with patch("store.db_service.database.SessionLocal") as mock_session:
         db = mock_session.return_value
 
         mock_entity = MagicMock()
@@ -79,7 +79,7 @@ async def test_submit_dino_embedding(mock_entity_job_class, job_service, mock_co
     mock_response = MagicMock(job_id="dino-123")
     mock_compute.dino_embedding.embed_image = AsyncMock(return_value=mock_response)
 
-    with patch("store.common.database.SessionLocal") as mock_session:
+    with patch("store.db_service.database.SessionLocal") as mock_session:
         db = mock_session.return_value
 
         mock_entity = MagicMock()
@@ -98,7 +98,7 @@ async def test_submit_dino_embedding(mock_entity_job_class, job_service, mock_co
 
 def test_delete_job_record(job_service):
     """Test job record deletion."""
-    with patch("store.common.database.SessionLocal") as mock_session:
+    with patch("store.db_service.database.SessionLocal") as mock_session:
         db = mock_session.return_value
         mock_job = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = mock_job
@@ -109,7 +109,7 @@ def test_delete_job_record(job_service):
 
 def test_update_job_status(job_service):
     """Test job status update."""
-    with patch("store.common.database.SessionLocal") as mock_session:
+    with patch("store.db_service.database.SessionLocal") as mock_session:
         db = mock_session.return_value
         mock_job = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = mock_job

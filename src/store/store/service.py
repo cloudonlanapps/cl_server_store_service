@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from store.common import schemas
-from store.common.models import Entity, ImageIntelligence
+from store.db_service.db_internals import Entity, ImageIntelligence
 from store.common.schemas import (
     BodyCreateEntity,
     BodyPatchEntity,
@@ -724,7 +724,8 @@ class EntityService:
         # This is used for cleanup in tests/admin
         from sqlalchemy import text
 
-        from ..common.models import (
+        from ..db_service.db_internals import (
+            Base,
             Entity,
             EntityJob,
             EntitySyncState,
@@ -732,8 +733,8 @@ class EntityService:
             FaceMatch,
             ImageIntelligence,
             KnownPerson,
+            ServiceConfig,
         )
-
         # 1. Clear intelligence and related tables
         _ = self.db.query(EntityJob).delete()
         _ = self.db.query(FaceMatch).delete()

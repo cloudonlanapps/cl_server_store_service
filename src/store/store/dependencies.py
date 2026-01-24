@@ -2,7 +2,7 @@ from cl_ml_tools import BroadcasterBase
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
-from store.common.database import get_db
+from store.db_service.db_internals import get_db
 
 from .config import StoreConfig
 from .config_service import ConfigService

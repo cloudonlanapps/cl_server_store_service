@@ -1,31 +1,9 @@
-"""Common module for shared utilities and models."""
+"""Common module for shared utilities and storage."""
 
-from . import versioning
 from .config import BaseConfig
-from .models import (
-    Base,
-    Entity,
-    EntityJob,
-    EntitySyncState,
-    Face,
-    FaceMatch,
-    ImageIntelligence,
-    KnownPerson,
-    ServiceConfig,
-)
 from .storage import StorageService
 
 __all__: list[str] = [
-    "versioning",
     "BaseConfig",
-    "Base",
-    "Entity",
-    "EntityJob",
-    "EntitySyncState",
-    "Face",
-    "FaceMatch",
-    "ImageIntelligence",
-    "KnownPerson",
-    "ServiceConfig",
     "StorageService",
 ]

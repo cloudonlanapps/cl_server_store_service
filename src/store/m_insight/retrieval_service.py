@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
 from sqlalchemy.orm import Session
 
-from store.common.models import EntityJob, Face, FaceMatch, KnownPerson, Entity
+from store.db_service.db_internals import EntityJob, Face, FaceMatch, KnownPerson, Entity
 from store.store.config import StoreConfig
 
 from .schemas import (

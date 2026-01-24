@@ -227,14 +227,14 @@ def test_engine() -> Generator[Engine, None, None]:
     # It will detect this is in-memory and skip WAL mode but enable foreign keys
     from sqlalchemy import event
 
-    from store.common.database import enable_wal_mode
+    from store.db_service.db_internals import enable_wal_mode
 
     event.listen(engine, "connect", enable_wal_mode)
 
     from sqlalchemy.orm import configure_mappers
 
     # Updated to import models module directly as requested
-    from store.common import models
+    from store.db_service import db_internals as models
 
     configure_mappers()
     models.Base.metadata.create_all(bind=engine)
@@ -352,7 +352,7 @@ def client(
 
     # Import app and override dependency
     from store.common.auth import UserPayload, get_current_user
-    from store.common.database import get_db
+    from store.db_service.db_internals import get_db
     from store.store.store import app
 
     app.dependency_overrides[get_db] = override_get_db
@@ -440,7 +440,7 @@ def auth_client(
             db.close()
 
     from store.common.auth import get_current_user
-    from store.common.database import get_db
+    from store.db_service.db_internals import get_db
     from store.store.store import app
 
     # Clear any existing auth override

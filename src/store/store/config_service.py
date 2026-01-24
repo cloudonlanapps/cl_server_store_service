@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from ..common.models import ServiceConfig
+from ..db_service.db_internals import ServiceConfig
 
 
 class ConfigService:

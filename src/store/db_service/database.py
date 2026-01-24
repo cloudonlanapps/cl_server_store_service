@@ -1,25 +1,25 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Generator
+from typing import ParamSpec, TypeVar, cast
 
 from loguru import logger
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine.interfaces import DBAPIConnection
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
-from sqlalchemy.exc import OperationalError
-import time
 
+from ..common.utils import get_db_url
 # CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
-# Using absolute import to avoid circular dependency
-import store.common.versioning as _versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
-
-from .utils import get_db_url
-
-from typing import cast
+from . import versioning as _versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
 # Global session factory
-SessionLocal: sessionmaker[Session] = cast(sessionmaker[Session], None)
-engine: Engine = cast(Engine, None)
+SessionLocal: sessionmaker[Session] = cast(sessionmaker[Session], cast(object, None))
+engine: Engine = cast(Engine, cast(object, None))
+
+T = TypeVar("T")
+P = ParamSpec("P")
 
 
 def enable_wal_mode(
@@ -43,7 +43,9 @@ def enable_wal_mode(
         db_list = cursor.fetchall()
         # db_list format: [(seq, name, file), ...]
         # For in-memory: file is '' (empty string)
-        is_memory = any(row[2] == "" for row in db_list)  # pyright: ignore[reportAny]
+        is_memory = any(
+            cast(str, row[2]) == "" for row in cast(list[tuple[object, object, object]], db_list)
+        )
 
         if not is_memory:
             # Only set WAL mode for file-based databases
@@ -163,12 +165,15 @@ def get_db() -> Generator[Session, None, None]:
     """Get database session for FastAPI dependency injection."""
     yield from get_db_session(SessionLocal)
 
-def with_retry(max_retries: int = 5, initial_delay: float = 0.5):
+
+def with_retry(
+    max_retries: int = 5, initial_delay: float = 0.5
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator to retry a function on SQLite locking errors."""
 
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            last_error = None
+    def decorator(func: Callable[P, T]) -> Callable[P, T]:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            last_error: OperationalError | None = None
             delay = initial_delay
             for i in range(max_retries):
                 try:
@@ -176,11 +181,19 @@ def with_retry(max_retries: int = 5, initial_delay: float = 0.5):
                 except OperationalError as e:
                     if "database is locked" in str(e).lower():
                         last_error = e
-                        logger.warning(f"Database locked, retrying {i+1}/{max_retries} after {delay}s...")
+                        logger.warning(
+                            f"Database locked, retrying {i + 1}/{max_retries} after {delay}s..."
+                        )
                         time.sleep(delay)
                         delay *= 2  # Exponential backoff
                     else:
-                        raise e
-            raise last_error
+                        raise
+            if last_error:
+                raise last_error
+            raise OperationalError(
+                "Max retries exceeded", None, cast(Exception, cast(object, None))
+            )
+
         return wrapper
+
     return decorator

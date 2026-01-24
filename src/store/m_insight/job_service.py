@@ -14,8 +14,8 @@ from cl_client.models import OnJobResponseCallback
 from cl_ml_tools.utils.profiling import timed
 from loguru import logger
 
-from store.common import Entity, EntityJob, Face, database
-from store.common.database import with_retry
+from store.db_service.db_internals import Entity, EntityJob, Face, database
+from store.db_service.db_internals import with_retry
 from store.common.storage import StorageService
 
 from .schemas import EntityVersionData
@@ -139,7 +139,7 @@ class JobSubmissionService:
             EntityStatusPayload or None if entity not found
         """
         from .schemas import EntityStatusPayload, EntityStatusDetails
-        from store.common.models import ImageIntelligence, EntityJob, Face
+        from store.db_service.db_internals import ImageIntelligence, EntityJob, Face
 
         session = database.SessionLocal()
         try:

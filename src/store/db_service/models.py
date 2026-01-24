@@ -18,11 +18,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # CRITICAL: Import versioning BEFORE defining models with __versioned__
-# Using absolute import to avoid circular dependency
-import store.common.versioning as _versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from . import versioning as _versioning  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 if TYPE_CHECKING:
-    from .storage import StorageService
+    from ..common.storage import StorageService
 
 
 class Base(DeclarativeBase):

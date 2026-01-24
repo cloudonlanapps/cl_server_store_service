@@ -4,9 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from store.common import models
-from store.common import models as intelligence_models
-from store.common import models as minsight_models
+from store.db_service.db_internals import models
+from store.db_service.db_internals import models as intelligence_models
+from store.db_service.db_internals import models as minsight_models
 
 
 @pytest.mark.usefixtures("qdrant_service", "compute_service", "auth_service")

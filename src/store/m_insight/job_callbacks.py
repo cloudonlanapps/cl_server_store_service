@@ -14,9 +14,9 @@ from loguru import logger
 from numpy.typing import NDArray
 from pydantic import ValidationError
 
-from store.common import database
-from store.common.database import with_retry
-from store.common.models import Entity, Face, FaceMatch, ImageIntelligence, KnownPerson
+from store.db_service.db_internals import database
+from store.db_service.db_internals import with_retry
+from store.db_service.db_internals import Entity, Face, FaceMatch, ImageIntelligence, KnownPerson
 
 from .config import MInsightConfig
 from .job_service import JobSubmissionService
