@@ -287,8 +287,6 @@ def main() -> int:
     config = MInsightConfig.model_validate(config_dict)
     config.finalize()
 
-    database.init_db()
-
     # Print startup info
     print(f"Starting m_insight process: {config.id}")
     print(f"MQTT broker: {config.mqtt_broker}:{config.mqtt_port}")

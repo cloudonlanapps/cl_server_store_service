@@ -139,6 +139,8 @@ def create_session_factory(engine: Engine) -> sessionmaker[Session]:
 def init_db() -> None:
     """Initialize database connection."""
     global SessionLocal, engine
+    if SessionLocal is not None:
+        return
     engine = create_db_engine(get_db_url(), echo=False)
     SessionLocal = create_session_factory(engine)
 
@@ -163,6 +165,8 @@ def get_db_session(
 
 def get_db() -> Generator[Session, None, None]:
     """Get database session for FastAPI dependency injection."""
+    if SessionLocal is None:
+        init_db()
     yield from get_db_session(SessionLocal)
 
 

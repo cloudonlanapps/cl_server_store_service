@@ -49,8 +49,7 @@ class MediaInsight:
         self._initialized: bool = False
 
         # Verify database is initialized
-        if not database.SessionLocal:
-            raise RuntimeError("Database not initialized. Call database.init_db() first.")
+        database.init_db()
 
         # Get Entity version class
         configure_mappers()
@@ -183,8 +182,7 @@ class MediaInsight:
             return False
 
         # Atomic read: Check if md5 changed from existing intelligence record
-        if not database.SessionLocal:
-            raise RuntimeError("Database not initialized")
+        database.init_db()
 
         session = database.SessionLocal()
         try:
@@ -230,8 +228,7 @@ class MediaInsight:
         version_val = transaction_id if transaction_id is not None else 0
 
         # Atomic write: Upsert intelligence record
-        if not database.SessionLocal:
-            raise RuntimeError("Database not initialized")
+        database.init_db()
 
         session = database.SessionLocal()
         try:
@@ -359,8 +356,7 @@ class MediaInsight:
         )
 
         # Update ImageIntelligence with job IDs
-        if not database.SessionLocal:
-            raise RuntimeError("Database not initialized")
+        database.init_db()
 
         session = database.SessionLocal()
         try:
@@ -388,8 +384,7 @@ class MediaInsight:
 
     def _get_last_version(self) -> int:
         """Get last processed version from sync state."""
-        if not database.SessionLocal:
-            raise RuntimeError("Database not initialized")
+        database.init_db()
 
         session = database.SessionLocal()
         try:
@@ -408,8 +403,7 @@ class MediaInsight:
 
     def _update_last_version(self, version: int) -> None:
         """Update last processed version in sync state."""
-        if not database.SessionLocal:
-            raise RuntimeError("Database not initialized")
+        database.init_db()
 
         session = database.SessionLocal()
         try:
@@ -422,8 +416,7 @@ class MediaInsight:
 
     def _get_entity_deltas(self, last_version: int) -> dict[int, EntityVersionSchema]:
         """Get entity changes since last version, coalesced by entity ID."""
-        if not database.SessionLocal:
-            raise RuntimeError("Database not initialized")
+        database.init_db()
 
         session = database.SessionLocal()
         try:

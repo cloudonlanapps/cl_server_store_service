@@ -28,12 +28,10 @@ async def lifespan(app: FastAPI):
     """
     # -------- Startup --------
 
-    # Try to get config from app state (injected by main.py or tests)
-    if hasattr(app.state, "config") and app.state.config:  # pyright: ignore[reportAny]
-        logger.info("Loaded core configuration from app.state.config")
-    else:
-        # Fallback for dev/test if config not injected
-        logger.warning("No config found in app.state.config. Using default.")
+    from .config import get_config
+    config = get_config()
+    app.state.config = config
+    logger.info("Loaded core configuration via get_config()")
 
     # Initialize MQTT Broadcaster
     config = cast(StoreConfig, getattr(app.state, "config", None))
