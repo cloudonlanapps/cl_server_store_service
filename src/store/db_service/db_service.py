@@ -5,6 +5,7 @@ from .entity import EntityDBService, EntityVersionDBService
 from .face import FaceDBService, KnownPersonDBService
 from .intelligence import EntityJobDBService, ImageIntelligenceDBService
 from .sync import EntitySyncStateDBService
+from .config import ConfigDBService
 
 if TYPE_CHECKING:
     from ..common.config import BaseConfig
@@ -28,3 +29,4 @@ class DBService:
         self.face = FaceDBService()
         self.known_person = KnownPersonDBService()
         self.sync_state = EntitySyncStateDBService()
+        self.config = ConfigDBService()

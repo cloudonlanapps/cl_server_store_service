@@ -21,7 +21,7 @@ from fastapi import (
 from loguru import logger
 from pydantic import BaseModel
 
-from store.store.config_service import ConfigService
+from store.db_service.config import ConfigDBService
 
 from ..common import schemas
 from ..common.auth import UserPayload, require_admin, require_permission
@@ -393,7 +393,7 @@ async def get_entity_versions(
 )
 async def get_config(
     user: UserPayload | None = Depends(require_admin),
-    config_service: ConfigService = Depends(get_config_service),
+    config_service: ConfigDBService = Depends(get_config_service),
 ) -> schemas.ConfigResponse:
     """Get current service configuration.
 
@@ -435,7 +435,7 @@ async def get_config(
 async def update_guest_mode(
     guest_mode: bool = Form(..., title="Guest Mode"),
     user: UserPayload | None = Depends(require_admin),
-    config_service: ConfigService = Depends(get_config_service),
+    config_service: ConfigDBService = Depends(get_config_service),
 ) -> dict[str, bool | str]:
     """Update guest mode configuration.
 
@@ -470,7 +470,7 @@ class RootResponse(BaseModel):
     response_model=RootResponse,
     operation_id="root_get",
 )
-async def root(config_service: ConfigService = Depends(get_config_service)):
+async def root(config_service: ConfigDBService = Depends(get_config_service)):
     read_auth_enabled = config_service.get_read_auth_enabled()
     # guestMode is "on" when read_auth is disabled (public read access)
     guest_mode = "off" if read_auth_enabled else "on"

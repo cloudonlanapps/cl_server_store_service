@@ -7,11 +7,9 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import ExpiredSignatureError, JWTError, jwt
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
-from sqlalchemy.orm import Session
-from ..store.config_service import ConfigService
-
+from store.db_service import DBService
+from store.db_service.dependencies import get_db_service
 from .config import BaseConfig
-from ..db_service.db_internals import get_db
 
 # ─────────────────────────────────────
 # Permissions
@@ -166,7 +164,7 @@ def require_permission(permission: Permission):
     async def permission_checker(
         request: Request,
         current_user: UserPayload | None = Depends(get_current_user),
-        db: Session = Depends(get_db),
+        db: DBService = Depends(get_db_service),
     ) -> UserPayload | None:
         config = cast(BaseConfig, request.app.state.config)  # pyright: ignore[reportAny]
 
@@ -174,7 +172,7 @@ def require_permission(permission: Permission):
             return current_user
 
         if permission == "media_store_read":
-            if not ConfigService(db).get_read_auth_enabled():
+            if not db.config.get_read_auth_enabled():
                 return current_user
 
         if current_user is None:

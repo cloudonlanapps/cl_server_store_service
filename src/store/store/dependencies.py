@@ -2,10 +2,11 @@ from cl_ml_tools import BroadcasterBase
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
-from store.db_service.db_internals import get_db
+from store.db_service import DBService
+from store.db_service.dependencies import get_db_service
+from store.db_service.config import ConfigDBService
 
 from .config import StoreConfig
-from .config_service import ConfigService
 from .monitor import MInsightMonitor
 from .service import EntityService
 
@@ -15,9 +16,9 @@ def get_config(request: Request) -> StoreConfig:
     return request.app.state.config  # pyright: ignore[reportAny]
 
 
-def get_config_service(db: Session = Depends(get_db)) -> ConfigService:
-    """Dependency to get ConfigService instance."""
-    return ConfigService(db)
+def get_config_service(db: DBService = Depends(get_db_service)) -> ConfigDBService:
+    """Dependency to get ConfigDBService instance."""
+    return db.config
 
 
 def get_entity_service(

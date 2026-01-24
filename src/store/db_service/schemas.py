@@ -165,3 +165,14 @@ class EntitySyncStateSchema(BaseModel):
 
     id: int = 1
     last_version: int = 0
+
+
+class ServiceConfigSchema(BaseModel):
+    """Pydantic model for ServiceConfig."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    value: str
+    updated_at: int
+    updated_by: str | None = None
