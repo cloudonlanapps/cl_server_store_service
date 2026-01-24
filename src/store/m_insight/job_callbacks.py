@@ -57,7 +57,9 @@ class JobCallbackHandler:
         self.dino_store = dino_store
         self.face_store = face_store
         self.config = config
-        self.job_submission_service: JobSubmissionService | None = job_submission_service
+        self.job_submission_service: JobSubmissionService | None = (
+            job_submission_service
+        )
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -68,7 +70,9 @@ class JobCallbackHandler:
         """
         return int(datetime.now(UTC).timestamp() * 1000)
 
-    async def _download_face_image(self, job_id: str, file_path: str, dest: Path) -> None:
+    async def _download_face_image(
+        self, job_id: str, file_path: str, dest: Path
+    ) -> None:
         """Download face image from job output.
 
         Args:
@@ -112,7 +116,9 @@ class JobCallbackHandler:
         return dir_path / filename
 
     @timed
-    async def handle_face_detection_complete(self, entity_id: int, job: JobResponse) -> None:
+    async def handle_face_detection_complete(
+        self, entity_id: int, job: JobResponse
+    ) -> None:
         """Handle face detection job completion.
 
         Downloads cropped faces, saves to files, and creates Face records in database.
@@ -144,14 +150,18 @@ class JobCallbackHandler:
         # Extract faces from task_output
         if not full_job.task_output or "faces" not in full_job.task_output:
             # Malformed output
-            raise RuntimeError(f"No faces key found in job {job.job_id} output for image {entity_id}")
+            raise RuntimeError(
+                f"No faces key found in job {job.job_id} output for image {entity_id}"
+            )
 
         try:
             task_output: FaceDetectionOutput = FaceDetectionOutput.model_validate(
                 full_job.task_output
             )
             faces_data = task_output.faces
-            logger.debug(f"Face detection job {job.job_id} found {len(faces_data)} faces for image {entity_id}")
+            logger.debug(
+                f"Face detection job {job.job_id} found {len(faces_data)} faces for image {entity_id}"
+            )
         except ValidationError as e:
             logger.error(f"Invalid task_output format for job {job.job_id}: {e}")
             return
@@ -162,7 +172,9 @@ class JobCallbackHandler:
         try:
             entity_temp = db_temp.query(Entity).filter(Entity.id == entity_id).first()
             if not entity_temp:
-                logger.error(f"Entity {entity_id} not found in database for job {job.job_id}")
+                logger.error(
+                    f"Entity {entity_id} not found in database for job {job.job_id}"
+                )
                 return
 
             create_date = entity_temp.create_date or entity_temp.updated_date or 0
@@ -216,7 +228,9 @@ class JobCallbackHandler:
                 db.close()
 
         commit_faces_to_db()
-        logger.info(f"Successfully saved {len(saved_faces)} faces (ids: {[f[0] for f in saved_faces]}) for image {entity_id}")
+        logger.info(
+            f"Successfully saved {len(saved_faces)} faces (ids: {[f[0] for f in saved_faces]}) for image {entity_id}"
+        )
 
         # Phase 2: Submit face_embedding jobs
         if self.job_submission_service:
@@ -241,12 +255,18 @@ class JobCallbackHandler:
                     db_fetch = database.SessionLocal()
                     try:
                         f_obj = db_fetch.query(Face).filter(Face.id == face_id).first()
-                        e_obj = db_fetch.query(Entity).filter(Entity.id == entity_id).first()
+                        e_obj = (
+                            db_fetch.query(Entity)
+                            .filter(Entity.id == entity_id)
+                            .first()
+                        )
                         if f_obj and e_obj:
-                            job_id = await self.job_submission_service.submit_face_embedding(
-                                face=f_obj,
-                                entity=e_obj,
-                                on_complete_callback=face_embedding_callback,
+                            job_id = (
+                                await self.job_submission_service.submit_face_embedding(
+                                    face=f_obj,
+                                    entity=e_obj,
+                                    on_complete_callback=face_embedding_callback,
+                                )
                             )
                             if job_id:
                                 face_job_ids.append(job_id)
@@ -254,7 +274,9 @@ class JobCallbackHandler:
                         db_fetch.close()
 
                 except Exception as e:
-                    logger.error(f"Failed to submit face_embedding job for face {face_id}: {e}")
+                    logger.error(
+                        f"Failed to submit face_embedding job for face {face_id}: {e}"
+                    )
 
             # Update ImageIntelligence with job IDs
             if face_job_ids:
@@ -292,7 +314,9 @@ class JobCallbackHandler:
             )
 
     @timed
-    async def handle_clip_embedding_complete(self, entity_id: int, job: JobResponse) -> None:
+    async def handle_clip_embedding_complete(
+        self, entity_id: int, job: JobResponse
+    ) -> None:
         """Handle CLIP embedding job completion.
 
         Extracts embedding and stores in Qdrant with entity_id as point_id.
@@ -340,7 +364,9 @@ class JobCallbackHandler:
 
                 # Load .npy file (numpy binary format)
 
-                embedding: NDArray[np.float32] = cast(NDArray[np.float32], np.load(tmp_path))
+                embedding: NDArray[np.float32] = cast(
+                    NDArray[np.float32], np.load(tmp_path)
+                )
 
                 # Validate embedding dimension
                 if embedding.shape[0] != 512:
@@ -363,7 +389,9 @@ class JobCallbackHandler:
                 )
             )
 
-            logger.info(f"Successfully stored CLIP embedding for image {entity_id} in Qdrant")
+            logger.info(
+                f"Successfully stored CLIP embedding for image {entity_id} in Qdrant"
+            )
 
             # Update job status in store database
             if self.job_submission_service:
@@ -372,10 +400,14 @@ class JobCallbackHandler:
                 )
 
         except Exception as e:
-            logger.error(f"Failed to handle CLIP embedding completion for image {entity_id}: {e}")
+            logger.error(
+                f"Failed to handle CLIP embedding completion for image {entity_id}: {e}"
+            )
 
     @timed
-    async def handle_dino_embedding_complete(self, entity_id: int, job: JobResponse) -> None:
+    async def handle_dino_embedding_complete(
+        self, entity_id: int, job: JobResponse
+    ) -> None:
         """Handle DINOv2 embedding job completion.
 
         Extracts embedding and stores in Qdrant (DINO collection) with entity_id as point_id.
@@ -422,7 +454,9 @@ class JobCallbackHandler:
 
                 # Load .npy file
 
-                embedding: NDArray[np.float32] = cast(NDArray[np.float32], np.load(tmp_path))
+                embedding: NDArray[np.float32] = cast(
+                    NDArray[np.float32], np.load(tmp_path)
+                )
 
                 # Validate embedding dimension (DINOv2-S is 384)
                 if embedding.shape[0] != 384:
@@ -445,7 +479,9 @@ class JobCallbackHandler:
                 )
             )
 
-            logger.info(f"Successfully stored DINO embedding for image {entity_id} in Qdrant")
+            logger.info(
+                f"Successfully stored DINO embedding for image {entity_id} in Qdrant"
+            )
 
             # Update job status in store database
             if self.job_submission_service:
@@ -454,7 +490,9 @@ class JobCallbackHandler:
                 )
 
         except Exception as e:
-            logger.error(f"Failed to handle DINO embedding completion for image {entity_id}: {e}")
+            logger.error(
+                f"Failed to handle DINO embedding completion for image {entity_id}: {e}"
+            )
 
     @timed
     async def handle_face_embedding_complete(
@@ -473,139 +511,144 @@ class JobCallbackHandler:
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
 
+        # Check if job failed
+        if job.status == "failed":
+            logger.error(
+                f"Face embedding job {job.job_id} failed for face {face_id}: {job.error_message}"
+            )
+            return
+
+        # MQTT callbacks don't include task_output - fetch full job via HTTP
+        full_job = await self.compute_client.get_job(job.job_id)
+        if not full_job or full_job.status != "completed":
+            logger.warning(
+                f"Job {job.job_id} not completed when fetching full details (status: {full_job.status if full_job else 'None'})"
+            )
+            return
+
+        # Download embedding file from job output
+        if not full_job.params or "output_path" not in full_job.params:
+            logger.error(f"No output_path found in job {job.job_id} params")
+            return
+
+        output_path = cast(str, full_job.params["output_path"])
+        with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+
         try:
-            # Check if job failed
-            if job.status == "failed":
+            await self.compute_client.download_job_file(
+                job_id=job.job_id,
+                file_path=output_path,
+                dest=tmp_path,
+            )
+            embedding: NDArray[np.float32] = cast(
+                NDArray[np.float32], np.load(tmp_path)
+            )
+            if embedding.shape[0] != self.config.face_vector_size:
                 logger.error(
-                    f"Face embedding job {job.job_id} failed for face {face_id}: {job.error_message}"
+                    f"Invalid embedding dimension for face {face_id}: expected {self.config.face_vector_size}, got {embedding.shape[0]}"
                 )
                 return
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
 
-            # MQTT callbacks don't include task_output - fetch full job via HTTP
-            full_job = await self.compute_client.get_job(job.job_id)
-            if not full_job or full_job.status != "completed":
-                logger.warning(
-                    f"Job {job.job_id} not completed when fetching full details (status: {full_job.status if full_job else 'None'})"
-                )
-                return
+        # Search face store for similar faces
+        similar_faces = self.face_store.search(
+            query_vector=embedding,
+            limit=10,
+            search_options=SearchPreferences(
+                score_threshold=self.config.face_embedding_threshold
+            ),
+        )
 
-            # Download embedding file from job output
-            if not full_job.params or "output_path" not in full_job.params:
-                logger.error(f"No output_path found in job {job.job_id} params")
-                return
-
-            output_path = cast(str, full_job.params["output_path"])
-            with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
-                tmp_path = Path(tmp.name)
-
+        # DB Operations (The part that needs retry)
+        @with_retry(max_retries=10)
+        def process_face_matches_and_linkage():
+            db = database.SessionLocal()
             try:
-                await self.compute_client.download_job_file(
-                    job_id=job.job_id,
-                    file_path=output_path,
-                    dest=tmp_path,
-                )
-                embedding: NDArray[np.float32] = cast(NDArray[np.float32], np.load(tmp_path))
-                if embedding.shape[0] != self.config.face_vector_size:
-                    logger.error(
-                        f"Invalid embedding dimension for face {face_id}: expected {self.config.face_vector_size}, got {embedding.shape[0]}"
-                    )
+                # 1. Get Face record
+                face = db.query(Face).filter(Face.id == face_id).first()
+                if not face:
+                    logger.error(f"Face {face_id} not found in database")
                     return
-            finally:
-                if tmp_path.exists():
-                    tmp_path.unlink()
 
-            # Search face store for similar faces
-            similar_faces = self.face_store.search(
-                query_vector=embedding,
-                limit=10,
-                search_options=SearchPreferences(
-                    score_threshold=self.config.face_embedding_threshold
-                ),
-            )
+                # 2. Find the best valid match from similar faces
+                valid_best_face = None
+                if similar_faces:
+                    for match in similar_faces:
+                        candidate_face = (
+                            db.query(Face).filter(Face.id == match.id).first()
+                        )
+                        if candidate_face:
+                            valid_best_face = candidate_face
+                            if valid_best_face.known_person_id:
+                                face.known_person_id = valid_best_face.known_person_id
+                                logger.info(
+                                    f"Linked face {face_id} to known person {valid_best_face.known_person_id} "
+                                    + f"(match: {match.id}, score: {match.score:.3f})"
+                                )
+                                break
 
-            # DB Operations (The part that needs retry)
-            @with_retry(max_retries=10)
-            def process_face_matches_and_linkage():
-                db = database.SessionLocal()
-                try:
-                    # 1. Get Face record
-                    face = db.query(Face).filter(Face.id == face_id).first()
-                    if not face:
-                        logger.error(f"Face {face_id} not found in database")
-                        return
+                # 3. Record ALL matches in FaceMatch table
+                if similar_faces:
+                    for match in similar_faces:
+                        matched_face_in_db = (
+                            db.query(Face).filter(Face.id == match.id).first()
+                        )
+                        if not matched_face_in_db:
+                            continue
 
-                    # 2. Find the best valid match from similar faces
-                    valid_best_face = None
-                    if similar_faces:
-                        for match in similar_faces:
-                            candidate_face = db.query(Face).filter(Face.id == match.id).first()
-                            if candidate_face:
-                                valid_best_face = candidate_face
-                                if valid_best_face.known_person_id:
-                                    face.known_person_id = valid_best_face.known_person_id
-                                    logger.info(
-                                        f"Linked face {face_id} to known person {valid_best_face.known_person_id} "
-                                        + f"(match: {match.id}, score: {match.score:.3f})"
-                                    )
-                                    break
-
-                    # 3. Record ALL matches in FaceMatch table
-                    if similar_faces:
-                        for match in similar_faces:
-                            matched_face_in_db = db.query(Face).filter(Face.id == match.id).first()
-                            if not matched_face_in_db:
-                                continue
-
-                            face_match = FaceMatch(
-                                face_id=face_id,
-                                matched_face_id=match.id,
-                                similarity_score=match.score,
-                                created_at=self._now_timestamp(),
-                            )
-                            db.add(face_match)
-
-                    # 4. If no valid similar face found, create new KnownPerson
-                    if not face.known_person_id:
-                        known_person = KnownPerson(
+                        face_match = FaceMatch(
+                            face_id=face_id,
+                            matched_face_id=match.id,
+                            similarity_score=match.score,
                             created_at=self._now_timestamp(),
-                            updated_at=self._now_timestamp(),
                         )
-                        db.add(known_person)
-                        db.flush()
-                        face.known_person_id = known_person.id
-                        logger.info(
-                            f"Created new known person {known_person.id} for face {face_id}"
-                        )
+                        db.add(face_match)
 
-                    db.commit()
-                except Exception:
-                    db.rollback()
-                    raise
-                finally:
-                    db.close()
+                # 4. If no valid similar face found, create new KnownPerson
+                if not face.known_person_id:
+                    known_person = KnownPerson(
+                        created_at=self._now_timestamp(),
+                        updated_at=self._now_timestamp(),
+                    )
+                    db.add(known_person)
+                    db.flush()
+                    face.known_person_id = known_person.id
+                    logger.info(
+                        f"Created new known person {known_person.id} for face {face_id}"
+                    )
 
-            process_face_matches_and_linkage()
-
-            # 5. Add face embedding to face store
-            p_id = 0
-            db_fetch = database.SessionLocal()
-            try:
-                face_fetch = db_fetch.query(Face).filter(Face.id == face_id).first()
-                if face_fetch:
-                    p_id = face_fetch.known_person_id or 0
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
             finally:
-                db_fetch.close()
+                db.close()
 
-            _ = self.face_store.add_vector(
-                StoreItem(
-                    id=face_id,
-                    embedding=np.array(embedding, dtype=np.float32),
-                    payload={
-                        "face_id": face_id,
-                        "entity_id": entity_id,
-                        "known_person_id": p_id,
-                    },
-                )
+        process_face_matches_and_linkage()
+
+        # 5. Add face embedding to face store
+        p_id = 0
+        db_fetch = database.SessionLocal()
+        try:
+            face_fetch = db_fetch.query(Face).filter(Face.id == face_id).first()
+            if face_fetch:
+                p_id = face_fetch.known_person_id or 0
+        finally:
+            db_fetch.close()
+
+        _ = self.face_store.add_vector(
+            StoreItem(
+                id=face_id,
+                embedding=np.array(embedding, dtype=np.float32),
+                payload={
+                    "face_id": face_id,
+                    "entity_id": entity_id,
+                    "known_person_id": p_id,
+                },
             )
+        )
 
-            logger.info(f"Successfully processed face embedding for face {face_id}")
+        logger.info(f"Successfully processed face embedding for face {face_id}")
