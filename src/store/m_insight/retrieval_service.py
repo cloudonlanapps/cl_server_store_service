@@ -156,17 +156,16 @@ class IntelligenceRetrieveService:
             ),
         )
 
-        # Filter out the query entity itself and convert to Pydantic
+        # Convert to Pydantic
         filtered_results: list[SimilarImageResult] = []
         for result in results:
-            if result.id != entity_id:
-                filtered_results.append(
-                    SimilarImageResult(
-                        image_id=int(result.id),
-                        score=float(result.score),
-                        entity=None,  # Will be populated below if requested
-                    )
+            filtered_results.append(
+                SimilarImageResult(
+                    image_id=int(result.id),
+                    score=float(result.score),
+                    entity=None,  # Will be populated below if requested
                 )
+            )
 
         final_results = filtered_results[:limit]
 
@@ -363,35 +362,34 @@ class IntelligenceRetrieveService:
             ),
         )
 
-        # Filter out the query face itself and convert to Pydantic
+        # Convert to Pydantic
         filtered_results: list[SimilarFacesResult] = []
         for result in results:
-            if result.id != face_id:
-                # Optionally load face details
-                face = self.db.query(Face).filter(Face.id == result.id).first()
-                face_response = None
-                if face:
-                    face_response = FaceResponse(
-                        id=face.id,
-                        image_id=face.entity_id,
-                        bbox=BBox.model_validate_json(face.bbox),
-                        confidence=face.confidence,
-                        landmarks=FaceLandmarks.model_validate_json(face.landmarks),
-                        file_path=face.file_path,
-                        created_at=face.created_at,
-                        known_person_id=face.known_person_id,
-                    )
-
-                filtered_results.append(
-                    SimilarFacesResult(
-                        face_id=int(result.id),
-                        score=float(result.score),
-                        known_person_id=(
-                            result.payload.get("known_person_id") if result.payload else None
-                        ),
-                        face=face_response,
-                    )
+            # Optionally load face details
+            face = self.db.query(Face).filter(Face.id == result.id).first()
+            face_response = None
+            if face:
+                face_response = FaceResponse(
+                    id=face.id,
+                    image_id=face.entity_id,
+                    bbox=BBox.model_validate_json(face.bbox),
+                    confidence=face.confidence,
+                    landmarks=FaceLandmarks.model_validate_json(face.landmarks),
+                    file_path=face.file_path,
+                    created_at=face.created_at,
+                    known_person_id=face.known_person_id,
                 )
+
+            filtered_results.append(
+                SimilarFacesResult(
+                    face_id=int(result.id),
+                    score=float(result.score),
+                    known_person_id=(
+                        result.payload.get("known_person_id") if result.payload else None
+                    ),
+                    face=face_response,
+                )
+            )
 
         return filtered_results[:limit]
 
