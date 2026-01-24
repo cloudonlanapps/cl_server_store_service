@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from .entity import EntityDBService, EntityVersionDBService
-from .face import FaceDBService, FaceMatchDBService, KnownPersonDBService
+from .face import FaceDBService, KnownPersonDBService
 from .intelligence import EntityJobDBService, ImageIntelligenceDBService
 from .sync import EntitySyncStateDBService
 
@@ -23,5 +23,4 @@ class DBService:
         self.job = EntityJobDBService()
         self.face = FaceDBService()
         self.known_person = KnownPersonDBService()
-        self.face_match = FaceMatchDBService()
         self.sync_state = EntitySyncStateDBService()

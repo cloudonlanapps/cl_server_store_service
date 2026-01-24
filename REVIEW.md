@@ -439,7 +439,6 @@ def delete_all_entities(self) -> None:
     """Delete all entities and related data from the database."""
     # 1. Clear intelligence and related tables
     _ = self.db.query(EntityJob).delete()
-    _ = self.db.query(FaceMatch).delete()
     _ = self.db.query(Face).delete()  # Face files NOT deleted!
     _ = self.db.query(ImageIntelligence).delete()
     _ = self.db.query(KnownPerson).delete()
@@ -502,7 +501,6 @@ def delete_all_entities(self) -> None:
 
     # Phase 1: Clear intelligence and related tables
     _ = self.db.query(EntityJob).delete()
-    _ = self.db.query(FaceMatch).delete()
     _ = self.db.query(Face).delete()
     _ = self.db.query(ImageIntelligence).delete()
     _ = self.db.query(KnownPerson).delete()
@@ -910,95 +908,8 @@ Use batch query with `IN` clause to load all versions in single query.
 ```
 
 ---
+### HIGH-003: FaceMatch Removed, hence not required
 
-### HIGH-003: N+1 Query in Face Matching
-
-**Category:** Source Code / Performance
-**Severity:** HIGH
-**Impact:** Poor performance in similarity search (100 matches = 100 queries)
-
-**Files Affected:**
-- `/Users/anandasarangaram/Work/cl_server/services/store/src/store/m_insight/retrieval_service.py` (Lines 289-320)
-
-**Description:**
-The `get_face_matches()` function performs a separate database query for each face match result, instead of batch loading.
-
-**Current Code:**
-```python
-def get_face_matches(face_id: int, threshold: float = 0.7):
-    # Query 1: Get all matches
-    matches = session.query(FaceMatch).filter(
-        FaceMatch.face_id == face_id,
-        FaceMatch.similarity_score >= threshold
-    ).all()
-
-    # N queries: One per match
-    results = []
-    for match in matches:
-        # Line 297: Separate query for EACH match
-        face = session.query(Face).filter(Face.id == match.matched_face_id).first()
-        results.append({
-            "face_id": face.id,
-            "similarity": match.similarity_score,
-            "entity_id": face.entity_id
-        })
-
-    return results
-```
-
-**Fix Required:**
-```python
-def get_face_matches(face_id: int, threshold: float = 0.7):
-    matches = session.query(FaceMatch).filter(
-        FaceMatch.face_id == face_id,
-        FaceMatch.similarity_score >= threshold
-    ).all()
-
-    # Batch load all faces in single query
-    face_ids = [m.matched_face_id for m in matches]
-    faces = session.query(Face).filter(Face.id.in_(face_ids)).all()
-    face_map = {f.id: f for f in faces}
-
-    # Assemble results without additional queries
-    results = []
-    for match in matches:
-        face = face_map[match.matched_face_id]
-        results.append({
-            "face_id": face.id,
-            "similarity": match.similarity_score,
-            "entity_id": face.entity_id
-        })
-
-    return results
-```
-
-**GitHub Issue Template:**
-```markdown
-**Title:** [HIGH] Fix N+1 query in get_face_matches()
-
-**Labels:** bug, high, performance, database
-
-**Description:**
-Face matching performs separate query for each match instead of batch loading.
-
-**Impact:**
-- 100 matches = 100 database queries
-- Slow similarity search
-- Poor scalability
-
-**Files:**
-- src/store/m_insight/retrieval_service.py (lines 289-320)
-
-**Fix:**
-Use batch query with `IN` clause.
-
-**Acceptance Criteria:**
-- [ ] Query count = 2 regardless of match count
-- [ ] Performance improved for 100+ matches
-- [ ] Tests pass
-```
-
----
 
 ### HIGH-004: Silent Error Handling in Job Service
 

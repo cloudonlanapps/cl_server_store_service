@@ -16,7 +16,6 @@ from store.common.schemas import (
 from store.common.storage import StorageService
 from store.db_service.schemas import (
     EntityVersionSchema,
-    FaceMatchSchema,
     FaceSchema,
     KnownPersonSchema,
 )

@@ -344,9 +344,7 @@ from .models import Entity  # Now versioning is active
 
    - **Face Embedding Callback:**
      - Store face embedding in Qdrant (`face_embeddings` collection)
-     - Perform similarity search to find matching faces
-     - Link face to `KnownPerson` or create new person
-     - Create `FaceMatch` records for similar faces
+     - Insert into `ImageIntelligence.face_embedding_job_ids` 
 
 5. **Status Updates:**
    - Update `ImageIntelligence.status` to "completed" when all jobs done
@@ -478,29 +476,29 @@ This section explains how to create and test compute plugins for the CL Server S
 
 Each plugin test file contains the following test categories:
 
-| Category | Description | Fixture Used |
-|----------|-------------|--------------|
-| **JobCreation** | Valid/invalid job creation | `client` |
-| **JobRetrieval** | GET job by ID | `client` |
-| **JobDeletion** | DELETE job | `client` |
-| **JobLifecycle** | Create → Get → Delete | `client` |
-| **Authentication** | 401 without token | `auth_client` |
-| **Authorization** | 403 with wrong permission | `auth_client` |
-| **TokenValidation** | Expired/invalid tokens | `auth_client` |
+| Category            | Description                | Fixture Used  |
+| ------------------- | -------------------------- | ------------- |
+| **JobCreation**     | Valid/invalid job creation | `client`      |
+| **JobRetrieval**    | GET job by ID              | `client`      |
+| **JobDeletion**     | DELETE job                 | `client`      |
+| **JobLifecycle**    | Create → Get → Delete      | `client`      |
+| **Authentication**  | 401 without token          | `auth_client` |
+| **Authorization**   | 403 with wrong permission  | `auth_client` |
+| **TokenValidation** | Expired/invalid tokens     | `auth_client` |
 
 ### Test Class Structure
 
 Plugin tests follow a 7-class pattern. Only **TestJobCreation** varies by plugin; the other 6 classes are identical boilerplate:
 
-| Class | Tests | Varies? | Purpose |
-|-------|-------|---------|---------|
-| TestJobCreation | 9-15 | ✅ Yes | Plugin-specific parameter validation |
-| TestJobRetrieval | 2 | ❌ No | Standard GET operations |
-| TestJobDeletion | 2 | ❌ No | Standard DELETE operations |
-| TestJobLifecycle | 1 | ❌ No | Full workflow test |
-| TestAuthentication | 4 | ❌ No | 401 error tests |
-| TestAuthorization | 5 | ❌ No | 403 error tests |
-| TestTokenValidation | 2 | ❌ No | Expired/invalid token tests |
+| Class               | Tests | Varies? | Purpose                              |
+| ------------------- | ----- | ------- | ------------------------------------ |
+| TestJobCreation     | 9-15  | ✅ Yes   | Plugin-specific parameter validation |
+| TestJobRetrieval    | 2     | ❌ No    | Standard GET operations              |
+| TestJobDeletion     | 2     | ❌ No    | Standard DELETE operations           |
+| TestJobLifecycle    | 1     | ❌ No    | Full workflow test                   |
+| TestAuthentication  | 4     | ❌ No    | 401 error tests                      |
+| TestAuthorization   | 5     | ❌ No    | 403 error tests                      |
+| TestTokenValidation | 2     | ❌ No    | Expired/invalid token tests          |
 
 **Implementation tip:** Copy boilerplate classes from template, customize only TestJobCreation for your plugin's parameters.
 
@@ -551,13 +549,13 @@ def test_requires_token(self, auth_client):
 
 #### Token Fixtures
 
-| Fixture | Permission | Admin |
-|---------|-----------|-------|
-| `inference_token` | `ai_inference_support` | No |
-| `inference_admin_token` | `ai_inference_support` | Yes |
-| `write_token` | `media_store_write` | No |
-| `read_token` | `media_store_read` | No |
-| `admin_token` | `media_store_read`, `media_store_write` | Yes |
+| Fixture                 | Permission                              | Admin |
+| ----------------------- | --------------------------------------- | ----- |
+| `inference_token`       | `ai_inference_support`                  | No    |
+| `inference_admin_token` | `ai_inference_support`                  | Yes   |
+| `write_token`           | `media_store_write`                     | No    |
+| `read_token`            | `media_store_read`                      | No    |
+| `admin_token`           | `media_store_read`, `media_store_write` | Yes   |
 
 #### Fixture Usage Guidelines
 
@@ -589,15 +587,15 @@ class TestAuthentication:
 
 ### HTTP Status Code Reference
 
-| Code | Meaning | When Expected |
-|------|---------|---------------|
-| 200 | Success | Job created successfully |
-| 204 | No Content | Job deleted successfully |
-| 401 | Unauthorized | Missing, invalid, or expired token |
-| 403 | Forbidden | Valid token, wrong permission |
-| 404 | Not Found | Job ID doesn't exist |
-| 422 | Validation Error | Invalid parameters (Pydantic) |
-| 405 | Method Not Allowed | Route not registered |
+| Code | Meaning            | When Expected                      |
+| ---- | ------------------ | ---------------------------------- |
+| 200  | Success            | Job created successfully           |
+| 204  | No Content         | Job deleted successfully           |
+| 401  | Unauthorized       | Missing, invalid, or expired token |
+| 403  | Forbidden          | Valid token, wrong permission      |
+| 404  | Not Found          | Job ID doesn't exist               |
+| 422  | Validation Error   | Invalid parameters (Pydantic)      |
+| 405  | Method Not Allowed | Route not registered               |
 
 **Permission requirements for job operations:**
 - ✅ Required: `ai_inference_support` permission
@@ -616,11 +614,11 @@ cp tests/test_plugin_template.py.template tests/test_plugin_<plugin_name>.py
 
 Edit the new file and replace:
 
-| Placeholder | Replace With | Example |
-|-------------|-------------|---------|
-| `{{PLUGIN_NAME}}` | Plugin name | `watermark` |
-| `{{TASK_TYPE}}` | Task type string | `watermark` |
-| `{{ENDPOINT}}` | API endpoint | `/compute/jobs/watermark` |
+| Placeholder       | Replace With     | Example                   |
+| ----------------- | ---------------- | ------------------------- |
+| `{{PLUGIN_NAME}}` | Plugin name      | `watermark`               |
+| `{{TASK_TYPE}}`   | Task type string | `watermark`               |
+| `{{ENDPOINT}}`    | API endpoint     | `/compute/jobs/watermark` |
 
 #### Step 3: Update Configuration
 

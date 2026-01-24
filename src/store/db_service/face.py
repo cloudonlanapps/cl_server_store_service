@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from .base import BaseDBService, timed
 from . import database
 from .database import with_retry
-from .models import Entity, Face, FaceMatch, KnownPerson
-from .schemas import FaceMatchSchema, FaceSchema, KnownPersonSchema
+from .models import Entity, Face, KnownPerson
+from .schemas import FaceSchema, KnownPersonSchema
 
 if TYPE_CHECKING:
     from ..common.config import BaseConfig
@@ -27,13 +27,7 @@ class FaceDBService(BaseDBService[FaceSchema]):
     def _log_cascade_deletes(self, orm_obj: Face, db: Session) -> None:
         """Log what will be cascade deleted."""
         try:
-            # Count FaceMatch records that will be deleted
-            match_count = db.query(FaceMatch).filter(
-                (FaceMatch.face_id == orm_obj.id) | (FaceMatch.matched_face_id == orm_obj.id)
-            ).count()
-
             logger.info(f"Deleting Face {orm_obj.id} (entity_id={orm_obj.entity_id}) will cascade delete:")
-            logger.info(f"  - FaceMatch records: {match_count}")
         except Exception as e:
             logger.warning(f"Failed to log cascade deletes for Face {orm_obj.id}: {e}")
 
@@ -302,53 +296,3 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
         finally:
             db.close()
 
-class FaceMatchDBService(BaseDBService[FaceMatchSchema]):
-    model_class = FaceMatch
-    schema_class = FaceMatchSchema
-
-    @timed
-    @with_retry(max_retries=10)
-    def get_by_face_id(self, face_id: int) -> list[FaceMatchSchema]:
-        """Get all matches for a face."""
-        db = database.SessionLocal()
-        try:
-            objs = db.query(FaceMatch).filter(FaceMatch.face_id == face_id).all()
-            return [self._to_schema(obj) for obj in objs]
-        finally:
-            db.close()
-
-    @timed
-    @with_retry(max_retries=10)
-    def count_by_face_id(self, face_id: int) -> int:
-        """Count matches for a face (for delete logging)."""
-        db = database.SessionLocal()
-        try:
-            return db.query(FaceMatch).filter(
-                (FaceMatch.face_id == face_id) | (FaceMatch.matched_face_id == face_id)
-            ).count()
-        finally:
-            db.close()
-
-    @timed
-    @with_retry(max_retries=10)
-    def create_batch(self, matches: list[FaceMatchSchema], ignore_exception: bool = False) -> list[FaceMatchSchema]:
-        """Create multiple match records in single transaction."""
-        db = database.SessionLocal()
-        try:
-            logger.debug(f"Creating batch of {len(matches)} FaceMatch records")
-            objs = [FaceMatch(**m.model_dump(exclude_unset=True)) for m in matches]
-            db.add_all(objs)
-            db.commit()
-            for obj in objs:
-                db.refresh(obj)
-            logger.debug(f"Created {len(objs)} FaceMatch records")
-            return [self._to_schema(obj) for obj in objs]
-        except Exception as e:
-            db.rollback()
-            if ignore_exception:
-                logger.debug(f"Ignoring exception for FaceMatch batch create: {e}")
-                return []
-            logger.error(f"Failed to create FaceMatch batch: {e}")
-            raise
-        finally:
-            db.close()

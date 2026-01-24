@@ -730,14 +730,12 @@ class EntityService:
             EntityJob,
             EntitySyncState,
             Face,
-            FaceMatch,
             ImageIntelligence,
             KnownPerson,
             ServiceConfig,
         )
         # 1. Clear intelligence and related tables
         _ = self.db.query(EntityJob).delete()
-        _ = self.db.query(FaceMatch).delete()
         _ = self.db.query(Face).delete()
         _ = self.db.query(ImageIntelligence).delete()
         _ = self.db.query(KnownPerson).delete()

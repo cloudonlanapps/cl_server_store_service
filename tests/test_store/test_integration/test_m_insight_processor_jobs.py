@@ -6,7 +6,7 @@ from cl_client.models import JobResponse
 
 from store.common import StorageService
 from store.m_insight import MediaInsight, MInsightConfig
-from store.m_insight.schemas import EntityVersionData
+from store.m_insight.schemas import EntityVersionSchema
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ async def processor(mock_config):
 @pytest.mark.asyncio
 async def test_trigger_async_jobs_missing_file_path(processor):
     """Test job triggering when file_path is missing."""
-    entity = EntityVersionData(
+    entity = EntityVersionSchema(
         id=1,
         transaction_id=1,
         file_path=None,
@@ -83,7 +83,7 @@ async def test_trigger_async_jobs_missing_file_path(processor):
 @pytest.mark.asyncio
 async def test_trigger_async_jobs_file_not_found(processor):
     """Test job triggering when file does not exist."""
-    entity = EntityVersionData(
+    entity = EntityVersionSchema(
         id=2,
         transaction_id=1,
         file_path="nonexistent.jpg",
@@ -102,7 +102,7 @@ async def test_trigger_async_jobs_file_not_found(processor):
 @pytest.mark.asyncio
 async def test_trigger_async_jobs_success(processor):
     """Test successful job triggering."""
-    entity = EntityVersionData(
+    entity = EntityVersionSchema(
         id=3,
         transaction_id=1,
         file_path="test.jpg",
@@ -123,7 +123,7 @@ async def test_trigger_async_jobs_success(processor):
 @pytest.mark.asyncio
 async def test_processing_callbacks(processor):
     """Test internal callbacks of trigger_async_jobs."""
-    entity = EntityVersionData(
+    entity = EntityVersionSchema(
         id=4,
         transaction_id=1,
         file_path="callback.jpg",

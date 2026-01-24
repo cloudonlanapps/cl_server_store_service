@@ -16,7 +16,7 @@ from pydantic import ValidationError
 
 from store.db_service.db_internals import database
 from store.db_service.db_internals import with_retry
-from store.db_service.db_internals import Entity, Face, FaceMatch, ImageIntelligence, KnownPerson
+from store.db_service.db_internals import Entity, Face, ImageIntelligence, KnownPerson
 
 from .config import MInsightConfig
 from .job_service import JobSubmissionService
@@ -565,92 +565,6 @@ class JobCallbackHandler:
             if tmp_path.exists():
                 tmp_path.unlink()
 
-        # Search face store for similar faces
-        similar_faces = self.face_store.search(
-            query_vector=embedding,
-            limit=10,
-            search_options=SearchPreferences(
-                score_threshold=self.config.face_embedding_threshold
-            ),
-        )
-
-        # DB Operations (The part that needs retry)
-        @with_retry(max_retries=10)
-        def process_face_matches_and_linkage():
-            db = database.SessionLocal()
-            try:
-                # 1. Get Face record
-                face = db.query(Face).filter(Face.id == face_id).first()
-                if not face:
-                    logger.error(f"Face {face_id} not found in database")
-                    return
-
-                # 2. Find the best valid match from similar faces
-                valid_best_face = None
-                if similar_faces:
-                    for match in similar_faces:
-                        candidate_face = (
-                            db.query(Face).filter(Face.id == match.id).first()
-                        )
-                        if candidate_face:
-                            valid_best_face = candidate_face
-                            if valid_best_face.known_person_id:
-                                face.known_person_id = valid_best_face.known_person_id
-                                logger.info(
-                                    f"Linked face {face_id} to known person {valid_best_face.known_person_id} "
-                                    + f"(match: {match.id}, score: {match.score:.3f})"
-                                )
-                                break
-
-                # 3. Record ALL matches in FaceMatch table
-                if similar_faces:
-                    for match in similar_faces:
-                        matched_face_in_db = (
-                            db.query(Face).filter(Face.id == match.id).first()
-                        )
-                        if not matched_face_in_db:
-                            continue
-
-                        face_match = FaceMatch(
-                            face_id=face_id,
-                            matched_face_id=match.id,
-                            similarity_score=match.score,
-                            created_at=self._now_timestamp(),
-                        )
-                        db.add(face_match)
-
-                # 4. If no valid similar face found, create new KnownPerson
-                if not face.known_person_id:
-                    known_person = KnownPerson(
-                        created_at=self._now_timestamp(),
-                        updated_at=self._now_timestamp(),
-                    )
-                    db.add(known_person)
-                    db.flush()
-                    face.known_person_id = known_person.id
-                    logger.info(
-                        f"Created new known person {known_person.id} for face {face_id}"
-                    )
-
-                db.commit()
-            except Exception:
-                db.rollback()
-                raise
-            finally:
-                db.close()
-
-        process_face_matches_and_linkage()
-
-        # 5. Add face embedding to face store
-        p_id = 0
-        db_fetch = database.SessionLocal()
-        try:
-            face_fetch = db_fetch.query(Face).filter(Face.id == face_id).first()
-            if face_fetch:
-                p_id = face_fetch.known_person_id or 0
-        finally:
-            db_fetch.close()
-
         _ = self.face_store.add_vector(
             StoreItem(
                 id=face_id,
@@ -658,7 +572,6 @@ class JobCallbackHandler:
                 payload={
                     "face_id": face_id,
                     "entity_id": entity_id,
-                    "known_person_id": p_id,
                 },
             )
         )

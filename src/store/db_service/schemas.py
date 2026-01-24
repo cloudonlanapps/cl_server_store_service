@@ -158,19 +158,6 @@ class KnownPersonSchema(BaseModel):
     face_count: int | None = None
 
 
-class FaceMatchSchema(BaseModel):
-    """Pydantic model for FaceMatch."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int | None = None  # Optional for creation
-    face_id: int
-    matched_face_id: int
-    similarity_score: float
-    created_at: int
-    matched_face: FaceSchema | None = None
-
-
 class EntitySyncStateSchema(BaseModel):
     """Pydantic model for EntitySyncState."""
 

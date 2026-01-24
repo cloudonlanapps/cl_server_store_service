@@ -14,7 +14,6 @@ from .models import (
     Entity,
     EntityJob,
     Face,
-    FaceMatch,
     ImageIntelligence,
     KnownPerson,
 )
@@ -114,7 +113,6 @@ class EntityDBService(BaseDBService[EntitySchema]):
         try:
             # Delete related data first (order matters for FKs)
             db.query(EntityJob).delete()
-            db.query(FaceMatch).delete()
             db.query(Face).delete()
             db.query(ImageIntelligence).delete()
             db.query(KnownPerson).delete()

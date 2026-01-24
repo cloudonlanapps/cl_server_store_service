@@ -1,8 +1,8 @@
-from store.db_service import EntitySchema, FaceSchema, FaceMatchSchema, KnownPersonSchema
+from store.db_service import EntitySchema, FaceSchema, KnownPersonSchema
 from cl_ml_tools import BBox, FaceLandmarks
 
 def test_face_cascade(db_service):
-    """Test standard cascade from Entity -> Face -> FaceMatch."""
+    """Test standard cascade from Entity -> Face."""
     
     # 1. Create Entity
     entity = db_service.entity.create(EntitySchema(id=1, label="Test Entity"))
@@ -35,12 +35,7 @@ def test_face_cascade(db_service):
         created_at=12345
     ))
     
-    match = db_service.face_match.create(FaceMatchSchema(
-        face_id=100, 
-        matched_face_id=101, 
-        similarity_score=0.95, 
-        created_at=12345
-    ))
+   
     
     # Verify creation
     assert db_service.face.get(100) is not None

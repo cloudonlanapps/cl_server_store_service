@@ -306,29 +306,3 @@ class KnownPerson(Base):
     def __repr__(self) -> str:
         return f"<KnownPerson(id={self.id}, name={self.name})>"
 
-
-class FaceMatch(Base):
-    """Track face similarity matches for audit and debugging."""
-
-    __tablename__ = "face_matches"  # pyright: ignore[reportUnannotatedClassAttribute]
-
-    # Primary key
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-
-    # Foreign keys to Face table
-    face_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("faces.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    matched_face_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("faces.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-
-    # Similarity score (0.0-1.0)
-    similarity_score: Mapped[float] = mapped_column(Float, nullable=False)
-
-    # Timestamp (in milliseconds)
-    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    @override
-    def __repr__(self) -> str:
-        return f"<FaceMatch(id={self.id}, face_id={self.face_id}, matched_face_id={self.matched_face_id}, score={self.similarity_score:.3f})>"

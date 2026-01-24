@@ -209,25 +209,6 @@ async def find_similar_faces(
     )
 
 
-@router.get(
-    "/faces/{face_id}/matches",
-    tags=["face-recognition"],
-    summary="Get Face Matches",
-    description="Get all match records for a face (similarity history).",
-    operation_id="get_face_matches",
-)
-async def get_face_matches(
-    face_id: int = Path(..., title="Face Id"),
-    user: UserPayload | None = Depends(require_permission("media_store_read")),
-    service: IntelligenceRetrieveService = Depends(get_intelligence_service),
-) -> list[intel_schemas.FaceMatchSchema]:
-    """Get all match records for a face."""
-    _ = user
-
-    try:
-        return service.get_face_matches(face_id)
-    except ResourceNotFoundError:
-        raise HTTPException(status_code=404, detail="Face not found")
 
 
 @router.get(

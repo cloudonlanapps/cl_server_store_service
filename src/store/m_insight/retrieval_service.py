@@ -13,7 +13,6 @@ from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
 from store.db_service import DBService
 from store.db_service.schemas import (
     EntityJobSchema,
-    FaceMatchSchema,
     FaceSchema,
     KnownPersonSchema,
 )
@@ -254,19 +253,6 @@ class IntelligenceRetrieveService:
             raise ResourceNotFoundError("Known person not found")
 
         return self.db.face.get_by_known_person_id(person_id)
-
-    def get_face_matches(self, face_id: int) -> list[FaceMatchSchema]:
-        """Get all match records for a face."""
-        self._get_face_or_raise(face_id)
-        matches = self.db.face_match.get_by_face_id(face_id)
-
-        for match in matches:
-            # Optionally load matched face details
-            matched_face = self.db.face.get(match.matched_face_id)
-            if matched_face:
-                match.matched_face = matched_face
-
-        return matches
 
     def update_known_person_name(self, person_id: int, name: str) -> KnownPersonSchema | None:
         """Update known person name."""
