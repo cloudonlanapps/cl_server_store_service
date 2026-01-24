@@ -36,7 +36,7 @@ def mock_config():
 @pytest.fixture
 async def processor(mock_config):
     with patch("store.m_insight.media_insight.version_class"), \
-         patch("store.m_insight.media_insight.version_class"), \
+         patch("store.m_insight.media_insight.database.SessionLocal"), \
          patch("store.m_insight.media_insight.configure_mappers"):
 
         mock_broadcaster = MagicMock()
@@ -46,18 +46,21 @@ async def processor(mock_config):
         p.storage_service = MagicMock(spec=StorageService)
         p.storage_service.get_absolute_path.side_effect = lambda p: Path(f"/tmp/fake/media/{p}")
 
-        p.job_service = AsyncMock()
-        p.job_service.submit_face_detection.return_value = "face-1"
-        p.job_service.submit_clip_embedding.return_value = "clip-1"
-        p.job_service.submit_dino_embedding.return_value = "dino-1"
-        # update_job_status is synchronous, so we must make it a MagicMock, not AsyncMock
+        p.job_service = MagicMock()
+        p.job_service.submit_face_detection = AsyncMock(return_value="face-1")
+        p.job_service.submit_clip_embedding = AsyncMock(return_value="clip-1")
+        p.job_service.submit_dino_embedding = AsyncMock(return_value="dino-1")
         p.job_service.update_job_status = MagicMock()
+        p.job_service.broadcast_entity_status = MagicMock()
 
-        p.callback_handler = AsyncMock()
+        p.callback_handler = MagicMock()
+        p.callback_handler.handle_face_detection_complete = AsyncMock()
+        p.callback_handler.handle_clip_embedding_complete = AsyncMock()
+        p.callback_handler.handle_dino_embedding_complete = AsyncMock()
 
         p._initialized = True # Skip real init
 
-        return p
+        yield p
 
 @pytest.mark.asyncio
 async def test_trigger_async_jobs_missing_file_path(processor):

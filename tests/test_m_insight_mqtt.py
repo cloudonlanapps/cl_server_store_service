@@ -1,4 +1,5 @@
 import json
+import random
 import time
 from pathlib import Path
 
@@ -45,7 +46,7 @@ def test_m_insight_worker(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        store_port=integration_config.store_port,
+        store_port=random.randint(30000, 40000),
         mqtt_broker=integration_config.mqtt_broker,
         mqtt_port=integration_config.mqtt_port,
         mqtt_topic="test/m_insight_mqtt",
@@ -122,7 +123,7 @@ async def test_m_insight_lifecycle_events(
 
     # Sort by timestamp to ensure correct order
     status_msg_payloads.sort(key=lambda s: s.timestamp)
-
+    
     # Last messages should contain 'idle' and 'running'
     statuses = [s.status for s in status_msg_payloads]
     assert "idle" in statuses
@@ -154,7 +155,7 @@ def test_m_insight_heartbeat_status(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        store_port=integration_config.store_port,
+        store_port=random.randint(40001, 50000),
         mqtt_broker=integration_config.mqtt_broker,
         mqtt_port=port,
     )

@@ -253,7 +253,8 @@ async def test_callback_entity_date_fallback(callback_handler):
         db.query.return_value.filter.return_value.first.return_value = mock_entity
 
         # Patch the method using the actual handler instance to ensure it's captured
-        with patch.object(callback_handler, "_get_face_storage_path", return_value=Path("/tmp/face.png")) as mock_get_path:
+        # Use a subpath of /tmp/fake/media to avoid ValueError: '/tmp/face.png' is not in the subpath of '/tmp/fake/media'
+        with patch.object(callback_handler, "_get_face_storage_path", return_value=Path("/tmp/fake/media/face.png")) as mock_get_path:
             await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
             assert mock_get_path.called
             # args[2] is entity_create_date
