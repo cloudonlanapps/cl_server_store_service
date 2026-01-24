@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 from sqlalchemy import select
-from sqlalchemy.orm import Session, configure_mappers
+from sqlalchemy.orm import configure_mappers
 from sqlalchemy_continuum import (
     version_class,  # pyright: ignore[reportAttributeAccessIssue, reportUnknownVariableType]
 )

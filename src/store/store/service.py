@@ -454,11 +454,11 @@ class EntityService:
 
         # Retry logic for database locks
         import time
+
         from sqlalchemy.exc import OperationalError
 
         max_retries = 5
         retry_delay = 0.1
-        last_error = None
 
         for attempt in range(max_retries):
             try:
@@ -477,10 +477,9 @@ class EntityService:
             except OperationalError as e:
                 self.db.rollback()
                 if "database is locked" in str(e).lower():
-                    last_error = e
                     if attempt < max_retries - 1:
                         logger.warning(
-                            f"Database locked during entity creation, retry {attempt+1}/{max_retries} after {retry_delay}s"
+                            f"Database locked during entity creation, retry {attempt + 1}/{max_retries} after {retry_delay}s"
                         )
                         time.sleep(retry_delay)
                         retry_delay *= 2  # Exponential backoff
@@ -724,23 +723,24 @@ class EntityService:
         """Delete all entities and related data from the database."""
         # This is used for cleanup in tests/admin
         from sqlalchemy import text
+
         from ..common.models import (
             Entity,
-            Face,
             EntityJob,
-            ImageIntelligence,
             EntitySyncState,
-            KnownPerson,
+            Face,
             FaceMatch,
+            ImageIntelligence,
+            KnownPerson,
         )
-        
+
         # 1. Clear intelligence and related tables
-        self.db.query(EntityJob).delete()
-        self.db.query(FaceMatch).delete()
-        self.db.query(Face).delete()
-        self.db.query(ImageIntelligence).delete()
-        self.db.query(KnownPerson).delete()
-        
+        _ = self.db.query(EntityJob).delete()
+        _ = self.db.query(FaceMatch).delete()
+        _ = self.db.query(Face).delete()
+        _ = self.db.query(ImageIntelligence).delete()
+        _ = self.db.query(KnownPerson).delete()
+
         # 2. Clear versioning and transaction metadata (using raw SQL for Continuum tables)
         # Sequence of deletion matters for FKs
         tables_to_clear = [
@@ -751,21 +751,23 @@ class EntityService:
         ]
         for table in tables_to_clear:
             try:
-                self.db.execute(text(f"DELETE FROM {table}"))
+                _ = self.db.execute(text(f"DELETE FROM {table}"))
             except Exception as e:
                 logger.warning(f"Failed to clear Continuum table {table}: {e}")
 
         # 3. Delete all records from main Entity table
-        self.db.query(Entity).delete()
-        
+        _ = self.db.query(Entity).delete()
+
         # 4. Reset sync state and sequences
         sync_state = self.db.query(EntitySyncState).filter(EntitySyncState.id == 1).first()
         if sync_state:
             sync_state.last_version = 0
-        
+
         try:
-            self.db.execute(text("DELETE FROM sqlite_sequence"))
+            _ = self.db.execute(text("DELETE FROM sqlite_sequence"))
         except Exception as e:
-            logger.debug(f"Note: sqlite_sequence clear failed (common if no AUTOINCREMENT used yet): {e}")
+            logger.debug(
+                f"Note: sqlite_sequence clear failed (common if no AUTOINCREMENT used yet): {e}"
+            )
 
         self.db.commit()

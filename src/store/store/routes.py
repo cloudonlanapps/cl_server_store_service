@@ -299,9 +299,11 @@ async def patch_entity(
     # Create body object from form fields
     # Handle type conversions for form data (strings to proper types)
     patch_data = {}
+    _ = label
     if "label" in form_keys:
         label_val = form_data.get("label")
         patch_data["label"] = label_val if label_val != "" else None
+    _ = description
     if "description" in form_keys:
         description_val = form_data.get("description")
         patch_data["description"] = description_val if description_val != "" else None
