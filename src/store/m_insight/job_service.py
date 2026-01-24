@@ -177,6 +177,7 @@ class JobSubmissionService:
             fd_count = None
             if fd_status == "completed":
                 fd_count = session.query(Face).filter(Face.entity_id == entity_id).count()
+                logger.debug(f"Entity {entity_id} status calculation: face_detection=completed, found {fd_count} faces in DB")
             
             details.face_detection = fd_status
             details.face_count = fd_count

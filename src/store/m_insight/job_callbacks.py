@@ -122,39 +122,8 @@ class JobCallbackHandler:
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
 
-        try:
-            # Check if job failed
-            if job.status == "failed":
-                logger.error(
-                    f"Face detection job {job.job_id} failed for image {entity_id}: "
-                    + f"{job.error_message}"
-                )
-                return
-
-            # MQTT callbacks don't include task_output - fetch full job via HTTP
-            full_job = await self.compute_client.get_job(job.job_id)
-            if not full_job or full_job.status != "completed":
-                logger.warning(
-                    f"Job {job.job_id} not completed when fetching full details (status: {full_job.status if full_job else 'None'})"
-                )
-                return
-
-            # Extract faces from task_output
-            if not full_job.task_output or "faces" not in full_job.task_output:
-                logger.warning(f"No faces found in job {job.job_id} output for image {entity_id}")
-                return
-
-            try:
-                task_output: FaceDetectionOutput = FaceDetectionOutput.model_validate(
-                    full_job.task_output
-                )
-                faces_data = task_output.faces
-            except ValidationError as e:
-                logger.error(f"Invalid task_output format for job {job.job_id}: {e}")
-                return
-
-            # Phase 1: Download face images and create/update Face records
-            saved_faces: list[tuple[int, Path]] = []  # (face_id, face_path)
+        # Phase 1: Download face images and create/update Face records
+        saved_faces: list[tuple[int, Path]] = []  # (face_id, face_path)
 
             # Get entity info needed for storage path (re-query in a small block)
             create_date = 0
@@ -216,7 +185,7 @@ class JobCallbackHandler:
                     db.close()
 
             commit_faces_to_db()
-            logger.info(f"Successfully saved {len(saved_faces)} faces for image {entity_id}")
+            logger.info(f"Successfully saved {len(saved_faces)} faces (ids: {[f[0] for f in saved_faces]}) for image {entity_id}")
 
             # Phase 2: Submit face_embedding jobs
             if self.job_submission_service:
@@ -612,6 +581,3 @@ class JobCallbackHandler:
             )
 
             logger.info(f"Successfully processed face embedding for face {face_id}")
-
-        except Exception as e:
-            logger.error(f"Failed to handle face embedding completion for face {face_id}: {e}")
