@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Response
 
 from store.common.auth import UserPayload, require_permission
 from . import schemas as intel_schemas
@@ -45,7 +45,6 @@ async def download_face_embedding(
 ):
     """Download face embedding from Qdrant vector store."""
     _ = user
-    from fastapi.responses import Response
 
     try:
         buffer = service.get_face_embedding_buffer(face_id)
@@ -73,7 +72,6 @@ async def download_entity_clip_embedding(
 ):
     """Download entity CLIP embedding from Qdrant vector store."""
     _ = user
-    from fastapi.responses import Response
 
     try:
         buffer = service.get_clip_embedding_buffer(entity_id)
@@ -103,7 +101,6 @@ async def download_entity_dino_embedding(
 ):
     """Download entity DINO embedding from Qdrant vector store."""
     _ = user
-    from fastapi.responses import Response
 
     try:
         buffer = service.get_dino_embedding_buffer(entity_id)

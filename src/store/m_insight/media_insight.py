@@ -17,6 +17,7 @@ from .job_callbacks import JobCallbackHandler
 from .job_service import JobSubmissionService
 from .schemas import EntityVersionData
 from .vector_stores import get_clip_store, get_dino_store, get_face_store
+from cl_ml_tools.utils.profiling import timed
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient, SessionManager
@@ -130,6 +131,7 @@ class MediaInsight:
         self._initialized = False
         logger.info("MInsightProcessor services shut down")
 
+    @timed
     async def process(self, data: EntityVersionData) -> bool:
         """Process an entity version for intelligence extraction.
 
@@ -193,6 +195,7 @@ class MediaInsight:
         finally:
             session.close()
 
+    @timed
     async def _enqueue_image(self, entity_version: EntityVersionData) -> None:
         """Enqueue a qualified image for processing.
 
@@ -262,6 +265,7 @@ class MediaInsight:
         except Exception as e:
             logger.error(f"Failed to trigger jobs for image {entity_id}: {e}")
 
+    @timed
     async def _trigger_async_jobs(self, entity: EntityVersionData) -> None:
         """Trigger face detection, CLIP, and DINO embedding jobs for an entity version.
 

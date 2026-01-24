@@ -6,6 +6,9 @@ from loguru import logger
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import QueuePool
+from sqlalchemy.exc import OperationalError
+import time
 
 # CRITICAL: Import versioning BEFORE models to ensure make_versioned() is called first
 # Using absolute import to avoid circular dependency
@@ -13,9 +16,10 @@ import store.common.versioning as _versioning  # noqa: F401  # pyright: ignore[r
 
 from .utils import get_db_url
 
+from typing import cast
 # Global session factory
-SessionLocal: sessionmaker[Session]
-engine: Engine
+SessionLocal: sessionmaker[Session] = cast(sessionmaker[Session], None)
+engine: Engine = cast(Engine, None)
 
 
 def enable_wal_mode(
@@ -87,7 +91,6 @@ def create_db_engine(
         else:
             # For file-based SQLite, we want a real pool to support high concurrency
             # especially for WAL mode and batch tests.
-            from sqlalchemy.pool import QueuePool
 
             kwargs.update(
                 {
@@ -162,8 +165,6 @@ def get_db() -> Generator[Session, None, None]:
 
 def with_retry(max_retries: int = 5, initial_delay: float = 0.5):
     """Decorator to retry a function on SQLite locking errors."""
-    import time
-    from sqlalchemy.exc import OperationalError
 
     def decorator(func):
         def wrapper(*args, **kwargs):

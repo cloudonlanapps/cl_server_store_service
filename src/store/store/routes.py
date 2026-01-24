@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from typing import cast
 
@@ -71,7 +72,6 @@ async def get_entities(
     )
 
     # Calculate pagination metadata
-    import math
 
     total_pages = math.ceil(total_count / page_size) if total_count > 0 else 0
     has_next = page < total_pages

@@ -3,7 +3,8 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from cl_ml_tools import BroadcasterBase
+from cl_ml_tools import BroadcasterBase, get_broadcaster
+from .schemas import MInsightStatus
 
 if TYPE_CHECKING:
     from .config import MInsightConfig
@@ -18,7 +19,7 @@ class MInsightBroadcaster:
         self.broadcaster: BroadcasterBase | None = None
         self.port: int = config.store_port
         self.topic_base: str = f"mInsight/{self.port}"
-        from .schemas import MInsightStatus
+        self.topic_base: str = f"mInsight/{self.port}"
         self.current_status: MInsightStatus = MInsightStatus(
             status="unknown",
             timestamp=int(time.time() * 1000)
@@ -28,8 +29,6 @@ class MInsightBroadcaster:
         """Initialize broadcaster."""
         if not self.config.mqtt_port:
             return
-
-        from cl_ml_tools import get_broadcaster
 
         self.broadcaster = get_broadcaster(
             broadcast_type="mqtt",

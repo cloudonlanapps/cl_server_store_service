@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
+import io
+import numpy as np
+from datetime import UTC, datetime
 
 from cl_ml_tools.plugins.face_detection.schema import BBox, FaceLandmarks
 from sqlalchemy.orm import Session
 
-from store.common.models import EntityJob, Face, FaceMatch, KnownPerson
+from store.common.models import EntityJob, Face, FaceMatch, KnownPerson, Entity
 from store.store.config import StoreConfig
 
 from .schemas import (
@@ -25,6 +28,7 @@ from .vector_stores import (
     get_dino_store,
     get_face_store,
 )
+from store.store.service import EntityService
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +74,6 @@ class IntelligenceRetrieveService:
 
     def _get_entity_or_raise(self, entity_id: int) -> None:
         """Check if entity exists, raise exception if not."""
-        from store.common.models import Entity
 
         exists = self.db.query(Entity.id).filter(Entity.id == entity_id).scalar()  # pyright: ignore[reportAny]
         if not exists:
@@ -78,7 +81,6 @@ class IntelligenceRetrieveService:
 
     def _get_face_or_raise(self, face_id: int) -> None:
         """Check if face exists, raise exception if not."""
-        from store.common.models import Face
 
         exists = self.db.query(Face.id).filter(Face.id == face_id).scalar()  # pyright: ignore[reportAny]
         if not exists:
@@ -171,8 +173,6 @@ class IntelligenceRetrieveService:
 
         # Optionally include entity details
         if include_details and final_results:
-            from store.store.service import EntityService
-
             entity_service = EntityService(self.db, self.config)
             for result in final_results:
                 result.entity = entity_service.get_entity_by_id(result.entity_id)
@@ -336,7 +336,6 @@ class IntelligenceRetrieveService:
 
     def _now_timestamp(self) -> int:
         """Return current UTC timestamp in milliseconds."""
-        from datetime import UTC, datetime
 
         return int(datetime.now(UTC).timestamp() * 1000)
 
@@ -405,9 +404,6 @@ class IntelligenceRetrieveService:
         Raises:
             ResourceNotFoundError: If face or embedding not found
         """
-        import io
-
-        import numpy as np
 
         self._get_face_or_raise(face_id)
 
@@ -432,10 +428,6 @@ class IntelligenceRetrieveService:
         Raises:
             ResourceNotFoundError: If entity or embedding not found
         """
-        import io
-
-        import numpy as np
-
         self._get_entity_or_raise(entity_id)
 
         point = self.qdrant_store.get_vector(id=entity_id)
@@ -459,10 +451,6 @@ class IntelligenceRetrieveService:
         Raises:
             ResourceNotFoundError: If entity or embedding not found
         """
-        import io
-
-        import numpy as np
-
         self._get_entity_or_raise(entity_id)
 
         point = self.dino_store.get_vector(id=entity_id)

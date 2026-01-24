@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import ExpiredSignatureError, JWTError, jwt
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
+from ..store.config_service import ConfigService
 
 from .config import BaseConfig
 from .database import get_db
@@ -173,8 +174,6 @@ def require_permission(permission: Permission):
             return current_user
 
         if permission == "media_store_read":
-            from ..store.config_service import ConfigService
-
             if not ConfigService(db).get_read_auth_enabled():
                 return current_user
 

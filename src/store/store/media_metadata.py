@@ -11,6 +11,7 @@ import tempfile
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
+import magic
 
 from cl_ml_tools.algorithms import (
     MediaType,
@@ -124,8 +125,6 @@ class MediaMetadataExtractor:
             raise ValueError(f"Failed to determine MIME type: {e}") from e
 
         # Get MIME type string using python-magic
-        import magic
-
         mime = magic.Magic(mime=True)
         mime_type_str = mime.from_buffer(file_bytes)
         if not mime_type_str:

@@ -8,11 +8,12 @@ from cl_client import ComputeClient
 from cl_client.models import OnJobResponseCallback
 from loguru import logger
 
-from store.common import Entity, EntityJob, Face
+from store.common import Entity, EntityJob, Face, database
 from store.common.database import with_retry
 from store.common.storage import StorageService
 
 from .schemas import EntityVersionData
+from cl_ml_tools.utils.profiling import timed
 
 
 class JobSubmissionService:
@@ -40,6 +41,7 @@ class JobSubmissionService:
         """
         return int(datetime.now(UTC).timestamp() * 1000)
 
+    @timed
     async def submit_face_detection(
         self,
         entity: Entity | EntityVersionData,
@@ -54,7 +56,6 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from store.common.database import SessionLocal
 
         try:
             # Resolve file path using StorageService
@@ -83,7 +84,7 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            db = SessionLocal()
+            db = database.SessionLocal()
             try:
                 @with_retry(max_retries=10)
                 def save_job():
@@ -115,6 +116,7 @@ class JobSubmissionService:
             logger.error(f"Failed to submit face_detection job for entity {entity.id}: {e}")
             return None
 
+    @timed
     async def submit_clip_embedding(
         self,
         entity: Entity | EntityVersionData,
@@ -129,7 +131,6 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from store.common.database import SessionLocal
 
         try:
             if not entity.file_path:
@@ -142,7 +143,7 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            db = SessionLocal()
+            db = database.SessionLocal()
             try:
                 now = self._now_timestamp()
                 entity_job = EntityJob(
@@ -170,6 +171,7 @@ class JobSubmissionService:
             logger.error(f"Failed to submit clip_embedding job for entity {entity.id}: {e}")
             return None
 
+    @timed
     async def submit_dino_embedding(
         self,
         entity: Entity | EntityVersionData,
@@ -184,7 +186,6 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from store.common.database import SessionLocal
 
         try:
             if not entity.file_path:
@@ -197,7 +198,7 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            db = SessionLocal()
+            db = database.SessionLocal()
             try:
                 now = self._now_timestamp()
                 entity_job = EntityJob(
@@ -225,6 +226,7 @@ class JobSubmissionService:
             logger.error(f"Failed to submit dino_embedding job for entity {entity.id}: {e}")
             return None
 
+    @timed
     async def submit_face_embedding(
         self,
         face: Face,
@@ -241,7 +243,6 @@ class JobSubmissionService:
         Returns:
             Job ID if successful, None if failed
         """
-        from store.common.database import SessionLocal
 
         try:
             # Resolve face file path
@@ -254,7 +255,7 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            db = SessionLocal()
+            db = database.SessionLocal()
             try:
                 now = self._now_timestamp()
                 # Track face_embedding jobs under the parent entity
@@ -290,7 +291,6 @@ class JobSubmissionService:
         Args:
             job_id: Job ID to delete
         """
-        from store.common.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -315,7 +315,6 @@ class JobSubmissionService:
             status: New status (queued, in_progress, completed, failed)
             error_message: Optional error message if status is failed
         """
-        from store.common.database import SessionLocal
 
         db = SessionLocal()
         try:

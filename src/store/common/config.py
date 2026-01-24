@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict
+from .utils import ensure_cl_server_dir
 
 
 class BaseConfig(BaseModel):
@@ -35,7 +36,6 @@ class BaseConfig(BaseModel):
 
     def finalize_base(self):
         """Finalize base configuration after CLI parsing."""
-        from .utils import ensure_cl_server_dir
 
         # Initialize Paths
         cl_dir = ensure_cl_server_dir(create_if_missing=True)

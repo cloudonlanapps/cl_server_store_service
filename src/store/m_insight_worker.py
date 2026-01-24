@@ -23,6 +23,9 @@ from loguru import logger
 from store.m_insight import MediaInsight, MInsightConfig
 
 from .m_insight.broadcaster import MInsightBroadcaster
+from cl_ml_tools import get_broadcaster, shutdown_broadcaster
+from .common import database, utils
+from .m_insight.config import MInsightConfig
 
 # Global shutdown event and signal counter
 shutdown_event = asyncio.Event()
@@ -75,8 +78,6 @@ async def mqtt_listener_task(config: MInsightConfig) -> None:
         return
 
     try:
-        from cl_ml_tools import get_broadcaster
-
         broadcaster = get_broadcaster(
             broadcast_type="mqtt",
             broker=config.mqtt_broker,
@@ -272,8 +273,6 @@ def main() -> int:
     args = parser.parse_args()
 
     # Initialize Database (Worker needs access to DB)
-    from .common import database, utils
-    from .m_insight.config import MInsightConfig
 
     # Initialize basic info needed for config
     cl_dir = utils.ensure_cl_server_dir(create_if_missing=True)
@@ -313,8 +312,6 @@ def main() -> int:
         return 1
     finally:
         # Cleanup
-        from cl_ml_tools import shutdown_broadcaster
-
         shutdown_broadcaster()
 
 

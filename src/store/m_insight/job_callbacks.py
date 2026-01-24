@@ -8,9 +8,12 @@ from typing import cast
 from cl_client import ComputeClient
 from cl_client.models import JobResponse
 from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput
+from cl_ml_tools.utils.profiling import timed
 from loguru import logger
+import numpy as np
 from numpy.typing import NDArray
 from pydantic import ValidationError
+import tempfile
 
 from store.common.database import with_retry
 from store.common.models import Entity, Face, FaceMatch, ImageIntelligence, KnownPerson
@@ -19,6 +22,7 @@ from .config import MInsightConfig
 from .job_service import JobSubmissionService
 from .schemas import SearchPreferences, StoreItem
 from .vector_stores import QdrantVectorStore
+from store.common import database
 
 
 class JobCallbackHandler:
@@ -108,6 +112,7 @@ class JobCallbackHandler:
 
         return dir_path / filename
 
+    @timed
     async def handle_face_detection_complete(self, entity_id: int, job: JobResponse) -> None:
         """Handle face detection job completion.
 
@@ -117,9 +122,8 @@ class JobCallbackHandler:
             entity_id: Image (Entity) ID
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
-        from store.common.database import SessionLocal
 
-        db = SessionLocal()
+        db = database.SessionLocal()
         try:
             # Check if job failed
             if job.status == "failed":
@@ -351,6 +355,7 @@ class JobCallbackHandler:
         finally:
             db.close()
 
+    @timed
     async def handle_clip_embedding_complete(self, entity_id: int, job: JobResponse) -> None:
         """Handle CLIP embedding job completion.
 
@@ -386,7 +391,6 @@ class JobCallbackHandler:
             output_path = cast(str, full_job.params["output_path"])
 
             # Download embedding file to temporary location
-            import tempfile
 
             with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
                 tmp_path = Path(tmp.name)
@@ -399,7 +403,6 @@ class JobCallbackHandler:
                 )
 
                 # Load .npy file (numpy binary format)
-                import numpy as np
 
                 embedding: NDArray[np.float32] = cast(NDArray[np.float32], np.load(tmp_path))
 
@@ -429,6 +432,7 @@ class JobCallbackHandler:
         except Exception as e:
             logger.error(f"Failed to handle CLIP embedding completion for image {entity_id}: {e}")
 
+    @timed
     async def handle_dino_embedding_complete(self, entity_id: int, job: JobResponse) -> None:
         """Handle DINOv2 embedding job completion.
 
@@ -463,7 +467,6 @@ class JobCallbackHandler:
             output_path = cast(str, full_job.params["output_path"])
 
             # Download embedding file to temporary location
-            import tempfile
 
             with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
                 tmp_path = Path(tmp.name)
@@ -476,7 +479,6 @@ class JobCallbackHandler:
                 )
 
                 # Load .npy file
-                import numpy as np
 
                 embedding: NDArray[np.float32] = cast(NDArray[np.float32], np.load(tmp_path))
 
@@ -506,6 +508,7 @@ class JobCallbackHandler:
         except Exception as e:
             logger.error(f"Failed to handle DINO embedding completion for image {entity_id}: {e}")
 
+    @timed
     async def handle_face_embedding_complete(
         self, face_id: int, entity_id: int, job: JobResponse
     ) -> None:
@@ -521,9 +524,8 @@ class JobCallbackHandler:
             entity_id: Original image Entity ID (for reference/logging)
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
-        from store.common.database import SessionLocal
 
-        db = SessionLocal()
+        db = database.SessionLocal()
         try:
             # Check if job failed
             if job.status == "failed":
@@ -549,7 +551,6 @@ class JobCallbackHandler:
             output_path = cast(str, full_job.params["output_path"])
 
             # Download embedding file to temporary location
-            import tempfile
 
             with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
                 tmp_path = Path(tmp.name)
@@ -562,7 +563,6 @@ class JobCallbackHandler:
                 )
 
                 # Load .npy file (numpy binary format)
-                import numpy as np
 
                 embedding: NDArray[np.float32] = cast(NDArray[np.float32], np.load(tmp_path))
 
@@ -659,7 +659,6 @@ class JobCallbackHandler:
                     logger.info(f"Created new known person {known_person.id} for face {face_id}")
 
             # Add face embedding to face store
-            import numpy as np
 
             _ = self.face_store.add_vector(
                 StoreItem(

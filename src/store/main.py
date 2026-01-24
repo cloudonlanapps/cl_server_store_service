@@ -15,11 +15,11 @@ from .common import (
 )
 from .store.config import StoreConfig
 from .store.media_metadata import validate_tools
+from .store.store import app
 
 
 def create_app(config: StoreConfig) -> FastAPI:
     """Create and configure the FastAPI application instance."""
-    from .store.store import app
 
     app.state.config = config
 
