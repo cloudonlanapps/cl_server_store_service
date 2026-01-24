@@ -15,17 +15,13 @@ class DBService:
     Each service manages its own sessions internally for multi-process safety.
     """
 
-    def __init__(self, config: BaseConfig):
-        """Initialize all table services.
-
-        Args:
-            config: Store configuration (no session stored)
-        """
-        self.entity = EntityDBService(config)
-        self.entity_version = EntityVersionDBService(config)
-        self.intelligence = ImageIntelligenceDBService(config)
-        self.job = EntityJobDBService(config)
-        self.face = FaceDBService(config)
-        self.known_person = KnownPersonDBService(config)
-        self.face_match = FaceMatchDBService(config)
-        self.sync_state = EntitySyncStateDBService(config)
+    def __init__(self):
+        """Initialize all table services."""
+        self.entity = EntityDBService()
+        self.entity_version = EntityVersionDBService()
+        self.intelligence = ImageIntelligenceDBService()
+        self.job = EntityJobDBService()
+        self.face = FaceDBService()
+        self.known_person = KnownPersonDBService()
+        self.face_match = FaceMatchDBService()
+        self.sync_state = EntitySyncStateDBService()

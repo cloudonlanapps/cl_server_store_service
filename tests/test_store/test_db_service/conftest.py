@@ -32,5 +32,5 @@ def store_config(tmp_path):
     return config
 
 @pytest.fixture
-def db_service(db_engine, store_config):
-    return DBService(store_config)
+def db_service(db_engine):
+    return DBService()

@@ -147,8 +147,7 @@ class EntityDBService(BaseDBService[EntitySchema]):
 
 
 class EntityVersionDBService:
-    def __init__(self, config: BaseConfig):
-        self.config = config
+    def __init__(self):
         # Get the EntityVersion model class
         configure_mappers()
         self.EntityVersion = version_class(Entity)

@@ -48,9 +48,9 @@ class BaseDBService(Generic[SchemaT]):
     model_class: type
     schema_class: type[SchemaT]
 
-    def __init__(self, config: BaseConfig):
-        """Initialize service with config only (no session stored)."""
-        self.config = config
+    def __init__(self):
+        """Initialize service."""
+        pass
 
     @timed
     @with_retry(max_retries=10)
