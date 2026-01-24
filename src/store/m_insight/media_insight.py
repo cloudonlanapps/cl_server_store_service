@@ -17,7 +17,7 @@ from .config import MInsightConfig
 from .job_callbacks import JobCallbackHandler
 from .job_service import JobSubmissionService
 from .schemas import EntityVersionSchema
-from .vector_stores import get_clip_store, get_dino_store, get_face_store
+from store.vectorstore_services.vector_stores import get_clip_store, get_dino_store, get_face_store
 from cl_ml_tools.utils.profiling import timed
 
 if TYPE_CHECKING:

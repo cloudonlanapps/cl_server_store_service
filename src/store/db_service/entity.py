@@ -10,6 +10,7 @@ from sqlalchemy_continuum import version_class  # type: ignore
 from .base import BaseDBService, timed
 from . import database
 from .database import with_retry
+from .exceptions import ResourceNotFoundError
 from .models import (
     Entity,
     EntityJob,
@@ -31,6 +32,13 @@ def _now_timestamp() -> int:
 class EntityDBService(BaseDBService[EntitySchema]):
     model_class = Entity
     schema_class = EntitySchema
+
+    def get_or_raise(self, id: int) -> EntitySchema:
+        """Get entity by ID or raise ResourceNotFoundError."""
+        entity = self.get(id)
+        if not entity:
+            raise ResourceNotFoundError(f"Entity {id} not found")
+        return entity
 
     def _log_cascade_deletes(self, orm_obj: Entity, db: Session) -> None:
         """Log what will be cascade deleted."""

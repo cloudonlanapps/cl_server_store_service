@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import cast, override
 
+import io
 import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
@@ -21,6 +22,7 @@ from qdrant_client.models import (
     VectorStructOutput,
 )
 
+from .exceptions import VectorResourceNotFound
 from .schemas import SearchPreferences, SearchResult, StoreItem
 
 
@@ -46,6 +48,20 @@ class StoreInterface[StoreItemT, SearchOptionsT, SearchResultT]:
         """
         _ = id
         raise NotImplementedError
+    
+    def get_vector_buffer(self, id: int) -> io.BytesIO:
+        """
+        Retrieves a vector by its ID and returns it as a BytesIO buffer of .npy data.
+        """
+        point = self.get_vector(id=id)
+        if not point:
+            raise VectorResourceNotFound(f"Vector {id} not found in vector store")
+
+        buffer = io.BytesIO()
+        np.save(buffer, point.embedding)
+        _ = buffer.seek(0)
+        return buffer
+    
 
     def delete_vector(self, id: int) -> None:
         """

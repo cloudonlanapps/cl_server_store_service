@@ -352,8 +352,12 @@ def client(
 
     # Import app and override dependency
     from store.common.auth import UserPayload, get_current_user
+    from store.db_service import database
     from store.db_service.db_internals import get_db
     from store.store.store import app
+
+    # CRITICAL: Also override the global SessionLocal for DBService
+    monkeypatch.setattr(database, "SessionLocal", TestingSessionLocal)
 
     app.dependency_overrides[get_db] = override_get_db
 

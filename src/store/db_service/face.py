@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from .base import BaseDBService, timed
 from . import database
 from .database import with_retry
+from .exceptions import ResourceNotFoundError
 from .models import Entity, Face, KnownPerson
 from .schemas import FaceSchema, KnownPersonSchema
 
@@ -23,6 +24,13 @@ def _now_timestamp() -> int:
 class FaceDBService(BaseDBService[FaceSchema]):
     model_class = Face
     schema_class = FaceSchema
+
+    def get_or_raise(self, id: int) -> FaceSchema:
+        """Get face by ID or raise ResourceNotFoundError."""
+        face = self.get(id)
+        if not face:
+            raise ResourceNotFoundError(f"Face {id} not found")
+        return face
 
     def _log_cascade_deletes(self, orm_obj: Face, db: Session) -> None:
         """Log what will be cascade deleted."""
@@ -238,6 +246,23 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
 
     @timed
     @with_retry(max_retries=10)
+    def get(self, id: int) -> KnownPersonSchema | None:
+        """Get known person by ID with face count."""
+        db = database.SessionLocal()
+        try:
+            obj = db.query(KnownPerson).filter_by(id=id).first()
+            if not obj:
+                return None
+            
+            schema = self._to_schema(obj)
+            # Efficient count
+            schema.face_count = db.query(Face).filter(Face.known_person_id == id).count()
+            return schema
+        finally:
+            db.close()
+
+    @timed
+    @with_retry(max_retries=10)
     def create_with_flush(self) -> KnownPersonSchema:
         """Create new person and flush to get ID (for immediate linking)."""
         db = database.SessionLocal()
@@ -248,7 +273,10 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
             db.flush()  # Get ID without committing
             db.commit()
             db.refresh(obj)
-            return self._to_schema(obj)
+            
+            schema = self._to_schema(obj)
+            schema.face_count = 0
+            return schema
         except Exception:
             db.rollback()
             raise
@@ -269,7 +297,10 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
             obj.updated_at = _now_timestamp()
             db.commit()
             db.refresh(obj)
-            return self._to_schema(obj)
+            
+            schema = self._to_schema(obj)
+            schema.face_count = db.query(Face).filter(Face.known_person_id == person_id).count()
+            return schema
         except Exception:
             db.rollback()
             raise
@@ -288,11 +319,24 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
     @timed
     @with_retry(max_retries=10)
     def get_all(self) -> list[KnownPersonSchema]:
-        """Get all known persons."""
+        """Get all known persons with face counts."""
         db = database.SessionLocal()
         try:
-            objs = db.query(KnownPerson).all()
-            return [self._to_schema(obj) for obj in objs]
+            from sqlalchemy import func
+            # Efficiently fetch persons with their face counts
+            results = (
+                db.query(KnownPerson, func.count(Face.id))
+                .outerjoin(Face, Face.known_person_id == KnownPerson.id)
+                .group_by(KnownPerson.id)
+                .all()
+            )
+            
+            schemas = []
+            for kp, count in results:
+                s = self._to_schema(kp)
+                s.face_count = count
+                schemas.append(s)
+            return schemas
         finally:
             db.close()
 

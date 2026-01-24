@@ -1,4 +1,5 @@
 from .db_service import DBService
+from .database import init_db
 from .schemas import (
     EntitySchema,
     EntityVersionSchema,

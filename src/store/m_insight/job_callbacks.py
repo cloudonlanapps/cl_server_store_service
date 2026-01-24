@@ -20,8 +20,8 @@ from store.db_service.db_internals import Entity, Face, ImageIntelligence, Known
 
 from .config import MInsightConfig
 from .job_service import JobSubmissionService
-from .schemas import SearchPreferences, StoreItem
-from .vector_stores import QdrantVectorStore
+from store.vectorstore_services.schemas import StoreItem
+from store.vectorstore_services.vector_stores import QdrantVectorStore
 
 
 class JobCallbackHandler:

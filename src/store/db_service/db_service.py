@@ -17,6 +17,10 @@ class DBService:
 
     def __init__(self):
         """Initialize all table services."""
+        from . import database
+        if database.SessionLocal is None:
+            database.init_db()
+
         self.entity = EntityDBService()
         self.entity_version = EntityVersionDBService()
         self.intelligence = ImageIntelligenceDBService()
