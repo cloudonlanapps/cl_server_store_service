@@ -1,16 +1,16 @@
 # CL Server Store Service - Comprehensive Code Review
 
-**Review Date:** 2026-01-23
+**Review Date:** 2026-01-24
 **Reviewer:** Claude Code (Automated Code Review)
-**Total Issues Found:** 92+ (52 source code + 40+ test issues)
+**Total Issues Found:** 95+ (55 source code + 40+ test issues)
 
 ## Quick Summary
 
 | Category        | Critical | High   | Medium | Low     | Total   |
 | --------------- | -------- | ------ | ------ | ------- | ------- |
-| **Source Code** | 2        | 16     | 25     | 9       | 52      |
+| **Source Code** | 5        | 16     | 25     | 9       | 55      |
 | **Tests**       | 8        | 12     | 15     | 5+      | 40+     |
-| **TOTAL**       | **10**   | **28** | **40** | **14+** | **92+** |
+| **TOTAL**       | **13**   | **28** | **40** | **14+** | **95+** |
 
 ## Table of Contents
 
@@ -289,6 +289,444 @@ Add `get_file_path(storage_service)` method to Entity model matching Face implem
 - [ ] Method tested with unit tests
 - [ ] No AttributeError in job_service
 - [ ] Type checker passes
+```
+
+---
+
+### CRITICAL-004: Face Files Not Deleted When Entity Deleted
+
+**Category:** Source Code / Resource Management / Data Leaks
+**Severity:** CRITICAL
+**Impact:** File system leaks, orphaned face images accumulate indefinitely, disk space exhaustion
+
+**Files Affected:**
+- `/Users/anandasarangaram/Work/cl_server/services/store/src/store/store/service.py` (delete_entity method, lines 642-694)
+- `/Users/anandasarangaram/Work/cl_server/services/store/src/store/common/models.py` (Face model, lines 188-244)
+
+**Description:**
+When an entity is deleted via `delete_entity()`, the entity's file is properly deleted from storage (line 688-689), and Face records are cascade-deleted from the database via SQLAlchemy relationships. However, the **cropped face image files** stored on disk (referenced by `face.file_path`) are **never deleted**, causing permanent file leaks.
+
+**Data Flow:**
+1. Entity created → Face detection job runs → Cropped face images saved to disk
+2. Face records created in database with `file_path` pointing to cropped images
+3. Entity deleted → Entity file deleted from storage ✓
+4. Face records cascade-deleted from database ✓
+5. **Cropped face image files remain on disk indefinitely** ✗
+
+**Current Code:**
+```python
+# service.py:642-694
+def delete_entity(self, entity_id: int, *, _from_parent: bool = False) -> bool:
+    """Delete an entity (hard delete with proper versioning)."""
+    entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
+    if not entity:
+        return False
+
+    # ... validation and children recursion ...
+
+    # Hard delete this entity - remove file and database record
+    if entity.file_path:
+        _ = self.file_storage.delete_file(entity.file_path)  # ✓ Entity file deleted
+
+    self.db.delete(entity)  # Face records cascade-deleted from DB
+    self.db.commit()
+
+    # ✗ PROBLEM: Face files (entity.faces[].file_path) are NEVER deleted!
+    return True
+```
+
+**Face Model (models.py:214):**
+```python
+class Face(Base):
+    file_path: Mapped[str] = mapped_column(String, nullable=False)
+    # Path to cropped face image file - stored in storage system
+```
+
+**Fix Required:**
+
+Delete face files before deleting the entity:
+
+```python
+def delete_entity(self, entity_id: int, *, _from_parent: bool = False) -> bool:
+    """Delete an entity (hard delete with proper versioning)."""
+    entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
+    if not entity:
+        return False
+
+    # Direct call: require entity to be soft-deleted first
+    if not _from_parent and not entity.is_deleted:
+        raise ValueError(...)
+
+    # Recursive call from parent: soft-delete if not already
+    if _from_parent and not entity.is_deleted:
+        entity.is_deleted = True
+        self.db.commit()
+
+    # Recursively handle children if this is a collection
+    children = self.db.query(Entity).filter(Entity.parent_id == entity_id).all()
+    if children:
+        for child in children:
+            _ = self.delete_entity(child.id, _from_parent=True)
+
+    # NEW: Delete face files before deleting entity
+    if entity.faces:
+        for face in entity.faces:
+            if face.file_path:
+                _ = self.file_storage.delete_file(face.file_path)
+
+    # Delete entity file
+    if entity.file_path:
+        _ = self.file_storage.delete_file(entity.file_path)
+
+    self.db.delete(entity)
+    self.db.commit()
+
+    return True
+```
+
+**GitHub Issue Template:**
+```markdown
+**Title:** [CRITICAL] delete_entity() leaks face image files
+
+**Labels:** bug, critical, resource-leak, file-management
+
+**Description:**
+When entities are deleted, their associated face image files are not deleted from storage, causing permanent file system leaks. Only database records are removed.
+
+**Impact:**
+- Orphaned face images accumulate indefinitely
+- Disk space exhaustion over time
+- No automatic cleanup mechanism
+- Production servers will eventually fill up
+- Each entity with N faces leaks N cropped image files
+
+**Files:**
+- src/store/store/service.py (delete_entity method)
+- src/store/common/models.py (Face model relationships)
+
+**Root Cause:**
+`delete_entity()` only deletes the entity's file, not the associated face files. SQLAlchemy cascade deletes Face records from DB, but files remain on disk.
+
+**Fix:**
+Before deleting entity, iterate through `entity.faces` and delete each `face.file_path` from storage.
+
+**Acceptance Criteria:**
+- [ ] delete_entity() deletes all face files before deleting entity
+- [ ] Cascade deletion still works for nested entities
+- [ ] File storage cleanup tested
+- [ ] Integration test verifies face files are deleted
+- [ ] No orphaned files remain after entity deletion
+```
+
+---
+
+### CRITICAL-005: delete_all_entities() Does Not Delete Any Files
+
+**Category:** Source Code / Resource Management / Data Leaks
+**Severity:** CRITICAL
+**Impact:** Massive file leaks, all entity and face files remain on disk, complete data inconsistency
+
+**Files Affected:**
+- `/Users/anandasarangaram/Work/cl_server/services/store/src/store/store/service.py` (delete_all_entities method, lines 722-774)
+
+**Description:**
+The `delete_all_entities()` method deletes all database records (entities, faces, intelligence data, versioning tables) but **does not delete ANY files from storage**. This creates a complete disconnect between database and file system, with all media files remaining orphaned on disk.
+
+**Current Code:**
+```python
+# service.py:722-774
+def delete_all_entities(self) -> None:
+    """Delete all entities and related data from the database."""
+    # 1. Clear intelligence and related tables
+    _ = self.db.query(EntityJob).delete()
+    _ = self.db.query(FaceMatch).delete()
+    _ = self.db.query(Face).delete()  # Face files NOT deleted!
+    _ = self.db.query(ImageIntelligence).delete()
+    _ = self.db.query(KnownPerson).delete()
+
+    # 2. Clear versioning and transaction metadata
+    tables_to_clear = [...]
+    for table in tables_to_clear:
+        _ = self.db.execute(text(f"DELETE FROM {table}"))
+
+    # 3. Delete all records from main Entity table
+    _ = self.db.query(Entity).delete()  # Entity files NOT deleted!
+
+    # 4. Reset sync state and sequences
+    # ...
+
+    self.db.commit()
+
+    # ✗ PROBLEM: NO file cleanup! All entity files and face files remain on disk!
+```
+
+**Impact Scenario:**
+1. System has 10,000 entities with images and faces
+2. Admin calls `delete_all_entities()` (or DELETE /entities endpoint)
+3. All database records deleted ✓
+4. All 10,000 entity files remain on disk ✗
+5. All associated face cropped images remain on disk ✗
+6. Files are now orphaned - no database references
+7. No way to know which files are orphaned vs legitimate
+8. Manual cleanup required or disk fills up
+
+**Fix Required:**
+
+Query all entities and faces first, delete files, then delete records:
+
+```python
+def delete_all_entities(self) -> None:
+    """Delete all entities and related data from database AND storage."""
+    from pathlib import Path
+    from sqlalchemy import text
+
+    # NEW: Phase 0 - Delete all files first (before database records)
+
+    # Delete all face files
+    faces = self.db.query(Face).all()
+    for face in faces:
+        if face.file_path:
+            try:
+                _ = self.file_storage.delete_file(face.file_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete face file {face.file_path}: {e}")
+
+    # Delete all entity files
+    entities = self.db.query(Entity).all()
+    for entity in entities:
+        if entity.file_path:
+            try:
+                _ = self.file_storage.delete_file(entity.file_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete entity file {entity.file_path}: {e}")
+
+    # Phase 1: Clear intelligence and related tables
+    _ = self.db.query(EntityJob).delete()
+    _ = self.db.query(FaceMatch).delete()
+    _ = self.db.query(Face).delete()
+    _ = self.db.query(ImageIntelligence).delete()
+    _ = self.db.query(KnownPerson).delete()
+
+    # Phase 2-4: Same as before...
+    # ...
+```
+
+**GitHub Issue Template:**
+```markdown
+**Title:** [CRITICAL] delete_all_entities() leaks ALL files to disk
+
+**Labels:** bug, critical, resource-leak, file-management, data-integrity
+
+**Description:**
+`delete_all_entities()` deletes all database records but does not delete any files from storage, leaving all entity and face files orphaned on disk.
+
+**Impact:**
+- Complete database/filesystem disconnect
+- All media files orphaned after deletion
+- Disk space exhausted by orphaned files
+- No mechanism to identify orphaned files
+- Manual cleanup required
+- Used by DELETE /entities endpoint (production impact)
+
+**Files:**
+- src/store/store/service.py (delete_all_entities method)
+- src/store/store/routes.py (delete_collection endpoint uses this)
+
+**Root Cause:**
+Method only deletes database records. File storage cleanup completely missing.
+
+**Fix:**
+Query all entities and faces, delete their files, then delete database records.
+
+**Acceptance Criteria:**
+- [ ] All entity files deleted before database deletion
+- [ ] All face files deleted before database deletion
+- [ ] Error handling for file deletion failures
+- [ ] Integration test verifies all files removed
+- [ ] Test verifies storage directory is empty after deletion
+```
+
+---
+
+### CRITICAL-006: Vector Embeddings Not Deleted (Qdrant Leak)
+
+**Category:** Source Code / Resource Management / Data Leaks
+**Severity:** CRITICAL
+**Impact:** Vector database bloat, orphaned embeddings accumulate, query performance degradation, storage waste
+
+**Files Affected:**
+- `/Users/anandasarangaram/Work/cl_server/services/store/src/store/store/service.py` (delete_entity, delete_all_entities)
+- `/Users/anandasarangaram/Work/cl_server/services/store/src/store/m_insight/vector_stores.py` (delete_vector methods exist but never called)
+
+**Description:**
+When entities or faces are deleted, their vector embeddings (CLIP, DINO, face embeddings) stored in Qdrant are **never removed**. The `delete_vector()` methods exist in `vector_stores.py` but are **never called** from anywhere in the codebase.
+
+**Vector Storage Context:**
+- **CLIP embeddings**: 512-dimensional vectors stored per entity in Qdrant collection
+- **DINO embeddings**: 384-dimensional vectors for duplicate detection
+- **Face embeddings**: 512-dimensional vectors per detected face for face recognition
+
+**Current State:**
+```python
+# vector_stores.py:50-55
+class CLIPVectorStore:
+    def delete_vector(self, id: int) -> None:
+        """Deletes a vector by its ID."""
+        self.client.delete(collection_name=self.collection, points_selector=[id])
+    # ✓ Method exists
+
+# vector_stores.py:197-200
+class FaceVectorStore:
+    def delete_vector(self, id: int):
+        """Delete a face embedding by face ID."""
+        self.client.delete(collection_name=self.collection, points_selector=[id])
+    # ✓ Method exists
+```
+
+**Grep search shows NO calls to delete_vector:**
+```bash
+$ grep -r "delete_vector(" services/store/src/
+# Only shows the method definitions, NO CALLS
+```
+
+**Impact:**
+1. Entity deleted → CLIP embedding remains in Qdrant
+2. Entity deleted → DINO embedding remains in Qdrant
+3. Face deleted → Face embedding remains in Qdrant
+4. Over time, Qdrant collections filled with orphaned vectors
+5. Query performance degrades (searching through deleted items)
+6. Storage waste (vectors for non-existent entities/faces)
+7. Similarity search returns results for deleted entities
+
+**Fix Required:**
+
+Add vector cleanup to `delete_entity()`:
+
+```python
+# service.py - add to delete_entity method
+def delete_entity(self, entity_id: int, *, _from_parent: bool = False) -> bool:
+    """Delete an entity (hard delete with proper versioning)."""
+    entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
+    if not entity:
+        return False
+
+    # ... existing validation code ...
+
+    # NEW: Delete vector embeddings from Qdrant
+    try:
+        from .m_insight.vector_stores import CLIPVectorStore, DINOVectorStore, FaceVectorStore
+
+        # Delete entity embeddings (CLIP, DINO)
+        clip_store = CLIPVectorStore()
+        clip_store.delete_vector(entity_id)
+
+        dino_store = DINOVectorStore()
+        dino_store.delete_vector(entity_id)
+
+        # Delete face embeddings
+        if entity.faces:
+            face_store = FaceVectorStore()
+            for face in entity.faces:
+                face_store.delete_vector(face.id)
+    except Exception as e:
+        logger.warning(f"Failed to delete vector embeddings for entity {entity_id}: {e}")
+
+    # Delete face files
+    if entity.faces:
+        for face in entity.faces:
+            if face.file_path:
+                _ = self.file_storage.delete_file(face.file_path)
+
+    # Delete entity file
+    if entity.file_path:
+        _ = self.file_storage.delete_file(entity.file_path)
+
+    self.db.delete(entity)
+    self.db.commit()
+
+    return True
+```
+
+**Also add to delete_all_entities():**
+
+```python
+def delete_all_entities(self) -> None:
+    """Delete all entities and related data."""
+    # NEW: Phase 0a - Delete all vector embeddings from Qdrant
+    try:
+        from .m_insight.vector_stores import CLIPVectorStore, DINOVectorStore, FaceVectorStore
+
+        # Get all entity IDs and face IDs before deletion
+        entity_ids = [e.id for e in self.db.query(Entity.id).all()]
+        face_ids = [f.id for f in self.db.query(Face.id).all()]
+
+        # Delete embeddings
+        clip_store = CLIPVectorStore()
+        dino_store = DINOVectorStore()
+        face_store = FaceVectorStore()
+
+        for entity_id in entity_ids:
+            try:
+                clip_store.delete_vector(entity_id)
+                dino_store.delete_vector(entity_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete entity {entity_id} embeddings: {e}")
+
+        for face_id in face_ids:
+            try:
+                face_store.delete_vector(face_id)
+            except Exception as e:
+                logger.warning(f"Failed to delete face {face_id} embedding: {e}")
+
+    except Exception as e:
+        logger.error(f"Failed to cleanup vector embeddings: {e}")
+
+    # Phase 0b - Delete all files (existing code to be added per CRITICAL-005)
+    # ...
+
+    # Phase 1-4 - Database cleanup (existing code)
+    # ...
+```
+
+**GitHub Issue Template:**
+```markdown
+**Title:** [CRITICAL] Vector embeddings not deleted from Qdrant
+
+**Labels:** bug, critical, resource-leak, vector-db, data-integrity
+
+**Description:**
+When entities or faces are deleted, their vector embeddings in Qdrant are never removed, causing vector database bloat and orphaned data.
+
+**Impact:**
+- Qdrant collections accumulate orphaned vectors indefinitely
+- Query performance degrades (searching deleted items)
+- Storage waste in vector database
+- Similarity search returns deleted entities/faces
+- No cleanup mechanism exists
+- delete_vector() methods exist but are never called
+
+**Files:**
+- src/store/store/service.py (delete_entity, delete_all_entities)
+- src/store/m_insight/vector_stores.py (delete_vector methods)
+
+**Vector Collections Affected:**
+- CLIP embeddings (clip_embeddings collection)
+- DINO embeddings (dino_embeddings collection)
+- Face embeddings (face_embeddings collection)
+
+**Root Cause:**
+Vector store delete methods implemented but never invoked during entity/face deletion.
+
+**Fix:**
+Call appropriate delete_vector() methods before deleting database records.
+
+**Acceptance Criteria:**
+- [ ] delete_entity() removes entity CLIP/DINO embeddings
+- [ ] delete_entity() removes all face embeddings
+- [ ] delete_all_entities() clears all embeddings from Qdrant
+- [ ] Error handling for Qdrant connection failures
+- [ ] Integration test verifies embeddings removed
+- [ ] Test verifies Qdrant collections are empty after deletion
 ```
 
 ---
@@ -2320,13 +2758,16 @@ uv run pytest --no-cov
 
 **Weekly Status:**
 ```markdown
-## Week 1 Status
+## Week 1 Status (Example)
 - [x] CRITICAL-001: Async test decorators
 - [x] CRITICAL-002: Status field consolidation
 - [ ] CRITICAL-003: Entity.get_file_path() (in progress)
+- [ ] CRITICAL-004: Face file cleanup (high priority - file leaks)
+- [ ] CRITICAL-005: delete_all_entities file cleanup (high priority - file leaks)
+- [ ] CRITICAL-006: Vector embedding cleanup (high priority - Qdrant leaks)
 
-Issues fixed: 2/10 critical
-Percentage: 20%
+Issues fixed: 2/13 critical
+Percentage: 15%
 ```
 
 **Metrics to Track:**
@@ -2339,24 +2780,29 @@ Percentage: 20%
 
 ## Summary Statistics
 
-**Total Issues:** 86+
+**Total Issues:** 95+
 
 **By Severity:**
-- Critical: 10 (must fix immediately)
-- High: 27 (fix within 2 weeks)
-- Medium: 35 (fix within 4 weeks)
+- Critical: 13 (must fix immediately)
+- High: 28 (fix within 2 weeks)
+- Medium: 40 (fix within 4 weeks)
 - Low: 14+ (fix when time permits)
 
 **By Type:**
-- Source Code: 46 issues
+- Source Code: 55 issues
 - Tests: 40+ issues
 
 **Estimated Fix Time:**
-- Critical: 16-20 hours
+- Critical: 30-40 hours (increased due to delete operation cleanup)
 - High: 30-40 hours
 - Medium: 30-40 hours
 - Low: 10-15 hours
-- **Total: 86-115 hours (11-14 business days)**
+- **Total: 100-135 hours (13-17 business days)**
+
+**Critical Delete Operation Issues (NEW - Must Fix Immediately):**
+1. CRITICAL-004: Face files not deleted (file leaks)
+2. CRITICAL-005: delete_all_entities() leaks all files (massive file leak)
+3. CRITICAL-006: Vector embeddings not deleted (Qdrant bloat)
 
 **Quick Wins (< 2 hours each):**
 1. CRITICAL-001: Add async decorators (2 hours)
@@ -2366,10 +2812,11 @@ Percentage: 20%
 5. LOW-001: Remove unused imports (automated)
 
 **High Impact:**
-1. CRITICAL-002: Fix status fields (prevents data corruption)
-2. HIGH-002: Fix N+1 queries (10-100x performance improvement)
-3. HIGH-004: Fix error handling (enables debugging)
-4. CRITICAL-003: Add Entity method (prevents runtime errors)
+1. **CRITICAL-004, 005, 006: Fix delete operations (prevents file/vector leaks, disk exhaustion)**
+2. CRITICAL-002: Fix status fields (prevents data corruption)
+3. HIGH-002: Fix N+1 queries (10-100x performance improvement)
+4. HIGH-004: Fix error handling (enables debugging)
+5. CRITICAL-003: Add Entity method (prevents runtime errors)
 
 ---
 
