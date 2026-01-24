@@ -69,7 +69,7 @@ class TestEntityCRUD:
 
         # Manually create intelligence record
         intel = ImageIntelligence(
-            image_id=entity_id,
+            entity_id=entity_id,
             md5=item.md5,
             status="completed",
             image_path="/tmp/fake.jpg",

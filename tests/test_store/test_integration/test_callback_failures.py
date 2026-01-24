@@ -66,7 +66,7 @@ async def test_callback_failed_job_status(callback_handler):
 
     with patch("store.common.database.SessionLocal") as mock_session_local:
         with patch("store.m_insight.job_callbacks.logger") as mock_logger:
-            await callback_handler.handle_face_detection_complete(image_id=1, job=job)
+            await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
             assert mock_logger.error.called
             assert "failed for image 1" in mock_logger.error.call_args[0][0]
 
@@ -92,7 +92,7 @@ async def test_callback_missing_detections(callback_handler):
 
     with patch("store.common.database.SessionLocal") as mock_session_local:
         with patch("store.m_insight.job_callbacks.logger") as mock_logger:
-            await callback_handler.handle_face_detection_complete(image_id=1, job=job)
+            await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
             assert mock_logger.warning.called
             assert "No faces found" in mock_logger.warning.call_args[0][0]
 
@@ -121,7 +121,7 @@ async def test_callback_entity_not_found(callback_handler):
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
         with patch("store.m_insight.job_callbacks.logger") as mock_logger:
-            await callback_handler.handle_face_detection_complete(image_id=999, job=job)
+            await callback_handler.handle_face_detection_complete(entity_id=999, job=job)
             assert mock_logger.error.called
             assert "not found" in mock_logger.error.call_args[0][0].lower()
 
@@ -142,7 +142,7 @@ async def test_callback_database_error(callback_handler):
         callback_handler.compute_client.get_job.side_effect = Exception("Fetch failed")
 
         with patch("store.m_insight.job_callbacks.logger") as mock_logger:
-            await callback_handler.handle_face_detection_complete(image_id=1, job=job)
+            await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
             assert mock_logger.error.called
             # The actual log message depends on the exception message
             assert "Fetch failed" in mock_logger.error.call_args[0][0]
@@ -168,7 +168,7 @@ async def test_callback_clip_malformed_output(callback_handler):
 
     with patch("store.common.database.SessionLocal") as mock_session_local:
         with patch("store.m_insight.job_callbacks.logger") as mock_logger:
-            await callback_handler.handle_clip_embedding_complete(image_id=1, job=job)
+            await callback_handler.handle_clip_embedding_complete(entity_id=1, job=job)
             assert mock_logger.error.called
 
 @pytest.mark.asyncio
@@ -180,7 +180,7 @@ async def test_callback_job_not_found(callback_handler):
 
     with patch("store.common.database.SessionLocal"), \
          patch("store.m_insight.job_callbacks.logger") as mock_logger:
-        await callback_handler.handle_face_detection_complete(image_id=1, job=job)
+        await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
         assert mock_logger.warning.called
         assert "not completed when fetching" in mock_logger.warning.call_args[0][0]
 
@@ -202,7 +202,7 @@ async def test_callback_validation_error(callback_handler):
         db.query.return_value.filter.return_value.first.return_value = MagicMock(id=1, create_date=1000)
 
         with patch("store.m_insight.job_callbacks.logger") as mock_logger:
-            await callback_handler.handle_face_detection_complete(image_id=1, job=job)
+            await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
             assert mock_logger.error.called
             assert "Invalid task_output format" in mock_logger.error.call_args[0][0]
 
@@ -241,7 +241,7 @@ async def test_callback_entity_date_fallback(callback_handler):
 
         # Patch the method using the actual handler instance to ensure it's captured
         with patch.object(callback_handler, "_get_face_storage_path", return_value=Path("/tmp/face.png")) as mock_get_path:
-            await callback_handler.handle_face_detection_complete(image_id=1, job=job)
+            await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
             assert mock_get_path.called
             # args[2] is entity_create_date
             args, _ = mock_get_path.call_args

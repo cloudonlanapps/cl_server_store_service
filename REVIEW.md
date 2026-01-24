@@ -6,11 +6,11 @@
 
 ## Quick Summary
 
-| Category | Critical | High | Medium | Low | Total |
-|----------|----------|------|--------|-----|-------|
-| **Source Code** | 2 | 16 | 25 | 9 | 52 |
-| **Tests** | 8 | 12 | 15 | 5+ | 40+ |
-| **TOTAL** | **10** | **28** | **40** | **14+** | **92+** |
+| Category        | Critical | High   | Medium | Low     | Total   |
+| --------------- | -------- | ------ | ------ | ------- | ------- |
+| **Source Code** | 2        | 16     | 25     | 9       | 52      |
+| **Tests**       | 8        | 12     | 15     | 5+      | 40+     |
+| **TOTAL**       | **10**   | **28** | **40** | **14+** | **92+** |
 
 ## Table of Contents
 
@@ -502,7 +502,7 @@ def get_face_matches(face_id: int, threshold: float = 0.7):
         results.append({
             "face_id": face.id,
             "similarity": match.similarity_score,
-            "image_id": face.image_id
+            "entity_id": face.entity_id
         })
 
     return results
@@ -528,7 +528,7 @@ def get_face_matches(face_id: int, threshold: float = 0.7):
         results.append({
             "face_id": face.id,
             "similarity": match.similarity_score,
-            "image_id": face.image_id
+            "entity_id": face.entity_id
         })
 
     return results

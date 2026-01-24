@@ -173,7 +173,7 @@ async def find_similar_images(
 
     return intel_schemas.SimilarImagesResponse(
         results=results,
-        query_image_id=entity_id,
+        query_entity_id=entity_id,
     )
 
 

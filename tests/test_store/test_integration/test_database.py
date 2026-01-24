@@ -30,7 +30,7 @@ class TestWALMode:
             "PRAGMA temp_store=MEMORY",
             "PRAGMA mmap_size=30000000000",
             "PRAGMA wal_autocheckpoint=1000",
-            "PRAGMA busy_timeout=10000",
+            "PRAGMA busy_timeout=60000",
             "PRAGMA foreign_keys=ON",
         ]
 

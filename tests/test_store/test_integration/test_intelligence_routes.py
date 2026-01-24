@@ -99,7 +99,7 @@ class TestIntelligenceRoutes:
 
         # Add intelligence record
         intel = minsight_models.ImageIntelligence(
-            image_id=entity.id,
+            entity_id=entity.id,
             md5="abc123face",
             status="complete",
             image_path="/tmp/test_image.jpg",
@@ -110,7 +110,7 @@ class TestIntelligenceRoutes:
         # Add face
         # Note: bbox is BBox model as JSON string
         face = intelligence_models.Face(
-            image_id=entity.id,
+            entity_id=entity.id,
             bbox='{"x1": 0.1, "y1": 0.1, "x2": 0.5, "y2": 0.5}',
             confidence=0.95,
             landmarks='{"right_eye": [0.2, 0.2], "left_eye": [0.4, 0.2], "nose_tip": [0.3, 0.3], "mouth_right": [0.2, 0.4], "mouth_left": [0.4, 0.4]}',
@@ -141,7 +141,7 @@ class TestIntelligenceRoutes:
 
         # Add intelligence job
         job = intelligence_models.EntityJob(
-            image_id=entity.id,
+            entity_id=entity.id,
             task_type="face_detection",
             status="running",
             job_id="job_abc_123",

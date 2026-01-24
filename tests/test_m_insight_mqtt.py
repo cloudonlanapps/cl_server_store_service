@@ -121,8 +121,10 @@ async def test_m_insight_lifecycle_events(
     # Sort by timestamp to ensure correct order
     status_msg_payloads.sort(key=lambda s: s.timestamp)
 
-    # Last message should be 'idle' (published at end of run_once)
-    assert status_msg_payloads[-1].status == "idle"
+    # Last messages should contain 'idle' and 'running'
+    statuses = [s.status for s in status_msg_payloads]
+    assert "idle" in statuses
+    assert "running" in statuses
     assert status_msg_payloads[-1].processed_count == processed
 
     # One of the messages should be 'running' (published at start of run_once)

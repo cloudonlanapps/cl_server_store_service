@@ -47,7 +47,7 @@ def test_get_entity_faces(retrieve_service, mock_db):
     """Test retrieval of faces for an entity."""
     mock_face = Face(
         id=1,
-        image_id=10,
+        entity_id=10,
         bbox=json.dumps({"x1": 0.0, "y1": 0.0, "x2": 1.0, "y2": 1.0}),
         landmarks=json.dumps({
             "right_eye": [0.6, 0.4],
@@ -70,7 +70,7 @@ def test_get_entity_jobs(retrieve_service, mock_db):
     """Test retrieval of jobs for an entity."""
     mock_job = EntityJob(
         id=1,
-        image_id=10,
+        entity_id=10,
         job_id="job123",
         task_type="face_detection",
         status="completed",
@@ -91,7 +91,7 @@ def test_search_similar_images(retrieve_service, mock_db):
 
     results = retrieve_service.search_similar_images(1)
     assert len(results) == 1
-    assert results[0].image_id == 2
+    assert results[0].entity_id == 2
     assert results[0].score == 0.9
 
 def test_search_similar_images_dino(retrieve_service, mock_db):
@@ -102,9 +102,9 @@ def test_search_similar_images_dino(retrieve_service, mock_db):
     ]
 
     response = retrieve_service.search_similar_images_dino(1)
-    assert response.query_image_id == 1
+    assert response.query_entity_id == 1
     assert len(response.results) == 1
-    assert response.results[0].image_id == 2
+    assert response.results[0].entity_id == 2
 
 def test_get_known_person(retrieve_service, mock_db):
     """Test generic known person retrieval."""
@@ -139,7 +139,7 @@ def test_search_similar_faces_by_id(retrieve_service, mock_db):
     """Test face store similarity search."""
     mock_face = Face(
         id=2,
-        image_id=10,
+        entity_id=10,
         bbox=json.dumps({"x1": 0.0, "y1": 0.0, "x2": 1.0, "y2": 1.0}),
         landmarks=json.dumps({
             "right_eye": [0.6, 0.4],
@@ -181,7 +181,7 @@ async def test_search_similar_images_with_details(client, mock_db):
         # Fix: The logic to populate entity details is inside search_similar_images,
         # but since we mocked it, we must return the result AS IF logic ran.
         mock_result = SimilarImageResult(
-            image_id=2, 
+            entity_id=2, 
             score=0.9, 
             entity={"id": 2, "label": "Detail", "is_collection": False}
         )

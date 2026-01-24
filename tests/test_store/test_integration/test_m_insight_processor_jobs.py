@@ -35,7 +35,7 @@ def mock_config():
 
 @pytest.fixture
 async def processor(mock_config):
-    with patch("store.common.database.SessionLocal", create=True), \
+    with patch("store.m_insight.media_insight.version_class"), \
          patch("store.m_insight.media_insight.version_class"), \
          patch("store.m_insight.media_insight.configure_mappers"):
 
@@ -72,7 +72,7 @@ async def test_trigger_async_jobs_missing_file_path(processor):
     )
 
     # We are testing private method _trigger_async_jobs directly for unit testing
-    await processor._trigger_async_jobs(entity, MagicMock())
+    await processor._trigger_async_jobs(entity)
 
     # Should not submit jobs
     processor.job_service.submit_face_detection.assert_not_called()
@@ -91,7 +91,7 @@ async def test_trigger_async_jobs_file_not_found(processor):
 
     # Mock path existence failure
     with patch("pathlib.Path.exists", return_value=False):
-         await processor._trigger_async_jobs(entity, MagicMock())
+         await processor._trigger_async_jobs(entity)
 
     # Should not submit jobs
     processor.job_service.submit_face_detection.assert_not_called()
@@ -110,7 +110,7 @@ async def test_trigger_async_jobs_success(processor):
 
     # Mock path existence success
     with patch("pathlib.Path.exists", return_value=True):
-        await processor._trigger_async_jobs(entity, MagicMock())
+        await processor._trigger_async_jobs(entity)
 
     # Verify jobs submitted
     processor.job_service.submit_face_detection.assert_called_once()
@@ -130,7 +130,7 @@ async def test_processing_callbacks(processor):
     )
 
     with patch("pathlib.Path.exists", return_value=True):
-        await processor._trigger_async_jobs(entity, MagicMock())
+        await processor._trigger_async_jobs(entity)
 
     # Capture the callbacks passed to submit_...
     face_cb = processor.job_service.submit_face_detection.call_args[1]["on_complete_callback"]

@@ -15,10 +15,14 @@ from store.m_insight import JobCallbackHandler, JobSubmissionService, MInsightCo
 def override_session_local(test_engine):
     """Override database.SessionLocal to use the test engine."""
     from sqlalchemy.orm import sessionmaker
-    original_session_local = database.SessionLocal
-    database.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    import store.common.database as db
+    original_session_local = getattr(db, "SessionLocal", None)
+    db.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     yield
-    database.SessionLocal = original_session_local
+    if original_session_local:
+        db.SessionLocal = original_session_local
+    else:
+        del db.SessionLocal
 
 class TestJobProcessing:
     @pytest.fixture
@@ -58,7 +62,7 @@ class TestJobProcessing:
         # Verify DB record
         job_record = test_db_session.query(intelligence_models.EntityJob).filter_by(job_id="job_123").first()
         assert job_record is not None
-        assert job_record.image_id == entity.id
+        assert job_record.entity_id == entity.id
         assert job_record.task_type == "face_detection"
         assert job_record.status == "queued"
 
@@ -73,7 +77,7 @@ class TestJobProcessing:
         test_db_session.commit()
 
         job_record = intelligence_models.EntityJob(
-            image_id=entity.id,
+            entity_id=entity.id,
             job_id="job_det_1",
             task_type="face_detection",
             status="queued",
@@ -155,7 +159,7 @@ class TestJobProcessing:
         await handler.handle_face_detection_complete(entity.id, job_resp)
 
         # Verify Face record created
-        face = test_db_session.query(intelligence_models.Face).filter_by(image_id=entity.id).first()
+        face = test_db_session.query(intelligence_models.Face).filter_by(entity_id=entity.id).first()
         assert face is not None
         assert face.confidence == 0.99
         assert "x1" in face.bbox
@@ -237,7 +241,7 @@ class TestJobProcessing:
 
         face = intelligence_models.Face(
             id=1001,
-            image_id=entity.id,
+            entity_id=entity.id,
             bbox='{"x1":0,"y1":0,"x2":1,"y2":1}',
             confidence=1.0,
             landmarks='{"right_eye":[0,0],"left_eye":[0,0],"nose_tip":[0,0],"mouth_right":[0,0],"mouth_left":[0,0]}',
@@ -338,7 +342,7 @@ class TestJobProcessing:
         test_db_session.commit()
 
         job = intelligence_models.EntityJob(
-            image_id=entity.id,
+            entity_id=entity.id,
             job_id="job_stat_1",
             task_type="face_detection",
             status="queued",

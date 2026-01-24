@@ -91,7 +91,7 @@ class FaceResponse(BaseModel):
     """Response schema for detected face."""
 
     id: int = Field(..., description="Face ID")
-    image_id: int = Field(..., description="Image ID this face belongs to")
+    entity_id: int = Field(..., description="Entity ID this face belongs to")
     bbox: BBox = Field(
         ..., description="Normalized bounding box [x1, y1, x2, y2] in range [0.0, 1.0]"
     )
@@ -108,7 +108,7 @@ class EntityJobResponse(BaseModel):
     """Response schema for entity job status."""
 
     id: int = Field(..., description="Job record ID")
-    image_id: int = Field(..., description="Image ID")
+    entity_id: int = Field(..., description="Entity ID")
     job_id: str = Field(..., description="Compute service job ID")
     task_type: str = Field(..., description="Task type (face_detection or clip_embedding)")
     status: str = Field(..., description="Job status (queued, in_progress, completed, failed)")
@@ -121,7 +121,7 @@ class EntityJobResponse(BaseModel):
 class SimilarImageResult(BaseModel):
     """Response schema for similar image search result."""
 
-    image_id: int = Field(..., description="Image Entity ID")
+    entity_id: int = Field(..., description="Image Entity ID")
     score: float = Field(..., description="Similarity score (0-1)")
     entity: Item | None = Field(None, description="Entity details if requested")
 
@@ -129,21 +129,21 @@ class SimilarImageResult(BaseModel):
 class SimilarImagesResponse(BaseModel):
     """Response schema for similar images search."""
 
-    query_image_id: int = Field(..., description="Query Image Entity ID")
+    query_entity_id: int = Field(..., description="Query Image Entity ID")
     results: list[SimilarImageResult] = Field(..., description="List of similar images")
 
 
 class SimilarImageDinoResult(BaseModel):
     """Response schema for similar image search result using DINO."""
 
-    image_id: int = Field(..., description="Image Entity ID")
+    entity_id: int = Field(..., description="Image Entity ID")
     score: float = Field(..., description="Similarity score (0-1)")
 
 
 class SimilarImagesDinoResponse(BaseModel):
     """Response schema for similar images search using DINO."""
 
-    query_image_id: int = Field(..., description="Query Image Entity ID")
+    query_entity_id: int = Field(..., description="Query Image Entity ID")
     results: list[SimilarImageDinoResult] = Field(..., description="List of similar images")
 
 

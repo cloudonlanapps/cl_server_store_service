@@ -134,7 +134,7 @@ class ImageIntelligence(Base):
 
     __tablename__ = "image_intelligence"  # pyright: ignore[reportUnannotatedClassAttribute]
 
-    image_id: Mapped[int] = mapped_column(
+    entity_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("entities.id", ondelete="CASCADE"),
         primary_key=True,
@@ -182,7 +182,7 @@ class ImageIntelligence(Base):
 
     @override
     def __repr__(self) -> str:
-        return f"<ImageIntelligence(image_id={self.image_id}, md5={self.md5}, status={self.status}, processing_status={self.processing_status})>"
+        return f"<ImageIntelligence(entity_id={self.entity_id}, md5={self.md5}, status={self.status}, processing_status={self.processing_status})>"
 
 
 class Face(Base):
@@ -190,7 +190,7 @@ class Face(Base):
 
     __tablename__ = "faces"  # pyright: ignore[reportUnannotatedClassAttribute]
 
-    # Primary key (derived from image_id and face index)
+    # Primary key (derived from entity_id and face index)
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     # Foreign key to Image (Entity)

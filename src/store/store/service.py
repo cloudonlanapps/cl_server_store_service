@@ -231,7 +231,7 @@ class EntityService:
         _ = search_query
         # Join with ImageIntelligence to get status
         query = self.db.query(Entity, ImageIntelligence.status).outerjoin(
-            ImageIntelligence, Entity.id == ImageIntelligence.image_id
+            ImageIntelligence, Entity.id == ImageIntelligence.entity_id
         )
 
         # Apply deleted filter
@@ -281,7 +281,7 @@ class EntityService:
         result = cast(
             tuple[Entity, str | None] | None,
             self.db.query(Entity, ImageIntelligence.status)
-            .outerjoin(ImageIntelligence, Entity.id == ImageIntelligence.image_id)
+            .outerjoin(ImageIntelligence, Entity.id == ImageIntelligence.entity_id)
             .filter(Entity.id == entity_id)
             .first(),
         )

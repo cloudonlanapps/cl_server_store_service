@@ -181,7 +181,7 @@ class MediaInsight:
 
         session = database.SessionLocal()
         try:
-            stmt = select(ImageIntelligence).where(ImageIntelligence.image_id == entity_version.id)
+            stmt = select(ImageIntelligence).where(ImageIntelligence.entity_id == entity_version.id)
             existing = session.execute(stmt).scalar_one_or_none()
 
             if existing is None:
@@ -227,12 +227,12 @@ class MediaInsight:
 
         session = database.SessionLocal()
         try:
-            stmt = select(ImageIntelligence).where(ImageIntelligence.image_id == entity_id)
+            stmt = select(ImageIntelligence).where(ImageIntelligence.entity_id == entity_id)
             intelligence = session.execute(stmt).scalar_one_or_none()
 
             if intelligence is None:
                 intelligence = ImageIntelligence(
-                    image_id=entity_id,
+                    entity_id=entity_id,
                     md5=md5,
                     status="queued",
                     image_path=image_path,
@@ -353,10 +353,10 @@ class MediaInsight:
 
         session = database.SessionLocal()
         try:
-            # Re-query using primary key (image_id)
+            # Re-query using primary key (entity_id)
             intelligence = (
                 session.query(ImageIntelligence)
-                .filter(ImageIntelligence.image_id == entity.id)
+                .filter(ImageIntelligence.entity_id == entity.id)
                 .first()
             )
             if intelligence:

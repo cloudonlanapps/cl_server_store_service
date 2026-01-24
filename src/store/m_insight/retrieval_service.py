@@ -94,7 +94,7 @@ class IntelligenceRetrieveService:
             results.append(
                 FaceResponse(
                     id=face.id,
-                    image_id=face.entity_id,
+                    entity_id=face.entity_id,
                     bbox=BBox.model_validate_json(face.bbox),
                     confidence=face.confidence,
                     landmarks=FaceLandmarks.model_validate_json(face.landmarks),
@@ -115,7 +115,7 @@ class IntelligenceRetrieveService:
             results.append(
                 EntityJobResponse(
                     id=job.id,
-                    image_id=job.entity_id,
+                    entity_id=job.entity_id,
                     job_id=job.job_id,
                     task_type=job.task_type,
                     status=job.status,
@@ -161,7 +161,7 @@ class IntelligenceRetrieveService:
         for result in results:
             filtered_results.append(
                 SimilarImageResult(
-                    image_id=int(result.id),
+                    entity_id=int(result.id),
                     score=float(result.score),
                     entity=None,  # Will be populated below if requested
                 )
@@ -175,7 +175,7 @@ class IntelligenceRetrieveService:
 
             entity_service = EntityService(self.db, self.config)
             for result in final_results:
-                result.entity = entity_service.get_entity_by_id(result.image_id)
+                result.entity = entity_service.get_entity_by_id(result.entity_id)
 
         return final_results
 
@@ -206,7 +206,7 @@ class IntelligenceRetrieveService:
         item = self.dino_store.get_vector(entity_id)
         if not item:
             return SimilarImagesDinoResponse(
-                query_image_id=entity_id,
+                query_entity_id=entity_id,
                 results=[],
             )
 
@@ -228,13 +228,13 @@ class IntelligenceRetrieveService:
 
             results.append(
                 SimilarImageDinoResult(
-                    image_id=int(result.id),
+                    entity_id=int(result.id),
                     score=result.score,
                 )
             )
 
         return SimilarImagesDinoResponse(
-            query_image_id=entity_id,
+            query_entity_id=entity_id,
             results=results,
         )
 
@@ -273,7 +273,7 @@ class IntelligenceRetrieveService:
             results.append(
                 FaceResponse(
                     id=face.id,
-                    image_id=face.entity_id,
+                    entity_id=face.entity_id,
                     bbox=BBox.model_validate_json(face.bbox),
                     confidence=face.confidence,
                     landmarks=FaceLandmarks.model_validate_json(face.landmarks),
@@ -298,7 +298,7 @@ class IntelligenceRetrieveService:
             if matched_face:
                 matched_face_response = FaceResponse(
                     id=matched_face.id,
-                    image_id=matched_face.entity_id,
+                    entity_id=matched_face.entity_id,
                     bbox=BBox.model_validate_json(matched_face.bbox),
                     confidence=matched_face.confidence,
                     landmarks=FaceLandmarks.model_validate_json(matched_face.landmarks),
@@ -371,7 +371,7 @@ class IntelligenceRetrieveService:
             if face:
                 face_response = FaceResponse(
                     id=face.id,
-                    image_id=face.entity_id,
+                    entity_id=face.entity_id,
                     bbox=BBox.model_validate_json(face.bbox),
                     confidence=face.confidence,
                     landmarks=FaceLandmarks.model_validate_json(face.landmarks),

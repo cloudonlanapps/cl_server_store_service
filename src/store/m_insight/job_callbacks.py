@@ -80,12 +80,12 @@ class JobCallbackHandler:
         )
 
     def _get_face_storage_path(
-        self, image_id: int, face_index: int, entity_create_date: int
+        self, entity_id: int, face_index: int, entity_create_date: int
     ) -> Path:
         """Get storage path for face image using original entity's creation date.
 
         Args:
-            image_id: Image (Entity) ID
+            entity_id: Image (Entity) ID
             face_index: Face index (0, 1, 2, ...)
             entity_create_date: Entity creation timestamp in milliseconds
 
@@ -103,18 +103,18 @@ class JobCallbackHandler:
         dir_path = base_dir / "faces" / year / month / day
         _ = dir_path.mkdir(parents=True, exist_ok=True)
 
-        # Filename: {image_id}_face_{index}.png
-        filename = f"{image_id}_face_{face_index}.png"
+        # Filename: {entity_id}_face_{index}.png
+        filename = f"{entity_id}_face_{face_index}.png"
 
         return dir_path / filename
 
-    async def handle_face_detection_complete(self, image_id: int, job: JobResponse) -> None:
+    async def handle_face_detection_complete(self, entity_id: int, job: JobResponse) -> None:
         """Handle face detection job completion.
 
         Downloads cropped faces, saves to files, and creates Face records in database.
 
         Args:
-            image_id: Image (Entity) ID
+            entity_id: Image (Entity) ID
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
         from store.common.database import SessionLocal
@@ -124,7 +124,7 @@ class JobCallbackHandler:
             # Check if job failed
             if job.status == "failed":
                 logger.error(
-                    f"Face detection job {job.job_id} failed for image {image_id}: "
+                    f"Face detection job {job.job_id} failed for image {entity_id}: "
                     + f"{job.error_message}"
                 )
                 return
@@ -138,14 +138,14 @@ class JobCallbackHandler:
                 return
 
             # Query Entity to get its create_date for organizing face files
-            entity = db.query(Entity).filter(Entity.id == image_id).first()
+            entity = db.query(Entity).filter(Entity.id == entity_id).first()
             if not entity:
-                logger.error(f"Entity {image_id} not found for face detection job {job.job_id}")
+                logger.error(f"Entity {entity_id} not found for face detection job {job.job_id}")
                 return
 
             # Extract faces from task_output
             if not full_job.task_output or "faces" not in full_job.task_output:
-                logger.warning(f"No faces found in job {job.job_id} output for image {image_id}")
+                logger.warning(f"No faces found in job {job.job_id} output for image {entity_id}")
                 return
 
             try:
@@ -169,7 +169,7 @@ class JobCallbackHandler:
                 try:
                     # Get storage path for face image using entity's create_date
                     face_path = self._get_face_storage_path(
-                        image_id,
+                        entity_id,
                         index,
                         entity.create_date
                         if entity.create_date
@@ -188,9 +188,9 @@ class JobCallbackHandler:
                     # Get relative path from MEDIA_STORAGE_DIR
                     relative_path = face_path.relative_to(self.config.media_storage_dir)
 
-                    # Generate deterministic face ID: image_id * 10000 + face_index
+                    # Generate deterministic face ID: entity_id * 10000 + face_index
                     # This prevents duplicates if callback runs multiple times
-                    face_id = image_id * 10000 + index
+                    face_id = entity_id * 10000 + index
 
                     # Check if face already exists (upsert pattern)
                     existing_face = db.query(Face).filter(Face.id == face_id).first()
@@ -202,12 +202,12 @@ class JobCallbackHandler:
                         existing_face.landmarks = face_data.landmarks.model_dump_json()
                         existing_face.file_path = str(relative_path)
                         face = existing_face
-                        logger.debug(f"Updated existing face {face_id} for image {image_id}")
+                        logger.debug(f"Updated existing face {face_id} for image {entity_id}")
                     else:
                         # Create new face with explicit ID
                         face = Face(
                             id=face_id,
-                            entity_id=image_id,
+                            entity_id=entity_id,
                             bbox=face_data.bbox.model_dump_json(),
                             confidence=face_data.confidence,
                             landmarks=face_data.landmarks.model_dump_json(),
@@ -215,21 +215,21 @@ class JobCallbackHandler:
                             created_at=self._now_timestamp(),
                         )
                         db.add(face)
-                        logger.debug(f"Created new face {face_id} for image {image_id}")
+                        logger.debug(f"Created new face {face_id} for image {entity_id}")
 
                     db.flush()
 
                     saved_faces.append((face.id, face_path))
 
                     logger.debug(
-                        f"Saved face {index} for image {image_id} "
+                        f"Saved face {index} for image {entity_id} "
                         + f"(confidence: {face_data.confidence:.2f})"
                     )
 
                 except Exception as e:
                     logger.error(
                         f"Failed to process face {index} from job {job.job_id} "
-                        + f"for image {image_id}: {e}"
+                        + f"for image {entity_id}: {e}"
                     )
                     # Continue processing other faces
 
@@ -239,7 +239,7 @@ class JobCallbackHandler:
                 db.commit()
             
             commit_faces()
-            logger.info(f"Successfully saved {len(saved_faces)} faces for image {image_id}")
+            logger.info(f"Successfully saved {len(saved_faces)} faces for image {entity_id}")
 
             # Phase 2: Submit face_embedding jobs (after commit to avoid locks)
             if self.job_submission_service:
@@ -252,7 +252,7 @@ class JobCallbackHandler:
                         ) -> None:
                             await self.handle_face_embedding_complete(
                                 face_id=fid,
-                                image_id=image_id,
+                                entity_id=entity_id,
                                 job=job,
                             )
                             if self.job_submission_service:
@@ -325,7 +325,7 @@ class JobCallbackHandler:
                     try:
                         intelligence = (
                             db.query(ImageIntelligence)
-                            .filter(ImageIntelligence.image_id == image_id)
+                            .filter(ImageIntelligence.entity_id == entity_id)
                             .first()
                         )
                         if intelligence:
@@ -339,32 +339,32 @@ class JobCallbackHandler:
                             
                             update_intelligence()
                             logger.info(
-                                f"Updated ImageIntelligence for {image_id} with {len(face_job_ids)} face embedding jobs"
+                                f"Updated ImageIntelligence for {entity_id} with {len(face_job_ids)} face embedding jobs"
                             )
                     except Exception as e:
                         logger.error(
-                            f"Failed to update ImageIntelligence with face job IDs for {image_id}: {e}"
+                            f"Failed to update ImageIntelligence with face job IDs for {entity_id}: {e}"
                         )
         except Exception as e:
-            logger.error(f"Failed to handle face detection completion for image {image_id}: {e}")
+            logger.error(f"Failed to handle face detection completion for image {entity_id}: {e}")
             db.rollback()
         finally:
             db.close()
 
-    async def handle_clip_embedding_complete(self, image_id: int, job: JobResponse) -> None:
+    async def handle_clip_embedding_complete(self, entity_id: int, job: JobResponse) -> None:
         """Handle CLIP embedding job completion.
 
-        Extracts embedding and stores in Qdrant with image_id as point_id.
+        Extracts embedding and stores in Qdrant with entity_id as point_id.
 
         Args:
-            image_id: Image (Entity) ID (used as Qdrant point_id)
+            entity_id: Image (Entity) ID (used as Qdrant point_id)
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
         try:
             # Check if job failed
             if job.status == "failed":
                 logger.error(
-                    f"CLIP embedding job {job.job_id} failed for image {image_id}: "
+                    f"CLIP embedding job {job.job_id} failed for image {entity_id}: "
                     + f"{job.error_message}"
                 )
                 return
@@ -406,7 +406,7 @@ class JobCallbackHandler:
                 # Validate embedding dimension
                 if embedding.shape[0] != 512:
                     logger.error(
-                        f"Invalid embedding dimension for image {image_id}: expected 512, got {embedding.shape[0]}"
+                        f"Invalid embedding dimension for image {entity_id}: expected 512, got {embedding.shape[0]}"
                     )
                     return
 
@@ -415,34 +415,34 @@ class JobCallbackHandler:
                 if tmp_path.exists():
                     tmp_path.unlink()
 
-            # Store in Qdrant with image_id as point_id
+            # Store in Qdrant with entity_id as point_id
             _ = self.clip_store.add_vector(
                 StoreItem(
-                    id=image_id,
+                    id=entity_id,
                     embedding=embedding,
-                    payload={"image_id": image_id},
+                    payload={"entity_id": entity_id},
                 )
             )
 
-            logger.info(f"Successfully stored CLIP embedding for image {image_id} in Qdrant")
+            logger.info(f"Successfully stored CLIP embedding for image {entity_id} in Qdrant")
 
         except Exception as e:
-            logger.error(f"Failed to handle CLIP embedding completion for image {image_id}: {e}")
+            logger.error(f"Failed to handle CLIP embedding completion for image {entity_id}: {e}")
 
-    async def handle_dino_embedding_complete(self, image_id: int, job: JobResponse) -> None:
+    async def handle_dino_embedding_complete(self, entity_id: int, job: JobResponse) -> None:
         """Handle DINOv2 embedding job completion.
 
-        Extracts embedding and stores in Qdrant (DINO collection) with image_id as point_id.
+        Extracts embedding and stores in Qdrant (DINO collection) with entity_id as point_id.
 
         Args:
-            image_id: Image (Entity) ID (used as Qdrant point_id)
+            entity_id: Image (Entity) ID (used as Qdrant point_id)
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
         try:
             # Check if job failed
             if job.status == "failed":
                 logger.error(
-                    f"DINO embedding job {job.job_id} failed for image {image_id}: "
+                    f"DINO embedding job {job.job_id} failed for image {entity_id}: "
                     + f"{job.error_message}"
                 )
                 return
@@ -483,7 +483,7 @@ class JobCallbackHandler:
                 # Validate embedding dimension (DINOv2-S is 384)
                 if embedding.shape[0] != 384:
                     logger.error(
-                        f"Invalid embedding dimension for image {image_id}: expected 384, got {embedding.shape[0]}"
+                        f"Invalid embedding dimension for image {entity_id}: expected 384, got {embedding.shape[0]}"
                     )
                     return
 
@@ -492,22 +492,22 @@ class JobCallbackHandler:
                 if tmp_path.exists():
                     tmp_path.unlink()
 
-            # Store in Qdrant (DINO collection) with image_id as point_id
+            # Store in Qdrant (DINO collection) with entity_id as point_id
             _ = self.dino_store.add_vector(
                 StoreItem(
-                    id=image_id,
+                    id=entity_id,
                     embedding=embedding,
-                    payload={"image_id": image_id},
+                    payload={"entity_id": entity_id},
                 )
             )
 
-            logger.info(f"Successfully stored DINO embedding for image {image_id} in Qdrant")
+            logger.info(f"Successfully stored DINO embedding for image {entity_id} in Qdrant")
 
         except Exception as e:
-            logger.error(f"Failed to handle DINO embedding completion for image {image_id}: {e}")
+            logger.error(f"Failed to handle DINO embedding completion for image {entity_id}: {e}")
 
     async def handle_face_embedding_complete(
-        self, face_id: int, image_id: int, job: JobResponse
+        self, face_id: int, entity_id: int, job: JobResponse
     ) -> None:
         """Handle face embedding job completion.
 
@@ -518,7 +518,7 @@ class JobCallbackHandler:
 
         Args:
             face_id: Face record ID
-            image_id: Original image Entity ID (for reference/logging)
+            entity_id: Original image Entity ID (for reference/logging)
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
         from store.common.database import SessionLocal
@@ -667,7 +667,7 @@ class JobCallbackHandler:
                     embedding=np.array(embedding, dtype=np.float32),
                     payload={
                         "face_id": face_id,
-                        "image_id": image_id,
+                        "entity_id": entity_id,
                         "known_person_id": face.known_person_id,
                     },
                 )

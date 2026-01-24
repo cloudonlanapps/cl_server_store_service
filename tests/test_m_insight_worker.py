@@ -33,7 +33,7 @@ def m_insight_processor_mock(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int,
     """Mock MInsightProcessor.process() to track calls instead of printing.
     
     Returns:
-        List of (image_id, md5) tuples for each process() call
+        List of (entity_id, md5) tuples for each process() call
     """
     calls: list[tuple[int, str]] = []
 
@@ -75,7 +75,7 @@ def m_insight_worker(
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         mqtt_broker=integration_config.mqtt_broker,
-        mqtt_port=integration_config.mqtt_port,
+        mqtt_port=integration_config.mqtt_port or 1883,
         mqtt_topic="test/m_insight",
     )
 
@@ -111,9 +111,9 @@ def get_intelligence_count(session: Session) -> int:
     return len(session.execute(stmt).scalars().all())
 
 
-def get_intelligence_for_image(session: Session, image_id: int) -> ImageIntelligence | None:
+def get_intelligence_for_image(session: Session, entity_id: int) -> ImageIntelligence | None:
     """Get intelligence row for specific image."""
-    stmt = select(ImageIntelligence).where(ImageIntelligence.image_id == image_id)
+    stmt = select(ImageIntelligence).where(ImageIntelligence.entity_id == entity_id)
     return session.execute(stmt).scalar_one_or_none()
 
 
@@ -132,7 +132,7 @@ async def test_empty_sync_state_queues_all_images(
 ) -> None:
     """Test that empty sync state processes all existing images."""
     # Create 3 images via API using 3 different image files
-    image_ids = []
+    entity_ids = []
     for i, image_path in enumerate(test_images_unique):
         with image_path.open("rb") as f:
             response = client.post(
@@ -144,7 +144,7 @@ async def test_empty_sync_state_queues_all_images(
                 },
             )
         assert response.status_code == 201, f"Failed to create image {i}: {response.json()}"
-        image_ids.append(response.json()["id"])
+        entity_ids.append(response.json()["id"])
 
     # Verify sync state is 0 (or doesn't exist yet)
     initial_version = get_sync_state(test_db_session)
@@ -237,12 +237,12 @@ async def test_multiple_md5_changes_single_queue(
         data={"label": "Test Image", "is_collection": "false"},
     )
     assert response.status_code == 201
-    image_id = response.json()["id"]
+    entity_id = response.json()["id"]
 
     # Update with different images (different md5)
     for i in range(1, 3):
         response = client.put(
-            f"/entities/{image_id}",
+            f"/entities/{entity_id}",
             files={"image": (f"test{i}.jpg", sample_images[i].open("rb"), "image/jpeg")},
             data={"label": "Test Image", "is_collection": "false"},
         )
@@ -257,10 +257,10 @@ async def test_multiple_md5_changes_single_queue(
     # Verify single processing with latest md5
     assert processed_count == 1
     assert len(m_insight_processor_mock) == 1
-    assert m_insight_processor_mock[0] == (image_id, final_md5)
+    assert m_insight_processor_mock[0] == (entity_id, final_md5)
 
     # Verify single intelligence row with latest md5
-    intelligence = get_intelligence_for_image(test_db_session, image_id)
+    intelligence = get_intelligence_for_image(test_db_session, entity_id)
     assert intelligence is not None
     assert intelligence.md5 == final_md5
     assert intelligence.status == "queued"
@@ -282,12 +282,12 @@ async def test_process_called_once_per_image(
         data={"label": "Test Image", "is_collection": "false"},
     )
     assert response.status_code == 201
-    image_id = response.json()["id"]
+    entity_id = response.json()["id"]
 
     # Update 5 times
     for i in range(1, 6):
         client.put(
-            f"/entities/{image_id}",
+            f"/entities/{entity_id}",
             files={"image": (f"test{i}.jpg", sample_images[i % len(sample_images)].open("rb"), "image/jpeg")},
             data={"label": "Test Image", "is_collection": "false"},
         )
@@ -297,7 +297,7 @@ async def test_process_called_once_per_image(
 
     # Verify exactly one process() call
     assert len(m_insight_processor_mock) == 1
-    assert m_insight_processor_mock[0][0] == image_id
+    assert m_insight_processor_mock[0][0] == entity_id
 
 
 # ============================================================================
@@ -321,7 +321,7 @@ async def test_no_duplicate_processing(
         data={"label": "Test Image", "is_collection": "false"},
     )
     assert response.status_code == 201
-    image_id = response.json()["id"]
+    entity_id = response.json()["id"]
 
     # First reconciliation
     await m_insight_worker.run_once()
@@ -361,25 +361,25 @@ async def test_delete_image_removes_intelligence(
         data={"label": "Test Image", "is_collection": "false"},
     )
     assert response.status_code == 201
-    image_id = response.json()["id"]
+    entity_id = response.json()["id"]
 
     await m_insight_worker.run_once()
 
     # Verify intelligence row exists
-    assert get_intelligence_for_image(test_db_session, image_id) is not None
+    assert get_intelligence_for_image(test_db_session, entity_id) is not None
 
     # Soft-delete image first
     from store.store.service import EntityService
     service = EntityService(test_db_session, client.app.state.config)
-    service.soft_delete_entity(image_id)
+    service.soft_delete_entity(entity_id)
 
     # Hard delete image
-    response = client.delete(f"/entities/{image_id}")
+    response = client.delete(f"/entities/{entity_id}")
     assert response.status_code == 204
 
     # Verify intelligence row was cascade-deleted
     test_db_session.expire_all()  # Refresh session to see changes
-    assert get_intelligence_for_image(test_db_session, image_id) is None
+    assert get_intelligence_for_image(test_db_session, entity_id) is None
 
 
 
@@ -398,15 +398,15 @@ async def test_restart_does_not_reinsert_deleted(
         data={"label": "Test Image", "is_collection": "false"},
     )
     assert response.status_code == 201
-    image_id = response.json()["id"]
+    entity_id = response.json()["id"]
 
     await m_insight_worker.run_once()
 
     # Soft-delete then hard-delete
     from store.store.service import EntityService
     service = EntityService(test_db_session, client.app.state.config)
-    service.soft_delete_entity(image_id)
-    client.delete(f"/entities/{image_id}")
+    service.soft_delete_entity(entity_id)
+    client.delete(f"/entities/{entity_id}")
 
     # Clear mock
     m_insight_processor_mock.clear()
@@ -422,7 +422,7 @@ async def test_restart_does_not_reinsert_deleted(
     # Verify deleted image not reprocessed
     assert processed_count == 0
     assert len(m_insight_processor_mock) == 0
-    assert get_intelligence_for_image(test_db_session, image_id) is None
+    assert get_intelligence_for_image(test_db_session, entity_id) is None
 
 
 # ============================================================================
