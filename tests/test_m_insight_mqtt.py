@@ -106,15 +106,17 @@ async def test_m_insight_lifecycle_events(
     processed = await worker.run_once()
     assert processed == 1, "Should have processed 1 item"
 
-    # Wait for messages
-    time.sleep(1.0)
-
-    # Verify messages on status topic
-    status_msg_payloads = [
-        MInsightStatus.model_validate_json(m.payload)
-        for m in messages
-        if m.topic == f"{topic_base}/status"
-    ]
+    # Wait for messages with timeout
+    start_time = time.time()
+    while time.time() - start_time < 5.0:
+        status_msg_payloads = [
+            MInsightStatus.model_validate_json(m.payload)
+            for m in messages
+            if m.topic == f"{topic_base}/status"
+        ]
+        if len(status_msg_payloads) >= 2:
+            break
+        time.sleep(0.1)
     
     assert len(status_msg_payloads) >= 2, f"Expected at least 2 status messages, got {len(status_msg_payloads)}"
 

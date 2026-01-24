@@ -26,7 +26,7 @@ def test_broadcaster_init_disabled(mock_config):
     broadcaster.init()
     assert broadcaster.broadcaster is None
 
-@patch("cl_ml_tools.get_broadcaster")
+@patch("store.m_insight.broadcaster.get_broadcaster")
 def test_broadcaster_init_enabled(mock_get_broadcaster, mock_config):
     """Test successful initialization with MQTT."""
     mock_mqtt_broadcaster = MagicMock()
@@ -51,7 +51,7 @@ def test_broadcaster_publish_no_init(mock_config):
     broadcaster.publish_end(5)
     broadcaster.publish_status("running")
 
-@patch("cl_ml_tools.get_broadcaster")
+@patch("store.m_insight.broadcaster.get_broadcaster")
 def test_broadcaster_publish_methods(mock_get_broadcaster, mock_config):
     """Test various publish methods."""
     mock_mqtt_broadcaster = MagicMock()

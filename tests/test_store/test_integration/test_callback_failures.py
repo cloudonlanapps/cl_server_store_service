@@ -42,6 +42,7 @@ def mock_store_config(integration_config):
 def callback_handler(mock_m_insight_config):
     mock_compute = MagicMock()
     mock_compute.get_job = AsyncMock()
+    mock_compute.download_job_file = AsyncMock()
     mock_qdrant = MagicMock()
     mock_dino = MagicMock()
     return JobCallbackHandler(
@@ -111,7 +112,19 @@ async def test_callback_entity_not_found(callback_handler):
         job_id="job3",
         status="completed",
         task_type="face_detection",
-        task_output={"faces": [{"bbox": {"x1":0,"y1":0,"x2":1,"y2":1}, "file_path":"f.png"}]}, # Need some face to trigger query
+        task_output={
+            "faces": [{
+                "bbox": {"x1":0,"y1":0,"x2":1,"y2":1}, 
+                "file_path":"f.png",
+                "confidence": 0.99,
+                "landmarks": {
+                    "right_eye": [0,0], "left_eye": [0,0], "nose_tip": [0,0], "mouth_right": [0,0], "mouth_left": [0,0]
+                }
+            }],
+            "num_faces": 1,
+            "image_width": 100,
+            "image_height": 100
+        }, # Need some face to trigger query
         created_at=1000
     )
     callback_handler.compute_client.get_job.return_value = full_job

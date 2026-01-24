@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from cl_client import ComputeClient
 from cl_client.models import OnJobResponseCallback
+from cl_ml_tools.utils.profiling import timed
 from loguru import logger
 
 from store.common import Entity, EntityJob, Face, database
@@ -13,7 +14,6 @@ from store.common.database import with_retry
 from store.common.storage import StorageService
 
 from .schemas import EntityVersionData
-from cl_ml_tools.utils.profiling import timed
 
 
 class JobSubmissionService:
@@ -40,6 +40,77 @@ class JobSubmissionService:
             Current timestamp in milliseconds since epoch
         """
         return int(datetime.now(UTC).timestamp() * 1000)
+
+    def update_job_status(self, job_id: str, status: str, error_message: str | None = None) -> None:
+        """Update job status in entity_jobs table.
+
+        Args:
+            job_id: Job ID to update
+            status: New job status (e.g., "completed", "failed")
+            error_message: Optional error message if job failed
+        """
+        @with_retry(max_retries=10)
+        def do_update():
+            db = database.SessionLocal()
+            try:
+                entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
+                if not entity_job:
+                    logger.warning(f"Job {job_id} not found in entity_jobs table")
+                    return
+
+                entity_job.status = status
+                entity_job.updated_at = JobSubmissionService._now_timestamp()
+
+                if status in ("completed", "failed"):
+                    entity_job.completed_at = JobSubmissionService._now_timestamp()
+
+                if error_message:
+                    entity_job.error_message = error_message
+
+                db.commit()
+                logger.debug(f"Updated job {job_id} status to {status}")
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+
+        try:
+            do_update()
+        except Exception as e:
+            logger.error(f"Failed to update job {job_id} status: {e}")
+
+    def delete_job_record(self, job_id: str) -> None:
+        """Delete job record from entity_jobs table.
+
+        Args:
+            job_id: Job ID to delete
+        """
+        @with_retry(max_retries=10)
+        def do_delete():
+            db = database.SessionLocal()
+            try:
+                entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
+                if entity_job:
+                    db.delete(entity_job)
+                    db.commit()
+                    logger.debug(f"Deleted job record {job_id}")
+                else:
+                    logger.warning(f"Job {job_id} not found for deletion")
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+
+        try:
+            do_delete()
+        except Exception as e:
+            logger.error(f"Failed to delete job record {job_id}: {e}")
+
+
+
+
 
     @timed
     async def submit_face_detection(
@@ -69,8 +140,8 @@ class JobSubmissionService:
             # However, logic is consistent: storage_service.get_absolute_path(entity.file_path)
 
             if not entity.file_path:
-                 logger.warning(f"Entity {entity.id} has no file_path")
-                 return None
+                logger.warning(f"Entity {entity.id} has no file_path")
+                return None
 
             file_path = self.storage_service.get_absolute_path(entity.file_path)
 
@@ -84,10 +155,10 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            db = database.SessionLocal()
-            try:
-                @with_retry(max_retries=10)
-                def save_job():
+            @with_retry(max_retries=10)
+            def save_job():
+                db = database.SessionLocal()
+                try:
                     now = self._now_timestamp()
                     entity_job = EntityJob(
                         entity_id=entity.id,
@@ -99,18 +170,17 @@ class JobSubmissionService:
                     )
                     db.add(entity_job)
                     db.commit()
-                
-                save_job()
-                logger.info(
-                    f"Submitted face_detection job {job_response.job_id} for entity {entity.id}"
-                )
-                return job_response.job_id
-            except Exception as e:
-                logger.error(f"Failed to save job record for face_detection entity {entity.id}: {e}")
-                db.rollback()
-                return None
-            finally:
-                db.close()
+                    logger.info(
+                        f"Submitted face_detection job {job_response.job_id} for entity {entity.id}"
+                    )
+                except Exception:
+                    db.rollback()
+                    raise
+                finally:
+                    db.close()
+
+            save_job()
+            return job_response.job_id
 
         except Exception as e:
             logger.error(f"Failed to submit face_detection job for entity {entity.id}: {e}")
@@ -134,7 +204,7 @@ class JobSubmissionService:
 
         try:
             if not entity.file_path:
-                 return None
+                return None
             file_path = self.storage_service.get_absolute_path(entity.file_path)
 
             job_response = await self.compute_client.clip_embedding.embed_image(
@@ -143,30 +213,32 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            db = database.SessionLocal()
-            try:
-                now = self._now_timestamp()
-                entity_job = EntityJob(
-                    entity_id=entity.id,
-                    job_id=job_response.job_id,
-                    task_type="clip_embedding",
-                    status="queued",
-                    created_at=now,
-                    updated_at=now,
-                )
-                db.add(entity_job)
-                db.commit()
+            @with_retry(max_retries=10)
+            def save_job():
+                db = database.SessionLocal()
+                try:
+                    now = self._now_timestamp()
+                    entity_job = EntityJob(
+                        entity_id=entity.id,
+                        job_id=job_response.job_id,
+                        task_type="clip_embedding",
+                        status="queued",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    db.add(entity_job)
+                    db.commit()
+                    logger.info(
+                        f"Submitted clip_embedding job {job_response.job_id} for entity {entity.id}"
+                    )
+                except Exception:
+                    db.rollback()
+                    raise
+                finally:
+                    db.close()
 
-                logger.info(
-                    f"Submitted clip_embedding job {job_response.job_id} for entity {entity.id}"
-                )
-                return job_response.job_id
-            except Exception as e:
-                logger.error(f"Failed to save job record for clip_embedding entity {entity.id}: {e}")
-                db.rollback()
-                return None
-            finally:
-                db.close()
+            save_job()
+            return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit clip_embedding job for entity {entity.id}: {e}")
             return None
@@ -189,7 +261,7 @@ class JobSubmissionService:
 
         try:
             if not entity.file_path:
-                 return None
+                return None
             file_path = self.storage_service.get_absolute_path(entity.file_path)
 
             job_response = await self.compute_client.dino_embedding.embed_image(
@@ -198,30 +270,32 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            db = database.SessionLocal()
-            try:
-                now = self._now_timestamp()
-                entity_job = EntityJob(
-                    entity_id=entity.id,
-                    job_id=job_response.job_id,
-                    task_type="dino_embedding",
-                    status="queued",
-                    created_at=now,
-                    updated_at=now,
-                )
-                db.add(entity_job)
-                db.commit()
+            @with_retry(max_retries=10)
+            def save_job():
+                db = database.SessionLocal()
+                try:
+                    now = self._now_timestamp()
+                    entity_job = EntityJob(
+                        entity_id=entity.id,
+                        job_id=job_response.job_id,
+                        task_type="dino_embedding",
+                        status="queued",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    db.add(entity_job)
+                    db.commit()
+                    logger.info(
+                        f"Submitted dino_embedding job {job_response.job_id} for entity {entity.id}"
+                    )
+                except Exception:
+                    db.rollback()
+                    raise
+                finally:
+                    db.close()
 
-                logger.info(
-                    f"Submitted dino_embedding job {job_response.job_id} for entity {entity.id}"
-                )
-                return job_response.job_id
-            except Exception as e:
-                logger.error(f"Failed to save job record for dino_embedding entity {entity.id}: {e}")
-                db.rollback()
-                return None
-            finally:
-                db.close()
+            save_job()
+            return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit dino_embedding job for entity {entity.id}: {e}")
             return None
@@ -255,71 +329,62 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            db = database.SessionLocal()
-            try:
-                now = self._now_timestamp()
-                # Track face_embedding jobs under the parent entity
-                entity_job = EntityJob(
-                    entity_id=entity.id,  # Use parent entity_id
-                    job_id=job_response.job_id,
-                    task_type="face_embedding",
-                    status="queued",
-                    created_at=now,
-                    updated_at=now,
-                )
-                db.add(entity_job)
-                db.commit()
+            @with_retry(max_retries=10)
+            def save_job():
+                db = database.SessionLocal()
+                try:
+                    now = self._now_timestamp()
+                    # Track face_embedding jobs under the parent entity
+                    entity_job = EntityJob(
+                        entity_id=entity.id,  # Use parent entity_id
+                        job_id=job_response.job_id,
+                        task_type="face_embedding",
+                        status="queued",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    db.add(entity_job)
+                    db.commit()
+                    logger.info(
+                        f"Submitted face_embedding job {job_response.job_id} "
+                        + f"for face {face.id} (entity {entity.id})"
+                    )
+                except Exception:
+                    db.rollback()
+                    raise
+                finally:
+                    db.close()
 
-                logger.info(
-                    f"Submitted face_embedding job {job_response.job_id} "
-                    + f"for face {face.id} (entity {entity.id})"
-                )
-                return job_response.job_id
-            except Exception as e:
-                logger.error(f"Failed to save job record for face {face.id}: {e}")
-                db.rollback()
-                return None
-            finally:
-                db.close()
+            save_job()
+            return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit face_embedding job for face {face.id}: {e}")
             return None
 
-    def delete_job_record(self, job_id: str) -> None:
-        """Delete job record after successful completion.
+        @with_retry(max_retries=10)
+        def do_delete():
+            db = database.SessionLocal()
+            try:
+                entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
+                if entity_job:
+                    db.delete(entity_job)
+                    db.commit()
+                    logger.debug(f"Deleted successful job record {job_id}")
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
 
-        Args:
-            job_id: Job ID to delete
-        """
-
-        db = SessionLocal()
         try:
-            entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
-            if entity_job:
-                db.delete(entity_job)
-                db.commit()
-                logger.debug(f"Deleted successful job record {job_id}")
+            do_delete()
         except Exception as e:
             logger.error(f"Failed to delete job record {job_id}: {e}")
-            db.rollback()
-        finally:
-            db.close()
 
-    def update_job_status(
-        self, job_id: str, status: str, error_message: str | None = None
-    ) -> None:
-        """Update job status in database.
-
-        Args:
-            job_id: Job ID to update
-            status: New status (queued, in_progress, completed, failed)
-            error_message: Optional error message if status is failed
-        """
-
-        db = SessionLocal()
-        try:
-            @with_retry(max_retries=10)
-            def do_update():
+        @with_retry(max_retries=10)
+        def do_update():
+            db = database.SessionLocal()
+            try:
                 entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
                 if not entity_job:
                     logger.warning(f"Job {job_id} not found in database")
@@ -335,11 +400,14 @@ class JobSubmissionService:
                     entity_job.error_message = error_message
 
                 db.commit()
-            
+                logger.debug(f"Updated job {job_id} status to {status}")
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                db.close()
+
+        try:
             do_update()
-            logger.debug(f"Updated job {job_id} status to {status}")
         except Exception as e:
             logger.error(f"Failed to update job {job_id} status: {e}")
-            db.rollback()
-        finally:
-            db.close()

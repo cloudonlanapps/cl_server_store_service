@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import asyncio
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
+import numpy as np
 from cl_client import ComputeClient
 from cl_client.models import JobResponse
 from cl_ml_tools.plugins.face_detection.schema import FaceDetectionOutput
 from cl_ml_tools.utils.profiling import timed
 from loguru import logger
-import numpy as np
 from numpy.typing import NDArray
 from pydantic import ValidationError
-import tempfile
 
+from store.common import database
 from store.common.database import with_retry
 from store.common.models import Entity, Face, FaceMatch, ImageIntelligence, KnownPerson
 
@@ -22,7 +22,6 @@ from .config import MInsightConfig
 from .job_service import JobSubmissionService
 from .schemas import SearchPreferences, StoreItem
 from .vector_stores import QdrantVectorStore
-from store.common import database
 
 
 class JobCallbackHandler:
@@ -123,7 +122,6 @@ class JobCallbackHandler:
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
 
-        db = database.SessionLocal()
         try:
             # Check if job failed
             if job.status == "failed":
@@ -141,12 +139,6 @@ class JobCallbackHandler:
                 )
                 return
 
-            # Query Entity to get its create_date for organizing face files
-            entity = db.query(Entity).filter(Entity.id == entity_id).first()
-            if not entity:
-                logger.error(f"Entity {entity_id} not found for face detection job {job.job_id}")
-                return
-
             # Extract faces from task_output
             if not full_job.task_output or "faces" not in full_job.task_output:
                 logger.warning(f"No faces found in job {job.job_id} output for image {entity_id}")
@@ -161,96 +153,77 @@ class JobCallbackHandler:
                 logger.error(f"Invalid task_output format for job {job.job_id}: {e}")
                 return
 
-            # Phase 1: Download face images and create Face records
+            # Phase 1: Download face images and create/update Face records
             saved_faces: list[tuple[int, Path]] = []  # (face_id, face_path)
 
-            # Using storage_service for path resolution would be ideal here if available,
-            # but _get_face_storage_path logic is specific.
-            # Could move to common/models.py Face.get_file_path reverse logic?
-            # For now keeping logic here as it implies creation logic.
+            # Get entity info needed for storage path (re-query in a small block)
+            create_date = 0
+            db_temp = database.SessionLocal()
+            try:
+                entity_temp = db_temp.query(Entity).filter(Entity.id == entity_id).first()
+                if not entity_temp:
+                    logger.error(f"Entity {entity_id} not found in database for job {job.job_id}")
+                    return
 
+                create_date = entity_temp.create_date or entity_temp.updated_date or 0
+            finally:
+                db_temp.close()
+
+            # 2. Downloads (not needed to retry with DB logic)
             for index, face_data in enumerate(faces_data):
-                try:
-                    # Get storage path for face image using entity's create_date
-                    face_path = self._get_face_storage_path(
-                        entity_id,
-                        index,
-                        entity.create_date
-                        if entity.create_date
-                        else entity.updated_date
-                        if entity.updated_date
-                        else 0,
-                    )
+                face_path = self._get_face_storage_path(entity_id, index, create_date)
+                await self._download_face_image(
+                    job_id=job.job_id,
+                    file_path=face_data.file_path,
+                    dest=face_path,
+                )
 
-                    # Download face image
-                    await self._download_face_image(
-                        job_id=job.job_id,
-                        file_path=face_data.file_path,
-                        dest=face_path,
-                    )
+                # Deterministic face ID
+                face_id = entity_id * 10000 + index
+                saved_faces.append((face_id, face_path))
 
-                    # Get relative path from MEDIA_STORAGE_DIR
-                    relative_path = face_path.relative_to(self.config.media_storage_dir)
-
-                    # Generate deterministic face ID: entity_id * 10000 + face_index
-                    # This prevents duplicates if callback runs multiple times
-                    face_id = entity_id * 10000 + index
-
-                    # Check if face already exists (upsert pattern)
-                    existing_face = db.query(Face).filter(Face.id == face_id).first()
-
-                    if existing_face:
-                        # Update existing face
-                        existing_face.bbox = face_data.bbox.model_dump_json()
-                        existing_face.confidence = face_data.confidence
-                        existing_face.landmarks = face_data.landmarks.model_dump_json()
-                        existing_face.file_path = str(relative_path)
-                        face = existing_face
-                        logger.debug(f"Updated existing face {face_id} for image {entity_id}")
-                    else:
-                        # Create new face with explicit ID
-                        face = Face(
-                            id=face_id,
-                            entity_id=entity_id,
-                            bbox=face_data.bbox.model_dump_json(),
-                            confidence=face_data.confidence,
-                            landmarks=face_data.landmarks.model_dump_json(),
-                            file_path=str(relative_path),
-                            created_at=self._now_timestamp(),
-                        )
-                        db.add(face)
-                        logger.debug(f"Created new face {face_id} for image {entity_id}")
-
-                    db.flush()
-
-                    saved_faces.append((face.id, face_path))
-
-                    logger.debug(
-                        f"Saved face {index} for image {entity_id} "
-                        + f"(confidence: {face_data.confidence:.2f})"
-                    )
-
-                except Exception as e:
-                    logger.error(
-                        f"Failed to process face {index} from job {job.job_id} "
-                        + f"for image {entity_id}: {e}"
-                    )
-                    # Continue processing other faces
-
-            # Commit all Face records BEFORE submitting jobs
+            # 3. DB Transaction (The part that needs retry)
             @with_retry(max_retries=10)
-            def commit_faces():
-                db.commit()
-            
-            commit_faces()
+            def commit_faces_to_db():
+                db = database.SessionLocal()
+                try:
+                    for index, face_data in enumerate(faces_data):
+                        face_id, face_path = saved_faces[index]
+                        relative_path = face_path.relative_to(self.config.media_storage_dir)
+
+                        existing_face = db.query(Face).filter(Face.id == face_id).first()
+                        if existing_face:
+                            existing_face.bbox = face_data.bbox.model_dump_json()
+                            existing_face.confidence = face_data.confidence
+                            existing_face.landmarks = face_data.landmarks.model_dump_json()
+                            existing_face.file_path = str(relative_path)
+                        else:
+                            face_obj = Face(
+                                id=face_id,
+                                entity_id=entity_id,
+                                bbox=face_data.bbox.model_dump_json(),
+                                confidence=face_data.confidence,
+                                landmarks=face_data.landmarks.model_dump_json(),
+                                file_path=str(relative_path),
+                                created_at=self._now_timestamp(),
+                            )
+                            db.add(face_obj)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    raise
+                finally:
+                    db.close()
+
+            commit_faces_to_db()
             logger.info(f"Successfully saved {len(saved_faces)} faces for image {entity_id}")
 
-            # Phase 2: Submit face_embedding jobs (after commit to avoid locks)
+            # Phase 2: Submit face_embedding jobs
             if self.job_submission_service:
                 face_job_ids: list[str] = []
                 for face_id, face_path in saved_faces:
                     try:
-                        # Capture face_id in closure
+
                         async def face_embedding_callback(
                             job: JobResponse, fid: int = face_id
                         ) -> None:
@@ -264,96 +237,62 @@ class JobCallbackHandler:
                                     job.job_id, job.status, job.error_message
                                 )
 
-                        # Fetch the Face object to pass to submit_face_embedding
-                        # We need to re-query or use the ID.
-                        # JobSubmissionService.submit_face_embedding now expects 'face' object and 'entity version data'?
-                        # Or maybe just IDs?
-                        # Plan said: submit_face_embedding(face: Face, entity: EntityVersionData, ...)
-                        # But here we are inside a callback where we have IDs.
-                        # We must query the objects to pass them, or update JobSubmissionService to take IDs?
-                        # I will assume JobSubmissionService will be updated to take Objects (per plan), so I need to query them.
-
-                        f_obj = db.query(Face).filter(Face.id == face_id).first()
-
-                        # We need EntityVersionData for entity.
-                        # We have 'entity' ORM object. Convert to EntityVersionData Pydantic model?
-                        # Or does JobSubmissionService take ORM objects?
-                        # Plan said: "submit_face_embedding(face: Face, entity: EntityVersionData, ...)"
-                        # Let's convert entity to EntityVersionData if possible.
-                        # EntityVersionData is for VERSIONED data. Here we have live Entity.
-                        # It should be compatible if we look at fields.
-
-                        # Construct minimal EVD or query version?
-                        # EntityVersionData expects transaction_id which Entity doesn't have directly (it has versions rel).
-                        # Taking a shortcut: If JobSubmissionService only needs path, we can pass what is needed.
-                        # But plan dictates signature change.
-                        # I will UPDATE JobSubmissionService to be flexible or take Entity/Face objects.
-
-                        if f_obj:
-                            # Create a temporary/partial EVD or we assume JobSubmissionService handles it.
-                            # For now, I will update JobSubmissionService to take Face object and maybe Entity object or EVD.
-
-                            # Actually, inside callback we might not have the version data handy easily without querying.
-                            # For simplicity, I will stick to IDs and path in this call if JobSubmissionService supports it,
-                            # OR I'll query what I need.
-
-                            pass
-
-                            # WAIT. In the plan I said:
-                            # submit_face_embedding(face: Face, entity: EntityVersionData, on_complete_callback)
-
-                            # Here in callback we have the Entity object.
-                            # Does it matter if it is Entity or EntityVersionData?
-                            # Primarily for get_file_path() I presume.
-
-                            # Let's update JobSubmissionService to accept Face and Entity (or EVD).
-                            # I'll pass the ORM objects if compatible or update JobSubmissionService to take Union.
-
-                            # For now, I'll call it with arguments I have.
-                            # submit_face_embedding method signature update is pending in next step.
-                            # I will invoke it assuming I pass the objects.
-
-                            job_id = await self.job_submission_service.submit_face_embedding(
-                                face=f_obj,
-                                entity=entity,  # Passing ORM entity
-                                on_complete_callback=face_embedding_callback,
-                            )
-                            if job_id:
-                                face_job_ids.append(job_id)
+                        # Need to re-query objects to pass to submit_face_embedding
+                        db_fetch = database.SessionLocal()
+                        try:
+                            f_obj = db_fetch.query(Face).filter(Face.id == face_id).first()
+                            e_obj = db_fetch.query(Entity).filter(Entity.id == entity_id).first()
+                            if f_obj and e_obj:
+                                job_id = await self.job_submission_service.submit_face_embedding(
+                                    face=f_obj,
+                                    entity=e_obj,
+                                    on_complete_callback=face_embedding_callback,
+                                )
+                                if job_id:
+                                    face_job_ids.append(job_id)
+                        finally:
+                            db_fetch.close()
 
                     except Exception as e:
                         logger.error(f"Failed to submit face_embedding job for face {face_id}: {e}")
 
                 # Update ImageIntelligence with job IDs
                 if face_job_ids:
-                    try:
-                        intelligence = (
-                            db.query(ImageIntelligence)
-                            .filter(ImageIntelligence.entity_id == entity_id)
-                            .first()
-                        )
-                        if intelligence:
-                            current_ids = intelligence.face_embedding_job_ids or []
-                            new_ids = list(current_ids) + face_job_ids
-                            
-                            @with_retry(max_retries=10)
-                            def update_intelligence():
-                                intelligence.face_embedding_job_ids = new_ids
-                                db.commit()
-                            
-                            update_intelligence()
-                            logger.info(
-                                f"Updated ImageIntelligence for {entity_id} with {len(face_job_ids)} face embedding jobs"
+
+                    @with_retry(max_retries=10)
+                    def update_intelligence():
+                        db = database.SessionLocal()
+                        try:
+                            intelligence = (
+                                db.query(ImageIntelligence)
+                                .filter(ImageIntelligence.entity_id == entity_id)
+                                .first()
                             )
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to update ImageIntelligence with face job IDs for {entity_id}: {e}"
-                        )
+                            if intelligence:
+                                current_ids = intelligence.face_embedding_job_ids or []
+                                intelligence.face_embedding_job_ids = (
+                                    list(current_ids) + face_job_ids
+                                )
+                                db.commit()
+                        except Exception:
+                            db.rollback()
+                            raise
+                        finally:
+                            db.close()
+
+                    update_intelligence()
+                    logger.info(
+                        f"Updated ImageIntelligence for {entity_id} with {len(face_job_ids)} face embedding jobs"
+                    )
+
+            # Update job status in store database
+            if self.job_submission_service:
+                self.job_submission_service.update_job_status(
+                    job.job_id, job.status, job.error_message
+                )
+
         except Exception as e:
             logger.error(f"Failed to handle face detection completion for image {entity_id}: {e}")
-            db.rollback()
-        finally:
-            db.close()
 
     @timed
     async def handle_clip_embedding_complete(self, entity_id: int, job: JobResponse) -> None:
@@ -428,6 +367,12 @@ class JobCallbackHandler:
             )
 
             logger.info(f"Successfully stored CLIP embedding for image {entity_id} in Qdrant")
+
+            # Update job status in store database
+            if self.job_submission_service:
+                self.job_submission_service.update_job_status(
+                    job.job_id, job.status, job.error_message
+                )
 
         except Exception as e:
             logger.error(f"Failed to handle CLIP embedding completion for image {entity_id}: {e}")
@@ -505,6 +450,12 @@ class JobCallbackHandler:
 
             logger.info(f"Successfully stored DINO embedding for image {entity_id} in Qdrant")
 
+            # Update job status in store database
+            if self.job_submission_service:
+                self.job_submission_service.update_job_status(
+                    job.job_id, job.status, job.error_message
+                )
+
         except Exception as e:
             logger.error(f"Failed to handle DINO embedding completion for image {entity_id}: {e}")
 
@@ -525,7 +476,6 @@ class JobCallbackHandler:
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
 
-        db = database.SessionLocal()
         try:
             # Check if job failed
             if job.status == "failed":
@@ -543,15 +493,11 @@ class JobCallbackHandler:
                 return
 
             # Download embedding file from job output
-            # The embedding is stored in a .npy file (numpy JSON format)
             if not full_job.params or "output_path" not in full_job.params:
                 logger.error(f"No output_path found in job {job.job_id} params")
                 return
 
             output_path = cast(str, full_job.params["output_path"])
-
-            # Download embedding file to temporary location
-
             with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
                 tmp_path = Path(tmp.name)
 
@@ -561,104 +507,97 @@ class JobCallbackHandler:
                     file_path=output_path,
                     dest=tmp_path,
                 )
-
-                # Load .npy file (numpy binary format)
-
                 embedding: NDArray[np.float32] = cast(NDArray[np.float32], np.load(tmp_path))
-
-                # Validate embedding dimension
                 if embedding.shape[0] != self.config.face_vector_size:
                     logger.error(
                         f"Invalid embedding dimension for face {face_id}: expected {self.config.face_vector_size}, got {embedding.shape[0]}"
                     )
                     return
-
             finally:
-                # Cleanup temporary file
                 if tmp_path.exists():
                     tmp_path.unlink()
 
+            # Search face store for similar faces
             similar_faces = self.face_store.search(
                 query_vector=embedding,
-                limit=10,  # Get up to 10 matches
+                limit=10,
                 search_options=SearchPreferences(
                     score_threshold=self.config.face_embedding_threshold
                 ),
             )
 
-            # Get Face record
-            face = db.query(Face).filter(Face.id == face_id).first()
-            if not face:
-                logger.error(f"Face {face_id} not found in database")
-                return
+            # DB Operations (The part that needs retry)
+            @with_retry(max_retries=10)
+            def process_face_matches_and_linkage():
+                db = database.SessionLocal()
+                try:
+                    # 1. Get Face record
+                    face = db.query(Face).filter(Face.id == face_id).first()
+                    if not face:
+                        logger.error(f"Face {face_id} not found in database")
+                        return
 
-            # Find the best valid match from similar faces
-            valid_best_face = None
-            if similar_faces:
-                # Retry loop to handle concurrent processing of faces for the same person
-                # If we find matches but none have a known_person_id, wait slightly and re-check
-                max_retries = 3
-                for retry in range(max_retries):
-                    for match in similar_faces:
-                        candidate_face = db.query(Face).filter(Face.id == match.id).first()
-                        if candidate_face:
-                            valid_best_face = candidate_face
-                            # Link to this face's KnownPerson if it has one
-                            if valid_best_face.known_person_id:
-                                face.known_person_id = valid_best_face.known_person_id
-                                logger.info(
-                                    f"Linked face {face_id} to known person {valid_best_face.known_person_id} "
-                                    + f"(match: {match.id}, score: {match.score:.3f})"
-                                )
-                                break
+                    # 2. Find the best valid match from similar faces
+                    valid_best_face = None
+                    if similar_faces:
+                        for match in similar_faces:
+                            candidate_face = db.query(Face).filter(Face.id == match.id).first()
+                            if candidate_face:
+                                valid_best_face = candidate_face
+                                if valid_best_face.known_person_id:
+                                    face.known_person_id = valid_best_face.known_person_id
+                                    logger.info(
+                                        f"Linked face {face_id} to known person {valid_best_face.known_person_id} "
+                                        + f"(match: {match.id}, score: {match.score:.3f})"
+                                    )
+                                    break
 
-                    if face.known_person_id or not similar_faces:
-                        break
+                    # 3. Record ALL matches in FaceMatch table
+                    if similar_faces:
+                        for match in similar_faces:
+                            matched_face_in_db = db.query(Face).filter(Face.id == match.id).first()
+                            if not matched_face_in_db:
+                                continue
 
-                    if retry < max_retries - 1:
-                        logger.debug(
-                            f"Matches found for face {face_id} but no known_person_id assigned yet. Retrying {retry + 1}/{max_retries}..."
+                            face_match = FaceMatch(
+                                face_id=face_id,
+                                matched_face_id=match.id,
+                                similarity_score=match.score,
+                                created_at=self._now_timestamp(),
+                            )
+                            db.add(face_match)
+
+                    # 4. If no valid similar face found, create new KnownPerson
+                    if not face.known_person_id:
+                        known_person = KnownPerson(
+                            created_at=self._now_timestamp(),
+                            updated_at=self._now_timestamp(),
                         )
-                        await asyncio.sleep(1.0)
-                        db.refresh(face)  # Ensure we have latest data
-
-            # Record ALL matches in FaceMatch table
-            if similar_faces:
-                for match in similar_faces:
-                    # Verify matched face exists in DB to prevent FK violation (stale vector store data)
-                    matched_face_in_db = db.query(Face).filter(Face.id == match.id).first()
-                    if not matched_face_in_db:
-                        logger.warning(
-                            f"Matched face {match.id} from vector store not found in DB. Skipping match record."
+                        db.add(known_person)
+                        db.flush()
+                        face.known_person_id = known_person.id
+                        logger.info(
+                            f"Created new known person {known_person.id} for face {face_id}"
                         )
-                        continue
 
-                    face_match = FaceMatch(
-                        face_id=face_id,
-                        matched_face_id=match.id,
-                        similarity_score=match.score,
-                        created_at=self._now_timestamp(),
-                    )
-                    db.add(face_match)
-                    logger.debug(
-                        f"Recorded match: face {face_id} <-> face {match.id} (score: {match.score:.3f})"
-                    )
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    raise
+                finally:
+                    db.close()
 
-            # If no valid similar face found (or no similar faces at all), create new KnownPerson
-            if not valid_best_face or not face.known_person_id:
-                # No match - create new KnownPerson
-                if not face.known_person_id:
-                    known_person = KnownPerson(
-                        created_at=self._now_timestamp(),
-                        updated_at=self._now_timestamp(),
-                    )
-                    db.add(known_person)
-                    db.flush()  # Get ID
+            process_face_matches_and_linkage()
 
-                    face.known_person_id = known_person.id
-                    logger.info(f"Created new known person {known_person.id} for face {face_id}")
-
-            # Add face embedding to face store
+            # 5. Add face embedding to face store
+            p_id = 0
+            db_fetch = database.SessionLocal()
+            try:
+                face_fetch = db_fetch.query(Face).filter(Face.id == face_id).first()
+                if face_fetch:
+                    p_id = face_fetch.known_person_id or 0
+            finally:
+                db_fetch.close()
 
             _ = self.face_store.add_vector(
                 StoreItem(
@@ -667,20 +606,12 @@ class JobCallbackHandler:
                     payload={
                         "face_id": face_id,
                         "entity_id": entity_id,
-                        "known_person_id": face.known_person_id,
+                        "known_person_id": p_id,
                     },
                 )
             )
 
-            @with_retry(max_retries=10)
-            def finalize_face():
-                db.commit()
-            
-            finalize_face()
             logger.info(f"Successfully processed face embedding for face {face_id}")
 
         except Exception as e:
             logger.error(f"Failed to handle face embedding completion for face {face_id}: {e}")
-            db.rollback()
-        finally:
-            db.close()
