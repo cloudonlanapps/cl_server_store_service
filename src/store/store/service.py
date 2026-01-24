@@ -452,18 +452,44 @@ class EntityService:
             updated_by=user_id,
         )
 
-        try:
-            self.db.add(entity)
-            self.db.commit()
-            self.db.refresh(entity)
-        except IntegrityError as _:
-            self.db.rollback()
-            # Clean up file if database insert failed
-            if file_path:
-                _ = self.file_storage.delete_file(file_path)
-            raise DuplicateFileError(
-                f"Duplicate MD5 detected: {file_meta.md5 if file_meta else 'unknown'}"
-            )
+        # Retry logic for database locks
+        import time
+        from sqlalchemy.exc import OperationalError
+
+        max_retries = 5
+        retry_delay = 0.1
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                self.db.add(entity)
+                self.db.commit()
+                self.db.refresh(entity)
+                break  # Success, exit retry loop
+            except IntegrityError as _:
+                self.db.rollback()
+                # Clean up file if database insert failed
+                if file_path:
+                    _ = self.file_storage.delete_file(file_path)
+                raise DuplicateFileError(
+                    f"Duplicate MD5 detected: {file_meta.md5 if file_meta else 'unknown'}"
+                )
+            except OperationalError as e:
+                self.db.rollback()
+                if "database is locked" in str(e).lower():
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            f"Database locked during entity creation, retry {attempt+1}/{max_retries} after {retry_delay}s"
+                        )
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        logger.error(f"Database locked after {max_retries} retries, giving up")
+                        raise
+                else:
+                    # Re-raise if it's not a lock error
+                    raise
 
         return (self._entity_to_item(entity), False)  # is_duplicate=False
 
