@@ -104,7 +104,11 @@ class MediaInsight:
             )
 
             # Initialize Services
-            self.job_service = JobSubmissionService(self.compute_client, self.storage_service)
+            self.job_service = JobSubmissionService(
+                self.compute_client, 
+                self.storage_service,
+                broadcaster=self.broadcaster
+            )
 
             self.callback_handler = JobCallbackHandler(
                 self.compute_client,
@@ -374,6 +378,10 @@ class MediaInsight:
             session.rollback()
         finally:
             session.close()
+
+        # Trigger initial status update
+        if self.job_service:
+            self.job_service.broadcast_entity_status(entity.id)
 
     def _get_last_version(self) -> int:
         """Get last processed version from sync state."""

@@ -147,7 +147,7 @@ def integration_config(request: pytest.FixtureRequest) -> IntegrationConfig:
         username=str(username) if username else "admin",
         password=str(password) if password else "admin",
         mqtt_broker=str(mqtt_broker),
-        mqtt_port=mqtt_port,
+        mqtt_port=mqtt_port if mqtt_port else 1883,
         auth_url=str(auth_url),
         compute_url=str(compute_url),
         qdrant_url=str(qdrant_url),

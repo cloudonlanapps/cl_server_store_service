@@ -118,6 +118,31 @@ class EntityJobResponse(BaseModel):
     error_message: str | None = Field(None, description="Error message if failed")
 
 
+    completed_at: int | None = Field(None, description="Completion timestamp (milliseconds)")
+    error_message: str | None = Field(None, description="Error message if failed")
+
+
+class EntityStatusDetails(BaseModel):
+    """Detailed status breakdown for entity processing."""
+    face_detection: str | None = Field(None, description="Status of face detection")
+    face_count: int | None = Field(None, description="Number of faces detected (if completed)")
+    clip_embedding: str | None = Field(None, description="Status of CLIP embedding")
+    dino_embedding: str | None = Field(None, description="Status of DINO embedding")
+    face_embeddings: list[str] | None = Field(None, description="List of face embedding statuses")
+
+
+class EntityStatusPayload(BaseModel):
+    """Payload for entity status broadcast."""
+
+    entity_id: int = Field(..., description="Entity ID")
+    status: str = Field(..., description="Overall status (queued, processing, completed, failed)")
+    details: EntityStatusDetails = Field(
+        default_factory=EntityStatusDetails,
+        description="Detailed status breakdown",
+    )
+    timestamp: int = Field(..., description="Timestamp (milliseconds)")
+
+
 class SimilarImageResult(BaseModel):
     """Response schema for similar image search result."""
 

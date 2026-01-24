@@ -1,6 +1,11 @@
 """Job submission and management service for async compute tasks."""
 
-from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .broadcaster import MInsightBroadcaster
+    from .schemas import EntityStatusPayload
+    from .schemas import EntityStatusPayload
 
 from datetime import UTC, datetime
 
@@ -21,16 +26,24 @@ class JobSubmissionService:
 
     compute_client: ComputeClient
     storage_service: StorageService
+    broadcaster: "MInsightBroadcaster | None"
 
-    def __init__(self, compute_client: ComputeClient, storage_service: StorageService) -> None:
+    def __init__(
+        self, 
+        compute_client: ComputeClient, 
+        storage_service: StorageService,
+        broadcaster: "MInsightBroadcaster | None" = None
+    ) -> None:
         """Initialize job submission service.
 
         Args:
             compute_client: ComputeClient instance for job submission
             storage_service: StorageService for file path resolution
+            broadcaster: Optional broadcaster for status updates
         """
         self.compute_client = compute_client
         self.storage_service = storage_service
+        self.broadcaster = broadcaster
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -50,13 +63,13 @@ class JobSubmissionService:
             error_message: Optional error message if job failed
         """
         @with_retry(max_retries=10)
-        def do_update():
+        def do_update() -> int | None:
             db = database.SessionLocal()
             try:
                 entity_job = db.query(EntityJob).filter(EntityJob.job_id == job_id).first()
                 if not entity_job:
                     logger.warning(f"Job {job_id} not found in entity_jobs table")
-                    return
+                    return None
 
                 entity_job.status = status
                 entity_job.updated_at = JobSubmissionService._now_timestamp()
@@ -69,6 +82,7 @@ class JobSubmissionService:
 
                 db.commit()
                 logger.debug(f"Updated job {job_id} status to {status}")
+                return entity_job.entity_id
             except Exception:
                 db.rollback()
                 raise
@@ -76,7 +90,9 @@ class JobSubmissionService:
                 db.close()
 
         try:
-            do_update()
+            entity_id = do_update()
+            if entity_id:
+                self.broadcast_entity_status(entity_id)
         except Exception as e:
             logger.error(f"Failed to update job {job_id} status: {e}")
 
@@ -111,6 +127,140 @@ class JobSubmissionService:
 
 
 
+
+    @timed
+    def _get_entity_status(self, entity_id: int) -> "EntityStatusPayload | None":
+        """Calculate aggregate status for an entity.
+
+        Args:
+            entity_id: Entity ID
+
+        Returns:
+            EntityStatusPayload or None if entity not found
+        """
+        from .schemas import EntityStatusPayload, EntityStatusDetails
+        from store.common.models import ImageIntelligence, EntityJob, Face
+
+        session = database.SessionLocal()
+        try:
+            # 1. Get Intelligence Record
+            intelligence = (
+                session.query(ImageIntelligence)
+                .filter(ImageIntelligence.entity_id == entity_id)
+                .first()
+            )
+            if not intelligence:
+                return None
+
+            # 2. Get All Jobs for this entity
+            jobs = (
+                session.query(EntityJob)
+                .filter(EntityJob.entity_id == entity_id)
+                .all()
+            )
+            job_map = {job.job_id: job for job in jobs}
+
+            # Helper to get job status
+            def get_job_status(job_id: str | None) -> str:
+                if not job_id:
+                    return "pending"
+                job = job_map.get(job_id)
+                if not job:
+                    return "pending"
+                return job.status
+
+            # 3. Build Details
+            details = EntityStatusDetails()
+
+            # Face Detection
+            fd_status = get_job_status(intelligence.face_detection_job_id)
+            fd_count = None
+            if fd_status == "completed":
+                fd_count = session.query(Face).filter(Face.entity_id == entity_id).count()
+            
+            details.face_detection = fd_status
+            details.face_count = fd_count
+
+            # Embeddings
+            details.clip_embedding = get_job_status(intelligence.clip_job_id)
+            details.dino_embedding = get_job_status(intelligence.dino_job_id)
+
+            # Face Embeddings
+            face_agg_status = "completed" # Default if no faces
+            
+            if fd_status == "completed":
+                actual_faces = fd_count or 0
+                if actual_faces > 0:
+                    job_ids = intelligence.face_embedding_job_ids or []
+                    statuses = []
+                    all_faces_done = True
+                    has_failure = False
+                    
+                    for i in range(actual_faces):
+                        if i < len(job_ids):
+                            s = get_job_status(job_ids[i])
+                        else:
+                            s = "pending"
+                        
+                        statuses.append(s)
+                        
+                        if s == "failed":
+                            has_failure = True
+                        if s != "completed":
+                            all_faces_done = False
+                    
+                    details.face_embeddings = statuses
+                    
+                    if has_failure:
+                        face_agg_status = "failed"
+                    elif not all_faces_done:
+                        face_agg_status = "processing"
+                else:
+                    details.face_embeddings = [] # 0 faces
+                    
+            elif fd_status == "failed":
+                face_agg_status = "skipped"
+                details.face_embeddings = None
+            else:
+                face_agg_status = "pending"
+                details.face_embeddings = None
+
+            # 4. Aggregate Overall Status
+            critical_statuses = [
+                details.face_detection,
+                details.clip_embedding,
+                details.dino_embedding
+            ]
+            
+            if any(s == "failed" for s in critical_statuses) or face_agg_status == "failed":
+                overall = "failed"
+            elif all(s == "completed" for s in critical_statuses) and face_agg_status == "completed":
+                overall = "completed"
+            elif all(s == "pending" for s in critical_statuses) and face_agg_status == "pending":
+                 overall = "queued"
+            else:
+                overall = "processing"
+
+            return EntityStatusPayload(
+                entity_id=entity_id,
+                status=overall,
+                details=details,
+                timestamp=self._now_timestamp()
+            )
+
+        finally:
+            session.close()
+
+    def broadcast_entity_status(self, entity_id: int) -> None:
+        """Public method to force a status broadcast for an entity."""
+        if not self.broadcaster:
+            return
+            
+        payload = self._get_entity_status(entity_id)
+        if payload:
+            # Set cleanup for final states
+            clear_after = 60.0 if payload.status in ("completed", "failed") else None
+            self.broadcaster.publish_entity_status(entity_id, payload, clear_after=clear_after)
 
     @timed
     async def submit_face_detection(
@@ -180,6 +330,8 @@ class JobSubmissionService:
                     db.close()
 
             save_job()
+            # Broadcast update
+            self.broadcast_entity_status(entity.id)
             return job_response.job_id
 
         except Exception as e:
@@ -238,6 +390,8 @@ class JobSubmissionService:
                     db.close()
 
             save_job()
+            # Broadcast update
+            self.broadcast_entity_status(entity.id)
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit clip_embedding job for entity {entity.id}: {e}")
@@ -295,6 +449,8 @@ class JobSubmissionService:
                     db.close()
 
             save_job()
+            # Broadcast update
+            self.broadcast_entity_status(entity.id)
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit dino_embedding job for entity {entity.id}: {e}")
@@ -356,6 +512,8 @@ class JobSubmissionService:
                     db.close()
 
             save_job()
+            # Broadcast update
+            self.broadcast_entity_status(entity.id)
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit face_embedding job for face {face.id}: {e}")

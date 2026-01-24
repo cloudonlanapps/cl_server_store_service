@@ -8,7 +8,7 @@ from .schemas import MInsightStatus
 
 if TYPE_CHECKING:
     from .config import MInsightConfig
-    from .schemas import MInsightStatus
+    from .schemas import MInsightStatus, EntityStatusPayload
 
 
 class MInsightBroadcaster:
@@ -76,3 +76,58 @@ class MInsightBroadcaster:
     def publish_status(self, status: str) -> None:
         self.current_status.status = status
         self._broadcast()
+
+    def publish_entity_status(
+        self, 
+        entity_id: int, 
+        payload: EntityStatusPayload, 
+        clear_after: float | None = None
+    ) -> None:
+        """Publish entity status update.
+        
+        Args:
+            entity_id: Entity ID
+            payload: EntityStatusPayload object
+            clear_after: Optional delay in seconds to clear the message (for final states)
+        """
+        if not self.broadcaster:
+            return
+
+        topic = f"{self.topic_base}/entity_item_status/{entity_id}"
+        _ = self.broadcaster.publish_retained(
+            topic=topic,
+            payload=payload.model_dump_json(),
+            qos=1
+        )
+
+        if clear_after:
+            import asyncio
+            # Schedule cleanup
+            # We use asyncio.create_task to run this in background
+            # Note: This simple approach assumes the event loop is running.
+            # In a real service, we might want more robust task management.
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._delayed_clear(entity_id, clear_after))
+            except RuntimeError:
+                # No running loop (e.g. sync context), cannot schedule async clear
+                pass
+
+    async def _delayed_clear(self, entity_id: int, delay: float) -> None:
+        """Wait for delay and then clear the entity status."""
+        import asyncio
+        await asyncio.sleep(delay)
+        self.clear_entity_status(entity_id)
+
+    def clear_entity_status(self, entity_id: int) -> None:
+        """Clear the retained status message for an entity."""
+        if not self.broadcaster:
+            return
+
+        topic = f"{self.topic_base}/entity_item_status/{entity_id}"
+        # Publish empty retained message to clear it
+        _ = self.broadcaster.publish_retained(
+            topic=topic,
+            payload="",
+            qos=1
+        )
