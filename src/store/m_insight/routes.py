@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Response
 
 from store.common.auth import UserPayload, require_permission
+from store.db_service.schemas import EntityJobSchema
 from . import schemas as intel_schemas
 from .dependencies import get_intelligence_service
 from .retrieval_service import IntelligenceRetrieveService, ResourceNotFoundError
@@ -21,7 +22,7 @@ async def get_entity_faces(
     entity_id: int = Path(..., title="Entity Id"),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
-) -> list[intel_schemas.FaceResponse]:
+) -> list[intel_schemas.FaceSchema]:
     """Get all faces detected in an entity."""
     _ = user
 
@@ -127,7 +128,7 @@ async def get_entity_jobs(
     entity_id: int = Path(..., title="Entity Id"),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
-) -> list[intel_schemas.EntityJobResponse]:
+) -> list[EntityJobSchema]:
     """Get all jobs for an entity."""
     _ = user
 
@@ -219,7 +220,7 @@ async def get_face_matches(
     face_id: int = Path(..., title="Face Id"),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
-) -> list[intel_schemas.FaceMatchResult]:
+) -> list[intel_schemas.FaceMatchSchema]:
     """Get all match records for a face."""
     _ = user
 
@@ -239,7 +240,7 @@ async def get_face_matches(
 async def get_all_known_persons(
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
-) -> list[intel_schemas.KnownPersonResponse]:
+) -> list[intel_schemas.KnownPersonSchema]:
     """Get all known persons."""
     _ = user
     return service.get_all_known_persons()
@@ -256,7 +257,7 @@ async def get_known_person(
     person_id: int = Path(..., title="Person Id"),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
-) -> intel_schemas.KnownPersonResponse:
+) -> intel_schemas.KnownPersonSchema:
     """Get known person details."""
     _ = user
 
@@ -278,7 +279,7 @@ async def get_person_faces(
     person_id: int = Path(..., title="Person Id"),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
-) -> list[intel_schemas.FaceResponse]:
+) -> list[intel_schemas.FaceSchema]:
     """Get all faces for a known person."""
     _ = user
 
@@ -300,7 +301,7 @@ async def update_person_name(
     body: intel_schemas.UpdatePersonNameRequest = Body(...),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: IntelligenceRetrieveService = Depends(get_intelligence_service),
-) -> intel_schemas.KnownPersonResponse:
+) -> intel_schemas.KnownPersonSchema:
     """Update person name."""
     _ = user
 

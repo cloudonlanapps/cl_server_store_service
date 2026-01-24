@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, TYPE_CHECKING
 
 from cl_ml_tools import BBox, FaceLandmarks
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
@@ -155,6 +155,7 @@ class KnownPersonSchema(BaseModel):
     name: str | None = None
     created_at: int
     updated_at: int
+    face_count: int | None = None
 
 
 class FaceMatchSchema(BaseModel):
@@ -167,6 +168,7 @@ class FaceMatchSchema(BaseModel):
     matched_face_id: int
     similarity_score: float
     created_at: int
+    matched_face: FaceSchema | None = None
 
 
 class EntitySyncStateSchema(BaseModel):

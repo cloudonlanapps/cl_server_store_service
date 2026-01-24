@@ -291,7 +291,16 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
             return db.query(KnownPerson.id).filter(KnownPerson.id == person_id).scalar() is not None
         finally:
             db.close()
-
+    @timed
+    @with_retry(max_retries=10)
+    def get_all(self) -> list[KnownPersonSchema]:
+        """Get all known persons."""
+        db = database.SessionLocal()
+        try:
+            objs = db.query(KnownPerson).all()
+            return [self._to_schema(obj) for obj in objs]
+        finally:
+            db.close()
 
 class FaceMatchDBService(BaseDBService[FaceMatchSchema]):
     model_class = FaceMatch

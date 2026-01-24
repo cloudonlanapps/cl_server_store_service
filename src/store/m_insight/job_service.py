@@ -18,10 +18,11 @@ from store.db_service import (
     DBService,
     EntityJobSchema,
     EntitySchema,
+    EntityVersionSchema,
     FaceSchema,
 )
 
-from .schemas import EntityStatusDetails, EntityStatusPayload, EntityVersionData
+from .schemas import EntityStatusDetails, EntityStatusPayload
 
 
 class JobSubmissionService:
@@ -222,13 +223,13 @@ class JobSubmissionService:
     @timed
     async def submit_face_detection(
         self,
-        entity: EntitySchema | EntityVersionData,
+        entity: EntitySchema | EntityVersionSchema,
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit face detection job.
 
         Args:
-            entity: EntitySchema or EntityVersionData object
+            entity: EntitySchema or EntityVersionSchema object
             on_complete_callback: Callback to invoke when job completes
 
         Returns:
@@ -277,13 +278,13 @@ class JobSubmissionService:
     @timed
     async def submit_clip_embedding(
         self,
-        entity: EntitySchema | EntityVersionData,
+        entity: EntitySchema | EntityVersionSchema,
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit CLIP embedding job.
 
         Args:
-            entity: EntitySchema or EntityVersionData object
+            entity: EntitySchema or EntityVersionSchema object
             on_complete_callback: Callback to invoke when job completes
 
         Returns:
@@ -325,13 +326,13 @@ class JobSubmissionService:
     @timed
     async def submit_dino_embedding(
         self,
-        entity: EntitySchema | EntityVersionData,
+        entity: EntitySchema | EntityVersionSchema,
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit DINOv2 embedding job.
 
         Args:
-            entity: EntitySchema or EntityVersionData object
+            entity: EntitySchema or EntityVersionSchema object
             on_complete_callback: Callback to invoke when job completes
 
         Returns:
@@ -374,7 +375,7 @@ class JobSubmissionService:
     async def submit_face_embedding(
         self,
         face: FaceSchema,
-        entity: EntitySchema | EntityVersionData,
+        entity: EntitySchema | EntityVersionSchema,
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
         """Submit face embedding job for a detected face.

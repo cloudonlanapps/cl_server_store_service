@@ -16,7 +16,7 @@ from store.common.storage import StorageService
 from .config import MInsightConfig
 from .job_callbacks import JobCallbackHandler
 from .job_service import JobSubmissionService
-from .schemas import EntityVersionData
+from .schemas import EntityVersionSchema
 from .vector_stores import get_clip_store, get_dino_store, get_face_store
 from cl_ml_tools.utils.profiling import timed
 
@@ -137,7 +137,7 @@ class MediaInsight:
         logger.info("MInsightProcessor services shut down")
 
     @timed
-    async def process(self, data: EntityVersionData) -> bool:
+    async def process(self, data: EntityVersionSchema) -> bool:
         """Process an entity version for intelligence extraction.
 
         This method:
@@ -159,7 +159,7 @@ class MediaInsight:
         await self._enqueue_image(data)
         return True
 
-    def _is_qualified(self, entity_version: EntityVersionData) -> bool:
+    def _is_qualified(self, entity_version: EntityVersionSchema) -> bool:
         """Check if entity qualifies for processing.
 
         Uses atomic database read - opens session, reads, closes immediately.
@@ -201,7 +201,7 @@ class MediaInsight:
             session.close()
 
     @timed
-    async def _enqueue_image(self, entity_version: EntityVersionData) -> None:
+    async def _enqueue_image(self, entity_version: EntityVersionSchema) -> None:
         """Enqueue a qualified image for processing.
 
         Uses atomic database write - opens session, upserts, commits, closes.
@@ -271,7 +271,7 @@ class MediaInsight:
             logger.error(f"Failed to trigger jobs for image {entity_id}: {e}")
 
     @timed
-    async def _trigger_async_jobs(self, entity: EntityVersionData) -> None:
+    async def _trigger_async_jobs(self, entity: EntityVersionSchema) -> None:
         """Trigger face detection, CLIP, and DINO embedding jobs for an entity version.
 
         Args:
@@ -282,7 +282,7 @@ class MediaInsight:
             await self.initialize()
 
         # Get absolute file path
-        # EntityVersionData doesn't have get_file_path unless we added it?
+        # EntityVersionSchema doesn't have get_file_path unless we added it?
         # Yes, we added it in Step 309 context summary (view_file of schemas.py might trigger if I checked it).
         # But here I need storage_service.
 
@@ -290,19 +290,21 @@ class MediaInsight:
         # logic from processing_service:
         # absolute_path = entity.get_file_path(self.storage_service)
 
-        # Let's verify EntityVersionData has get_file_path and it takes storage_service
+        # Let's verify EntityVersionSchema has get_file_path and it takes storage_service
         # Assuming it does based on prev edits.
 
-        try:
-            if not self.storage_service:  # Should be init by now
-                raise RuntimeError("Storage service not initialized")
-
-            absolute_path = entity.get_file_path(self.storage_service)
-        except (AttributeError, ValueError):
-            # Fallback if method missing or file_path missing
-            absolute_path = (
-                self.config.media_storage_dir / entity.file_path if entity.file_path else None
-            )
+        if not self.storage_service:
+            # Should be init by now, but just in case
+            logger.warning("Storage service not initialized during job trigger")
+            # Try manual resolution if possible? config.media_storage_dir is available.
+            if entity.file_path:
+                absolute_path = self.config.media_storage_dir / entity.file_path
+            else:
+                absolute_path = None
+        elif entity.file_path:
+            absolute_path = self.storage_service.get_absolute_path(entity.file_path)
+        else:
+            absolute_path = None
 
         if not absolute_path or not absolute_path.exists():
             logger.warning(f"File not found for entity {entity.id}: {absolute_path}")
@@ -418,7 +420,7 @@ class MediaInsight:
         finally:
             session.close()
 
-    def _get_entity_deltas(self, last_version: int) -> dict[int, EntityVersionData]:
+    def _get_entity_deltas(self, last_version: int) -> dict[int, EntityVersionSchema]:
         """Get entity changes since last version, coalesced by entity ID."""
         if not database.SessionLocal:
             raise RuntimeError("Database not initialized")
@@ -432,9 +434,9 @@ class MediaInsight:
             )
             versions = session.execute(stmt).scalars().all()
 
-            entity_map: dict[int, EntityVersionData] = {}
+            entity_map: dict[int, EntityVersionSchema] = {}
             for version in versions:  # pyright: ignore[reportAny]
-                entity_map[version.id] = EntityVersionData.model_validate(version)  # pyright: ignore[reportAny]
+                entity_map[version.id] = EntityVersionSchema.model_validate(version)  # pyright: ignore[reportAny]
 
             return entity_map
         finally:
