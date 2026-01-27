@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, TYPE_CHECKING
+from typing import Annotated, Any, TYPE_CHECKING, ClassVar
 
 from cl_ml_tools import BBox, FaceLandmarks
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
@@ -53,6 +53,50 @@ class EntitySchema(BaseModel):
     md5: str | None = None
     file_path: str | None = None
     is_deleted: bool = False
+    is_indirectly_deleted: bool | None = Field(
+        None, description="True if any ancestor in the parent chain is soft-deleted"
+    )
+    intelligence_data: EntityIntelligenceData | None = None
+
+
+class JobInfo(BaseModel):
+    """Job tracking information."""
+
+    job_id: str
+    task_type: str  # clip_embedding, dino_embedding, face_detection, etc.
+    started_at: int
+
+
+class InferenceStatus(BaseModel):
+    """Fine-grained inference status."""
+
+    face_detection: str = "pending"
+    clip_embedding: str = "pending"
+    dino_embedding: str = "pending"
+    face_embeddings: list[str] | None = None  # Status for each face
+
+
+class EntityIntelligenceData(BaseModel):
+    """Pydantic model for denormalized intelligence data (JSON field)."""
+
+    # Persistence
+    overall_status: str = "queued"  # queued, processing, completed, failed
+    last_processed_md5: str | None = None
+    last_processed_version: int | None = None
+    face_count: int | None = None
+
+    # Safety for race conditions
+    active_processing_md5: str | None = None
+
+    # Job Tracking (Explicit List)
+    active_jobs: list[JobInfo] = Field(default_factory=list)
+
+    # Fine-grained status for UI (Explicit Model)
+    inference_status: InferenceStatus = Field(default_factory=InferenceStatus)
+
+    # Timestamps / Errors
+    last_updated: int
+    error_message: str | None = None
 
 
 class EntityVersionSchema(BaseModel):
@@ -91,44 +135,13 @@ class EntityVersionSchema(BaseModel):
 
     # Soft delete
     is_deleted: bool | None = None
+    intelligence_data: EntityIntelligenceData | None = None
 
     # Version tracking
     transaction_id: int | None = None
     operation_type: int | None = None  # 0: INSERT, 1: UPDATE, 2: DELETE
 
 
-class ImageIntelligenceSchema(BaseModel):
-    """Pydantic model for ImageIntelligence."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    entity_id: int
-    md5: str
-    status: str = "queued"
-    processing_status: str = "pending"
-    image_path: str
-    version: int = 1
-
-    face_detection_job_id: str | None = None
-    clip_job_id: str | None = None
-    dino_job_id: str | None = None
-    face_embedding_job_ids: list[str] | None = None
-
-
-class EntityJobSchema(BaseModel):
-    """Pydantic model for EntityJob."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int | None = None  # Optional for creation
-    entity_id: int
-    job_id: str
-    task_type: str
-    status: str
-    created_at: int
-    updated_at: int
-    completed_at: int | None = None
-    error_message: str | None = None
 
 
 class FaceSchema(BaseModel):
@@ -175,4 +188,48 @@ class ServiceConfigSchema(BaseModel):
     key: str
     value: str
     updated_at: int
-    updated_by: str | None = None
+
+
+
+class PaginationMetadata(BaseModel):
+    """Pagination metadata for paginated responses."""
+
+    page: int = Field(..., description="Current page number (1-indexed)")
+    page_size: int = Field(..., description="Number of items per page")
+    total_items: int = Field(..., description="Total number of items across all pages")
+    total_pages: int = Field(..., description="Total number of pages")
+    has_next: bool = Field(..., description="Whether there is a next page")
+    has_prev: bool = Field(..., description="Whether there is a previous page")
+
+
+class PaginatedResponse(BaseModel):
+    """Paginated response wrapper for entity lists."""
+
+    items: list[EntitySchema] = Field(..., description="List of items for the current page")
+    pagination: PaginationMetadata = Field(..., description="Pagination metadata")
+
+
+class ConfigResponse(BaseModel):
+    """Response schema for configuration."""
+
+    guest_mode: bool = Field(
+        ..., description="Whether guest mode is enabled (true = no authentication required)"
+    )
+    updated_at: int | None = Field(None, description="Last update timestamp (milliseconds)")
+    updated_by: str | None = Field(None, description="User ID who last updated the config")
+
+
+class UpdateReadAuthConfig(BaseModel):
+    """Request schema for updating read authentication configuration."""
+
+    enabled: bool = Field(..., description="Whether to enable read authentication")
+
+
+class VersionInfo(BaseModel):
+    """Information about an entity version."""
+
+    version: int = Field(..., description="Version number (1-indexed)")
+    transaction_id: int | None = Field(None, description="Transaction ID of the version")
+    updated_date: int | None = Field(None, description="Last update timestamp (milliseconds)")
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)

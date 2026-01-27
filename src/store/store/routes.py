@@ -23,10 +23,12 @@ from pydantic import BaseModel
 
 from store.db_service.config import ConfigDBService
 
-from ..common import schemas
+from store.db_service import EntitySchema
+from store.db_service import schemas as db_schemas
+from ..broadcast_service import schemas as broadcast_schemas
 from ..common.auth import UserPayload, require_admin, require_permission
 from .dependencies import get_broadcaster, get_config_service, get_entity_service, get_monitor
-from .monitor import MInsightMonitor
+from ..broadcast_service.monitor import MInsightMonitor
 from .service import EntityService
 
 router = APIRouter()
@@ -38,7 +40,7 @@ router = APIRouter()
     summary="Get Entities",
     description="Retrieves a paginated list of media entities, optionally at a specific version.",
     operation_id="get_entities",
-    responses={200: {"model": schemas.PaginatedResponse, "description": "Successful Response"}},
+    responses={200: {"model": db_schemas.PaginatedResponse, "description": "Successful Response"}},
 )
 async def get_entities(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
@@ -57,7 +59,7 @@ async def get_entities(
     ),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: EntityService = Depends(get_entity_service),
-) -> schemas.PaginatedResponse:
+) -> db_schemas.PaginatedResponse:
     """
     Get all entities with pagination.
     """
@@ -77,7 +79,7 @@ async def get_entities(
     has_next = page < total_pages
     has_prev = page > 1
 
-    pagination = schemas.PaginationMetadata(
+    pagination = db_schemas.PaginationMetadata(
         page=page,
         page_size=page_size,
         total_items=total_count,
@@ -86,7 +88,7 @@ async def get_entities(
         has_prev=has_prev,
     )
 
-    return schemas.PaginatedResponse(items=items, pagination=pagination)
+    return db_schemas.PaginatedResponse(items=items, pagination=pagination)
 
 
 @router.post(
@@ -96,7 +98,7 @@ async def get_entities(
     description="Creates a new entity.",
     operation_id="create_entity",
     status_code=status.HTTP_201_CREATED,
-    responses={201: {"model": schemas.Item, "description": "Successful Response"}},
+    responses={201: {"model": EntitySchema, "description": "Successful Response"}},
 )
 async def create_entity(
     is_collection: bool = Form(..., title="Is Collection"),
@@ -107,19 +109,11 @@ async def create_entity(
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
     broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
-) -> schemas.Item:
+) -> EntitySchema:
     config = service.config
 
     # Extract user_id from JWT payload (None in demo mode)
     user_id = user.id if user else None
-
-    # Create body object from form fields
-    body = schemas.BodyCreateEntity(
-        is_collection=is_collection,
-        label=label,
-        description=description,
-        parent_id=parent_id,
-    )
 
     # Read file bytes and filename if provided
     file_bytes = None
@@ -129,7 +123,15 @@ async def create_entity(
         filename = image.filename or "file"
 
     try:
-        item, is_duplicate = service.create_entity(body, file_bytes, filename, user_id)
+        item, is_duplicate = service.create_entity(
+            is_collection=is_collection,
+            label=label,
+            description=description,
+            parent_id=parent_id,
+            image=file_bytes,
+            filename=filename,
+            user_id=user_id
+        )
 
         # Broadcast MQTT event only if this was a new entity (not a duplicate)
         if broadcaster and item.md5 and not is_duplicate:
@@ -176,7 +178,7 @@ async def delete_collection(
     summary="Get Entity",
     description="Retrieves a specific media entity by its ID, optionally at a specific version.",
     operation_id="get_entity",
-    responses={200: {"model": schemas.Item, "description": "Successful Response"}},
+    responses={200: {"model": EntitySchema, "description": "Successful Response"}},
 )
 async def get_entity(
     entity_id: int = Path(..., title="Entity Id"),
@@ -185,7 +187,7 @@ async def get_entity(
     ),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: EntityService = Depends(get_entity_service),
-) -> schemas.Item:
+) -> EntitySchema:
     _ = user
     item = service.get_entity_by_id(entity_id, version=version)
     if not item:
@@ -204,7 +206,7 @@ async def get_entity(
     summary="Put Entity",
     description="Update an existing entity.",
     operation_id="put_entity",
-    responses={200: {"model": schemas.Item, "description": "Successful Response"}},
+    responses={200: {"model": EntitySchema, "description": "Successful Response"}},
 )
 async def put_entity(
     entity_id: int = Path(..., title="Entity Id"),
@@ -216,19 +218,11 @@ async def put_entity(
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
     broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
-) -> schemas.Item:
+) -> EntitySchema:
     config = service.config
 
     # Extract user_id from JWT payload (None in demo mode)
     user_id = user.id if user else None
-
-    # Create body object from form fields
-    body = schemas.BodyUpdateEntity(
-        is_collection=is_collection,
-        label=label,
-        description=description,
-        parent_id=parent_id,
-    )
 
     # Read file bytes and filename if provided
     file_bytes: bytes | None = None
@@ -239,7 +233,16 @@ async def put_entity(
 
     try:
         # Update entity (file is optional - None updates only metadata)
-        result = service.update_entity(entity_id, body, file_bytes, filename, user_id)
+        result = service.update_entity(
+            entity_id=entity_id,
+            is_collection=is_collection,
+            label=label,
+            description=description,
+            parent_id=parent_id,
+            image=file_bytes,
+            filename=filename,
+            user_id=user_id,
+        )
         if not result:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
 
@@ -275,7 +278,7 @@ async def put_entity(
     description="Partially updates an entity. Use this endpoint to soft delete (is_deleted=true) or restore (is_deleted=false) an entity.",
     operation_id="patch_entity",
     responses={
-        200: {"model": schemas.Item, "description": "Successful Response"},
+        200: {"model": EntitySchema, "description": "Successful Response"},
         404: {"description": "Entity not found"},
     },
 )
@@ -288,7 +291,7 @@ async def patch_entity(
     is_deleted: str = Form("__UNSET__", title="Is Deleted"),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
-) -> schemas.Item:
+) -> EntitySchema:
     # Extract user_id from JWT payload (None in demo mode)
     user_id = user.id if user else None
 
@@ -324,12 +327,13 @@ async def patch_entity(
         if isinstance(is_deleted_val, str):
             patch_data["is_deleted"] = is_deleted_val.lower() in ("true", "1", "yes")
 
-    # Use model_construct to preserve explicit None values as "set"
-    body = schemas.BodyPatchEntity.model_construct(
-        **patch_data, _fields_set=set(cast(dict[str, object], patch_data).keys())
-    )
+            patch_data["is_deleted"] = is_deleted_val.lower() in ("true", "1", "yes")
 
-    item = service.patch_entity(entity_id, body, user_id)
+    # Use model_construct to preserve explicit None values as "set"
+    # Actually for service call we just pass the dict as changes
+    changes = cast(dict[str, object], patch_data)
+
+    item = service.patch_entity(entity_id, changes=changes, user_id=user_id)
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
     return item
@@ -368,13 +372,13 @@ async def delete_entity(
     summary="Get Entity Versions",
     description="Retrieves all versions of a specific entity.",
     operation_id="get_entity_versions",
-    response_model=list[schemas.VersionInfo],
+    response_model=list[db_schemas.VersionInfo],
 )
 async def get_entity_versions(
     entity_id: int = Path(..., title="Entity Id"),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: EntityService = Depends(get_entity_service),
-) -> list[schemas.VersionInfo]:
+) -> list[db_schemas.VersionInfo]:
     _ = user
     versions = service.get_entity_versions(entity_id)
     if not versions:
@@ -389,12 +393,12 @@ async def get_entity_versions(
     summary="Get Configuration",
     description="Get current service configuration. Requires admin access.",
     operation_id="get_config_admin_config_get",
-    responses={200: {"model": schemas.ConfigResponse, "description": "Successful Response"}},
+    responses={200: {"model": db_schemas.ConfigResponse, "description": "Successful Response"}},
 )
 async def get_config(
     user: UserPayload | None = Depends(require_admin),
     config_service: ConfigDBService = Depends(get_config_service),
-) -> schemas.ConfigResponse:
+) -> db_schemas.ConfigResponse:
     """Get current service configuration.
 
     Requires admin access.
@@ -410,7 +414,7 @@ async def get_config(
         updated_by = metadata["updated_by"]
         # Invert logic: read_auth_enabled=false means guest_mode=true
         read_auth_enabled = value_str.lower() == "true"
-        return schemas.ConfigResponse(
+        return db_schemas.ConfigResponse(
             guest_mode=not read_auth_enabled,
             updated_at=int(updated_at)
             if updated_at is not None and not isinstance(updated_at, str)
@@ -421,7 +425,7 @@ async def get_config(
         )
 
     # Default if not found: read_auth_enabled=false means guest_mode=true
-    return schemas.ConfigResponse(guest_mode=True, updated_at=None, updated_by=None)
+    return db_schemas.ConfigResponse(guest_mode=True, updated_at=None, updated_by=None)
 
 
 @router.put(
@@ -486,11 +490,11 @@ async def root(config_service: ConfigDBService = Depends(get_config_service)):
     summary="Get MInsight Status",
     description="Get current status of MInsight processes for the configured port.",
     operation_id="get_m_insight_status",
-    response_model=schemas.MInsightStatus | None,
+    response_model=broadcast_schemas.MInsightStatus | None,
 )
 async def get_m_insight_status(
     monitor: MInsightMonitor | None = Depends(get_monitor),
-) -> schemas.MInsightStatus | None:
+) -> broadcast_schemas.MInsightStatus | None:
     """Get MInsight process status."""
     if monitor:
         return monitor.get_status()

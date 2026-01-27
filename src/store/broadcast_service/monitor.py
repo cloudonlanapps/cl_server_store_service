@@ -5,9 +5,9 @@ from typing import cast
 from cl_ml_tools import BroadcasterBase, get_broadcaster
 from loguru import logger
 
-from store.common.schemas import MInsightStatus
+from store.broadcast_service.schemas import MInsightStatus
 
-from .config import StoreConfig
+from store.store.config import StoreConfig
 
 
 class MInsightMonitor:
@@ -63,28 +63,8 @@ class MInsightMonitor:
         _ = client
         _ = userdata
         try:
-            topic = cast(str, getattr(msg, "topic"))  # mInsight/<port>/status
-            parts = topic.split("/")
-            if len(parts) < 3:
-                return
-
-            # parts[0] = "mInsight", parts[1] = <port>, parts[2] = status
-            try:
-                msg_port = int(parts[1])
-            except ValueError:
-                return
-
-            if msg_port != self.config.port:
-                return
-
             payload_bytes = cast(bytes, getattr(msg, "payload"))
-
-            try:
-                self.process_status = MInsightStatus.model_validate_json(payload_bytes)
-            except Exception as ve:
-                logger.warning(f"Payload validation failed for {topic}: {ve}")
-                return
-
+            self.process_status = MInsightStatus.model_validate_json(payload_bytes)
         except Exception as e:
             logger.error(f"Error processing monitor message: {e}")
 

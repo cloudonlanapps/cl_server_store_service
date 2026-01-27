@@ -13,12 +13,10 @@ from .database import with_retry
 from .exceptions import ResourceNotFoundError
 from .models import (
     Entity,
-    EntityJob,
     Face,
-    ImageIntelligence,
     KnownPerson,
 )
-from .schemas import EntitySchema, EntityVersionSchema
+from .schemas import EntityIntelligenceData, EntitySchema, EntityVersionSchema
 
 if TYPE_CHECKING:
     from ..common.config import BaseConfig
@@ -40,72 +38,37 @@ class EntityDBService(BaseDBService[EntitySchema]):
             raise ResourceNotFoundError(f"Entity {id} not found")
         return entity
 
+    @timed
+    @with_retry(max_retries=10)
+    def update_intelligence_data(self, id: int, data: EntityIntelligenceData) -> EntitySchema | None:
+        """Update intelligence_data JSON field."""
+        db = database.SessionLocal()
+        try:
+            entity = db.query(Entity).filter(Entity.id == id).first()
+            if not entity:
+                return None
+            
+            entity.intelligence_data = data.model_dump()
+            db.commit()
+            db.refresh(entity)
+            return self._to_schema(entity)
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
     def _log_cascade_deletes(self, orm_obj: Entity, db: Session) -> None:
         """Log what will be cascade deleted."""
-        # Note: orm_obj might not have relationships loaded if session closed?
-        # But BaseDBService.delete keeps session open while calling this.
-        # However, we need to be careful about lazy loading. 
-        # But usually accessing attributes triggers load if session is active.
-        
-        # Actually, counting is better to avoid loading everything.
         try:
-            intelligence_count = 1 if orm_obj.intelligence else 0
             faces_count = len(orm_obj.faces)
-            jobs_count = len(orm_obj.jobs)
 
             logger.info(f"Deleting Entity {orm_obj.id} will cascade delete:")
-            logger.info(f"  - ImageIntelligence: {intelligence_count}")
             logger.info(f"  - Faces: {faces_count}")
-            logger.info(f"  - EntityJobs: {jobs_count}")
         except Exception as e:
             logger.warning(f"Failed to log cascade deletes for Entity {orm_obj.id}: {e}")
 
-    @timed
-    @with_retry(max_retries=10)
-    def get_with_intelligence_status(self, id: int) -> tuple[EntitySchema | None, str | None]:
-        """Get entity with intelligence status via outer join."""
-        db = database.SessionLocal()
-        try:
-            result = db.query(Entity, ImageIntelligence.status)\
-                .outerjoin(ImageIntelligence, Entity.id == ImageIntelligence.entity_id)\
-                .filter(Entity.id == id)\
-                .first()
-            if result:
-                # result is tuple (Entity, status_str)
-                entity, status = result
-                return (self._to_schema(entity), status)
-            return (None, None)
-        finally:
-            db.close()
 
-    @timed
-    @with_retry(max_retries=10)
-    def get_all_with_intelligence_status(
-        self,
-        page: int | None = 1,
-        page_size: int = 20,
-        exclude_deleted: bool = False
-    ) -> list[tuple[EntitySchema, str | None]] | tuple[list[tuple[EntitySchema, str | None]], int]:
-        """Get all entities with intelligence status via outer join."""
-        db = database.SessionLocal()
-        try:
-            query = db.query(Entity, ImageIntelligence.status)\
-                .outerjoin(ImageIntelligence, Entity.id == ImageIntelligence.entity_id)
-
-            if exclude_deleted:
-                query = query.filter(Entity.is_deleted == False)
-
-            if page is None:
-                results = query.all()
-                return [(self._to_schema(e), s) for e, s in results]
-            else:
-                total = query.count()
-                offset = (page - 1) * page_size
-                results = query.order_by(Entity.id.asc()).offset(offset).limit(page_size).all()
-                items = [(self._to_schema(e), s) for e, s in results]
-                return (items, total)
-        finally:
-            db.close()
 
     @timed
     @with_retry(max_retries=10)
@@ -120,9 +83,7 @@ class EntityDBService(BaseDBService[EntitySchema]):
         db = database.SessionLocal()
         try:
             # Delete related data first (order matters for FKs)
-            db.query(EntityJob).delete()
             db.query(Face).delete()
-            db.query(ImageIntelligence).delete()
             db.query(KnownPerson).delete()
 
             # Clear Continuum version tables

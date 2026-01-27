@@ -22,10 +22,8 @@ from .database import (
 from .models import (
     Base,
     Entity,
-    EntityJob,
     EntitySyncState,
     Face,
-    ImageIntelligence,
     KnownPerson,
     ServiceConfig,
 )
@@ -52,10 +50,8 @@ __all__ = [
     # Re-exporting models symbols
     "Base",
     "Entity",
-    "EntityJob",
     "EntitySyncState",
     "Face",
-    "ImageIntelligence",
     "KnownPerson",
     "ServiceConfig",
     "make_versioned",

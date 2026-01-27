@@ -7,7 +7,7 @@ from store.db_service.dependencies import get_db_service
 from store.db_service.config import ConfigDBService
 
 from .config import StoreConfig
-from .monitor import MInsightMonitor
+from store.broadcast_service.monitor import MInsightMonitor
 from .service import EntityService
 
 

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import configure_mappers
+from store.db_service import DBService, EntityIntelligenceData
+from sqlalchemy_continuum import version_class  # pyright: ignore[reportAttributeAccessIssue]
 from store.db_service.db_internals import (
     Entity,
     EntitySyncState,
-    ImageIntelligence,
     database,
-    version_class,
 )
 from store.common.storage import StorageService
 from .config import MInsightConfig
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from cl_client import ComputeClient, SessionManager
     from cl_client.models import JobResponse
 
-    from .broadcaster import MInsightBroadcaster
+    from store.broadcast_service.broadcaster import MInsightBroadcaster
 
 
 class MediaInsight:
@@ -46,6 +46,7 @@ class MediaInsight:
         self.storage_service: StorageService | None = None
         self.job_service: JobSubmissionService | None = None
         self.callback_handler: JobCallbackHandler | None = None
+        self.db: DBService = DBService()
         self._initialized: bool = False
 
         # Verify database is initialized
@@ -107,7 +108,8 @@ class MediaInsight:
             self.job_service = JobSubmissionService(
                 self.compute_client, 
                 self.storage_service,
-                broadcaster=self.broadcaster
+                broadcaster=self.broadcaster,
+                db=self.db
             )
 
             self.callback_handler = JobCallbackHandler(
@@ -116,6 +118,7 @@ class MediaInsight:
                 dino_store,
                 face_store,
                 config=self.config,
+                db=self.db,
                 job_submission_service=self.job_service,
             )
 
@@ -186,81 +189,33 @@ class MediaInsight:
 
         session = database.SessionLocal()
         try:
-            stmt = select(ImageIntelligence).where(ImageIntelligence.entity_id == entity_version.id)
-            existing = session.execute(stmt).scalar_one_or_none()
+            entity = session.query(Entity).filter(Entity.id == entity_version.id).first()
+            if not entity:
+                return False
 
-            if existing is None:
-                # New image
+            if not entity.intelligence_data:
+                # New image or no intelligence data yet
                 return True
 
-            # Check if md5 changed
-            return existing.md5 != entity_version.md5
+            # Check if active_processing_md5 changed
+            try:
+                raw_data = cast(dict[str, object], entity.intelligence_data)
+                intel = EntityIntelligenceData.model_validate(raw_data)
+                active_md5 = intel.active_processing_md5
+                return active_md5 != entity_version.md5
+            except Exception:
+                return True
         finally:
             session.close()
 
     @timed
     async def _enqueue_image(self, entity_version: EntityVersionSchema) -> None:
-        """Enqueue a qualified image for processing.
-
-        Uses atomic database write - opens session, upserts, commits, closes.
-        Derives image_path from entity file_path and config.
-        Triggers async jobs.
-
+        """Enqueue a qualified image for processing and trigger async jobs.
+        
         Args:
             entity_version: Entity version data from Pydantic model
         """
         entity_id = entity_version.id
-        md5 = entity_version.md5
-        file_path = entity_version.file_path
-        transaction_id = entity_version.transaction_id
-
-        if not isinstance(md5, str):
-            logger.warning(f"Invalid md5 for image {entity_id}: {md5}")
-            return
-
-        if not file_path:
-            logger.warning(f"No file_path for image {entity_id}")
-            return
-
-        # Derive absolute image path from relative file_path and config
-        image_path = str(self.config.media_storage_dir / file_path)
-
-        version_val = transaction_id if transaction_id is not None else 0
-
-        # Atomic write: Upsert intelligence record
-        database.init_db()
-
-        session = database.SessionLocal()
-        try:
-            stmt = select(ImageIntelligence).where(ImageIntelligence.entity_id == entity_id)
-            intelligence = session.execute(stmt).scalar_one_or_none()
-
-            if intelligence is None:
-                intelligence = ImageIntelligence(
-                    entity_id=entity_id,
-                    md5=md5,
-                    status="queued",
-                    image_path=image_path,
-                    version=version_val,
-                )
-                session.add(intelligence)
-            else:
-                intelligence.md5 = md5
-                intelligence.status = "queued"
-                intelligence.image_path = image_path
-                intelligence.version = version_val
-
-            session.commit()
-            logger.info(f"Image intelligence record created/updated for {entity_id}")
-
-        except Exception as e:
-            logger.error(f"Failed to enqueue image {entity_id} for intelligence: {e}")
-            session.rollback()
-            return
-        finally:
-            session.close()
-
-        # Trigger async jobs AFTER closing the enqueue session to reduce lock duration
         try:
             await self._trigger_async_jobs(entity_version)
             logger.info(f"Image intelligence jobs triggered for {entity_id}")
@@ -268,71 +223,38 @@ class MediaInsight:
             logger.error(f"Failed to trigger jobs for image {entity_id}: {e}")
 
     @timed
-    async def _trigger_async_jobs(self, entity: EntityVersionSchema) -> None:
-        """Trigger face detection, CLIP, and DINO embedding jobs for an entity version.
-
-        Args:
-            entity: Entity version data
+    async def _trigger_async_jobs(self, entity_version: EntityVersionSchema) -> None:
+        """Trigger face detection, CLIP, and DINO embedding jobs.
         """
         if not self._initialized or not self.job_service or not self.callback_handler:
-            logger.warning("Services not initialized, attempting initialization")
             await self.initialize()
+            if not self.job_service or not self.callback_handler:
+                return
 
-        # Get absolute file path
-        # EntityVersionSchema doesn't have get_file_path unless we added it?
-        # Yes, we added it in Step 309 context summary (view_file of schemas.py might trigger if I checked it).
-        # But here I need storage_service.
-
-        # Manually resolving path if needed, or using entity helper if available
-        # logic from processing_service:
-        # absolute_path = entity.get_file_path(self.storage_service)
-
-        # Let's verify EntityVersionSchema has get_file_path and it takes storage_service
-        # Assuming it does based on prev edits.
-
-        if not self.storage_service:
-            # Should be init by now, but just in case
-            logger.warning("Storage service not initialized during job trigger")
-            # Try manual resolution if possible? config.media_storage_dir is available.
-            if entity.file_path:
-                absolute_path = self.config.media_storage_dir / entity.file_path
-            else:
-                absolute_path = None
-        elif entity.file_path:
-            absolute_path = self.storage_service.get_absolute_path(entity.file_path)
-        else:
-            absolute_path = None
-
-        if not absolute_path or not absolute_path.exists():
-            logger.warning(f"File not found for entity {entity.id}: {absolute_path}")
+        # Fetch SQLAlchemy Entity
+        entity = self.db.entity.get(entity_version.id)
+        if not entity:
+            logger.error(f"Entity {entity_version.id} not found for job trigger")
             return
 
         # Define callbacks
-        # We need to capture variables safely.
-
-        # We need 'self' to access callback_handler
-
         async def face_detection_callback(job: JobResponse) -> None:
             if job.status == "completed" and self.callback_handler:
                 await self.callback_handler.handle_face_detection_complete(entity.id, job)
             if self.job_service:
-                self.job_service.update_job_status(job.job_id, job.status, job.error_message)
+                self.job_service.update_job_status(entity.id, job.job_id, job.status, job.error_message)
 
         async def clip_embedding_callback(job: JobResponse) -> None:
             if job.status == "completed" and self.callback_handler:
                 await self.callback_handler.handle_clip_embedding_complete(entity.id, job)
             if self.job_service:
-                self.job_service.update_job_status(job.job_id, job.status, job.error_message)
+                self.job_service.update_job_status(entity.id, job.job_id, job.status, job.error_message)
 
         async def dino_embedding_callback(job: JobResponse) -> None:
             if job.status == "completed" and self.callback_handler:
                 await self.callback_handler.handle_dino_embedding_complete(entity.id, job)
             if self.job_service:
-                self.job_service.update_job_status(job.job_id, job.status, job.error_message)
-
-        if not self.job_service:
-            logger.error("Job service not available")
-            return
+                self.job_service.update_job_status(entity.id, job.job_id, job.status, job.error_message)
 
         # Submit jobs
         face_job_id = await self.job_service.submit_face_detection(
@@ -355,32 +277,8 @@ class MediaInsight:
             + f"face_detection={face_job_id}, clip_embedding={clip_job_id}, dino_embedding={dino_job_id}"
         )
 
-        # Update ImageIntelligence with job IDs
-        database.init_db()
-
-        session = database.SessionLocal()
-        try:
-            # Re-query using primary key (entity_id)
-            intelligence = (
-                session.query(ImageIntelligence)
-                .filter(ImageIntelligence.entity_id == entity.id)
-                .first()
-            )
-            if intelligence:
-                intelligence.face_detection_job_id = face_job_id
-                intelligence.clip_job_id = clip_job_id
-                intelligence.dino_job_id = dino_job_id
-                intelligence.processing_status = "processing"
-                session.commit()
-        except Exception as e:
-            logger.error(f"Failed to update ImageIntelligence job IDs for {entity.id}: {e}")
-            session.rollback()
-        finally:
-            session.close()
-
         # Trigger initial status update
-        if self.job_service:
-            self.job_service.broadcast_entity_status(entity.id)
+        self.job_service.broadcast_entity_status(entity.id)
 
     def _get_last_version(self) -> int:
         """Get last processed version from sync state."""

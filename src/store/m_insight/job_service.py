@@ -3,8 +3,8 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .broadcaster import MInsightBroadcaster
-    from .schemas import EntityStatusPayload
+    from store.broadcast_service.broadcaster import MInsightBroadcaster
+    from store.broadcast_service.schemas import EntityStatusPayload
 
 from datetime import UTC, datetime
 
@@ -16,13 +16,14 @@ from loguru import logger
 from store.common.storage import StorageService
 from store.db_service import (
     DBService,
-    EntityJobSchema,
+    EntityIntelligenceData,
+    JobInfo,
     EntitySchema,
     EntityVersionSchema,
     FaceSchema,
 )
 
-from .schemas import EntityStatusDetails, EntityStatusPayload
+from store.broadcast_service.schemas import EntityStatusPayload
 
 
 class JobSubmissionService:
@@ -37,7 +38,8 @@ class JobSubmissionService:
         self, 
         compute_client: ComputeClient, 
         storage_service: StorageService,
-        broadcaster: "MInsightBroadcaster | None" = None
+        broadcaster: "MInsightBroadcaster | None" = None,
+        db: DBService | None = None
     ) -> None:
         """Initialize job submission service.
 
@@ -45,11 +47,12 @@ class JobSubmissionService:
             compute_client: ComputeClient instance for job submission
             storage_service: StorageService for file path resolution
             broadcaster: Optional broadcaster for status updates
+            db: Optional DBService instance
         """
         self.compute_client = compute_client
         self.storage_service = storage_service
         self.broadcaster = broadcaster
-        self.db = DBService()
+        self.db = db or DBService()
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -60,153 +63,131 @@ class JobSubmissionService:
         """
         return int(datetime.now(UTC).timestamp() * 1000)
 
-    def update_job_status(self, job_id: str, status: str, error_message: str | None = None) -> None:
-        """Update job status in entity_jobs table.
+    def update_job_status(self, entity_id: int, job_id: str, status: str, error_message: str | None = None) -> None:
+        """Update job status in Entity.intelligence_data.
 
         Args:
+            entity_id: Entity ID being processed
             job_id: Job ID to update
             status: New job status (e.g., "completed", "failed")
             error_message: Optional error message if job failed
         """
         try:
-            completed_at = self._now_timestamp() if status in ("completed", "failed") else None
-            result, entity_id = self.db.job.update_status(
-                job_id=job_id,
-                status=status,
-                error_message=error_message,
-                completed_at=completed_at
-            )
+            entity = self.db.entity.get(entity_id)
+            if not entity or not entity.intelligence_data:
+                logger.warning(f"Entity {entity_id} not found or has no intelligence_data")
+                return
+
+            data = entity.intelligence_data
             
-            if result and entity_id:
-                logger.debug(f"Updated job {job_id} status to {status}")
-                self.broadcast_entity_status(entity_id)
+            # Find and update job in active_jobs
+            for job in data.active_jobs:
+                if job.job_id == job_id:
+                    # Update status in inference_status
+                    if job.task_type == "face_detection":
+                        data.inference_status.face_detection = status
+                    elif job.task_type == "clip_embedding":
+                        data.inference_status.clip_embedding = status
+                    elif job.task_type == "dino_embedding":
+                        data.inference_status.dino_embedding = status
+                    
+                    # Remove from active_jobs if finished
+                    if status in ("completed", "failed"):
+                        data.active_jobs = [j for j in data.active_jobs if j.job_id != job_id]
+                    break
             else:
-                logger.warning(f"Job {job_id} not found or failed to update")
+                # Might be a face embedding job (if we track them differently or search list)
+                # For now just use the task_type if known.
+                pass
+            
+            if error_message:
+                data.error_message = error_message
+            
+            data.last_updated = self._now_timestamp()
+            
+            # Re-calculate overall status
+            inf = data.inference_status
+            critical = [inf.face_detection, inf.clip_embedding, inf.dino_embedding]
+            
+            if any(s == "failed" for s in critical):
+                data.overall_status = "failed"
+            elif all(s == "completed" for s in critical):
+                data.overall_status = "completed"
+            elif all(s == "pending" for s in critical):
+                data.overall_status = "queued"
+            else:
+                data.overall_status = "processing"
+
+            _ = self.db.entity.update_intelligence_data(entity_id, data)
+            logger.debug(f"Updated job {job_id} for entity {entity_id} to status {status}")
+            self.broadcast_entity_status(entity_id)
 
         except Exception as e:
-            logger.error(f"Failed to update job {job_id} status: {e}")
+            logger.error(f"Failed to update job {job_id} status for entity {entity_id}: {e}")
 
-    def delete_job_record(self, job_id: str) -> None:
-        """Delete job record from entity_jobs table.
-
-        Args:
-            job_id: Job ID to delete
-        """
+    def delete_job_record(self, entity_id: int, job_id: str) -> None:
+        """Remove job from active_jobs list."""
         try:
-            deleted = self.db.job.delete_by_job_id(job_id)
-            if deleted:
-                logger.debug(f"Deleted job record {job_id}")
-            else:
-                logger.warning(f"Job {job_id} not found for deletion")
+            entity = self.db.entity.get(entity_id)
+            if entity and entity.intelligence_data:
+                data = entity.intelligence_data
+                data.active_jobs = [j for j in data.active_jobs if j.job_id != job_id]
+                _ = self.db.entity.update_intelligence_data(entity_id, data)
         except Exception as e:
-            logger.error(f"Failed to delete job record {job_id}: {e}")
+            logger.error(f"Failed to delete job record {job_id} for entity {entity_id}: {e}")
+
+    def _register_job(self, entity: EntitySchema | EntityVersionSchema, job_id: str, task_type: str) -> None:
+        """Helper to register an active job in the denormalized intelligence_data."""
+        now = self._now_timestamp()
+        db_entity = self.db.entity.get(entity.id)
+        if not db_entity:
+            return
+
+        data = db_entity.intelligence_data or EntityIntelligenceData(last_updated=now)
+        data.active_processing_md5 = db_entity.md5
+        data.overall_status = "processing"
+        
+        if task_type == "face_detection":
+            data.inference_status.face_detection = "processing"
+        elif task_type == "clip_embedding":
+            data.inference_status.clip_embedding = "processing"
+        elif task_type == "dino_embedding":
+            data.inference_status.dino_embedding = "processing"
+            
+        data.active_jobs.append(JobInfo(
+            job_id=job_id,
+            task_type=task_type,
+            started_at=now
+        ))
+        data.last_updated = now
+        _ = self.db.entity.update_intelligence_data(entity.id, data)
 
     @timed
-    def _get_entity_status(self, entity_id: int) -> "EntityStatusPayload | None":
-        """Calculate aggregate status for an entity.
-
-        Args:
-            entity_id: Entity ID
-
-        Returns:
-            EntityStatusPayload or None if entity not found
-        """
-        # 1. Get Intelligence Record
-        intelligence = self.db.intelligence.get_by_entity_id(entity_id)
-        if not intelligence:
+    def _get_entity_status(self, entity_id: int) -> EntityStatusPayload | None:
+        """Get status payload from denormalized field."""
+        entity = self.db.entity.get(entity_id)
+        if not entity or not entity.intelligence_data:
             return None
 
-        # 2. Get All Jobs for this entity
-        jobs = self.db.job.get_by_entity_id(entity_id)
-        job_map = {job.job_id: job for job in jobs}
-
-        # Helper to get job status
-        def get_job_status(job_id: str | None) -> str:
-            if not job_id:
-                return "pending"
-            job = job_map.get(job_id)
-            if not job:
-                return "pending"
-            return job.status
-
-        # 3. Build Details
-        details = EntityStatusDetails()
-
-        # Face Detection
-        fd_status = get_job_status(intelligence.face_detection_job_id)
-        fd_count = None
-        if fd_status == "completed":
-            fd_count = self.db.face.count_by_entity_id(entity_id)
-            logger.debug(f"Entity {entity_id} status calculation: face_detection=completed, found {fd_count} faces in DB")
-        
-        details.face_detection = fd_status
-        details.face_count = fd_count
-
-        # Embeddings
-        details.clip_embedding = get_job_status(intelligence.clip_job_id)
-        details.dino_embedding = get_job_status(intelligence.dino_job_id)
-
-        # Face Embeddings
-        face_agg_status = "completed" # Default if no faces
-        
-        if fd_status == "completed":
-            actual_faces = fd_count or 0
-            if actual_faces > 0:
-                job_ids = intelligence.face_embedding_job_ids or []
-                statuses = []
-                all_faces_done = True
-                has_failure = False
-                
-                for i in range(actual_faces):
-                    if i < len(job_ids):
-                        s = get_job_status(job_ids[i])
-                    else:
-                        s = "pending"
-                    
-                    statuses.append(s)
-                    
-                    if s == "failed":
-                        has_failure = True
-                    if s != "completed":
-                        all_faces_done = False
-                
-                details.face_embeddings = statuses
-                
-                if has_failure:
-                    face_agg_status = "failed"
-                elif not all_faces_done:
-                    face_agg_status = "processing"
-            else:
-                details.face_embeddings = [] # 0 faces
-                
-        elif fd_status == "failed":
-            face_agg_status = "skipped"
-            details.face_embeddings = None
+        # Convert dict to Pydantic model if it's a dict
+        raw_data = entity.intelligence_data
+        if isinstance(raw_data, dict):
+            try:
+                data = EntityIntelligenceData.model_validate(raw_data)
+            except Exception:
+                return None
         else:
-            face_agg_status = "pending"
-            details.face_embeddings = None
-
-        # 4. Aggregate Overall Status
-        critical_statuses = [
-            details.face_detection,
-            details.clip_embedding,
-            details.dino_embedding
-        ]
+            data = raw_data
         
-        if any(s == "failed" for s in critical_statuses) or face_agg_status == "failed":
-            overall = "failed"
-        elif all(s == "completed" for s in critical_statuses) and face_agg_status == "completed":
-            overall = "completed"
-        elif all(s == "pending" for s in critical_statuses) and face_agg_status == "pending":
-             overall = "queued"
-        else:
-            overall = "processing"
-
         return EntityStatusPayload(
             entity_id=entity_id,
-            status=overall,
-            details=details,
-            timestamp=self._now_timestamp()
+            status=data.overall_status,
+            timestamp=data.last_updated,
+            face_detection=data.inference_status.face_detection,
+            face_count=data.face_count,
+            clip_embedding=data.inference_status.clip_embedding,
+            dino_embedding=data.inference_status.dino_embedding,
+            face_embeddings=data.inference_status.face_embeddings,
         )
 
     def broadcast_entity_status(self, entity_id: int) -> None:
@@ -253,21 +234,9 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            now = self._now_timestamp()
-            job_data = EntityJobSchema(
-                entity_id=entity.id,
-                job_id=job_response.job_id,
-                task_type="face_detection",
-                status="queued",
-                created_at=now,
-                updated_at=now,
-            )
-            self.db.job.create(job_data)
-            logger.info(
-                f"Submitted face_detection job {job_response.job_id} for entity {entity.id}"
-            )
+            self._register_job(entity, job_response.job_id, "face_detection")
+            logger.info(f"Submitted face_detection job {job_response.job_id} for entity {entity.id}")
 
-            # Broadcast update
             self.broadcast_entity_status(entity.id)
             return job_response.job_id
 
@@ -302,21 +271,9 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            now = self._now_timestamp()
-            job_data = EntityJobSchema(
-                entity_id=entity.id,
-                job_id=job_response.job_id,
-                task_type="clip_embedding",
-                status="queued",
-                created_at=now,
-                updated_at=now,
-            )
-            self.db.job.create(job_data)
-            logger.info(
-                f"Submitted clip_embedding job {job_response.job_id} for entity {entity.id}"
-            )
+            self._register_job(entity, job_response.job_id, "clip_embedding")
+            logger.info(f"Submitted clip_embedding job {job_response.job_id} for entity {entity.id}")
 
-            # Broadcast update
             self.broadcast_entity_status(entity.id)
             return job_response.job_id
         except Exception as e:
@@ -350,21 +307,9 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            now = self._now_timestamp()
-            job_data = EntityJobSchema(
-                entity_id=entity.id,
-                job_id=job_response.job_id,
-                task_type="dino_embedding",
-                status="queued",
-                created_at=now,
-                updated_at=now,
-            )
-            self.db.job.create(job_data)
-            logger.info(
-                f"Submitted dino_embedding job {job_response.job_id} for entity {entity.id}"
-            )
+            self._register_job(entity, job_response.job_id, "dino_embedding")
+            logger.info(f"Submitted dino_embedding job {job_response.job_id} for entity {entity.id}")
 
-            # Broadcast update
             self.broadcast_entity_status(entity.id)
             return job_response.job_id
         except Exception as e:
@@ -401,23 +346,9 @@ class JobSubmissionService:
                 on_complete=on_complete_callback,
             )
 
-            now = self._now_timestamp()
-            # Track face_embedding jobs under the parent entity
-            job_data = EntityJobSchema(
-                entity_id=entity.id,
-                job_id=job_response.job_id,
-                task_type="face_embedding",
-                status="queued",
-                created_at=now,
-                updated_at=now,
-            )
-            self.db.job.create(job_data)
-            logger.info(
-                f"Submitted face_embedding job {job_response.job_id} "
-                + f"for face {face.id} (entity {entity.id})"
-            )
+            self._register_job(entity, job_response.job_id, "face_embedding")
+            logger.info(f"Submitted face_embedding job {job_response.job_id} for face {face.id}")
 
-            # Broadcast update
             self.broadcast_entity_status(entity.id)
             return job_response.job_id
         except Exception as e:

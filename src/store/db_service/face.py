@@ -146,6 +146,41 @@ class FaceDBService(BaseDBService[FaceSchema]):
 
     @timed
     @with_retry(max_retries=10)
+    def create_many(self, data_list: list[FaceSchema], ignore_exception: bool = False) -> list[FaceSchema]:
+        """Bulk create faces."""
+        if not data_list:
+            return []
+
+        db = database.SessionLocal()
+        try:
+            # Group by entity_id to verify existence efficiently
+            entity_ids = {d.entity_id for d in data_list}
+            existing_ids = {id for id, in db.query(Entity.id).filter(Entity.id.in_(list(entity_ids))).all()}
+            
+            objs = []
+            for data in data_list:
+                if data.entity_id not in existing_ids:
+                    if ignore_exception:
+                        continue
+                    raise ValueError(f"Entity {data.entity_id} does not exist")
+                
+                prepared = self._prepare_data(data)
+                objs.append(Face(**prepared))
+            
+            db.add_all(objs)
+            db.commit()
+            return [self._to_schema(obj) for obj in objs]
+        except Exception as e:
+            db.rollback()
+            if ignore_exception:
+                logger.debug(f"Ignoring Exception in Face.create_many: {e}")
+                return []
+            raise
+        finally:
+            db.close()
+
+    @timed
+    @with_retry(max_retries=10)
     def create_or_update(self, data: FaceSchema, ignore_exception: bool = False) -> FaceSchema | None:
         """Upsert face (deterministic ID: entity_id * 10000 + index).
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import cast
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Response
 
 from store.common.auth import UserPayload, require_permission
-from store.db_service.schemas import EntityJobSchema
+from store.db_service.schemas import JobInfo
 from store.db_service import DBService
 from store.db_service.exceptions import ResourceNotFoundError
 from store.vectorstore_services.exceptions import VectorResourceNotFound
@@ -36,7 +37,7 @@ async def get_entity_faces(
     _ = user
 
     try:
-        db.entity.get_or_raise(entity_id)
+        _ = db.entity.get_or_raise(entity_id)
         return db.face.get_by_entity_id(entity_id)
     except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -59,7 +60,7 @@ async def download_face_embedding(
     _ = user
 
     try:
-        db.face.get_or_raise(face_id)
+        _ = db.face.get_or_raise(face_id)
         buffer = face_store.get_vector_buffer(face_id)
     except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Face not found")
@@ -90,7 +91,7 @@ async def download_entity_clip_embedding(
     _ = user
 
     try:
-        db.entity.get_or_raise(entity_id)
+        _ = db.entity.get_or_raise(entity_id)
         buffer = clip_store.get_vector_buffer(entity_id)
     except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -123,7 +124,7 @@ async def download_entity_dino_embedding(
     _ = user
 
     try:
-        db.entity.get_or_raise(entity_id)
+        _ = db.entity.get_or_raise(entity_id)
         buffer = dino_store.get_vector_buffer(entity_id)
     except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -143,20 +144,27 @@ async def download_entity_dino_embedding(
     "/entities/{entity_id}/jobs",
     tags=["entity", "jobs"],
     summary="Get Entity Jobs",
-    description="Retrieves job status for all compute jobs associated with an entity.",
+    description="Retrieves active job information from denormalized intelligence data.",
     operation_id="get_entity_jobs",
 )
 async def get_entity_jobs(
     entity_id: int = Path(..., title="Entity Id"),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     db: DBService = Depends(get_db_service),
-) -> list[EntityJobSchema]:
-    """Get all jobs for an entity."""
+) -> list[JobInfo]:
+    """Get all active jobs for an entity."""
     _ = user
 
     try:
-        db.entity.get_or_raise(entity_id)
-        return db.job.get_by_entity_id(entity_id)
+        entity = db.entity.get_or_raise(entity_id)
+        if hasattr(entity, "intelligence_data") and entity.intelligence_data is not None:
+            # If it's a dict (from JSON column), convert or return Field
+            data = entity.intelligence_data
+            if isinstance(data, dict):
+                raw_data = cast(dict[str, object], data)
+                return cast(list[JobInfo], raw_data.get("active_jobs", []))
+            return data.active_jobs
+        return []
     except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Entity not found")
 
@@ -262,7 +270,7 @@ async def find_similar_images(
     _ = user
 
     try:
-        db.entity.get_or_raise(entity_id)
+        _ = db.entity.get_or_raise(entity_id)
         # Get vector for entity
         vector_item = clip_store.get_vector(entity_id)
         if not vector_item:
@@ -299,7 +307,7 @@ async def find_similar_faces(
     _ = user
 
     try:
-        db.face.get_or_raise(face_id)
+        _ = db.face.get_or_raise(face_id)
         # Get vector
         vector_item = face_store.get_vector(face_id)
         if not vector_item:

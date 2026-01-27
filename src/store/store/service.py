@@ -7,14 +7,9 @@ from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from store.common import schemas
-from store.db_service.db_internals import Entity, ImageIntelligence
-from store.common.schemas import (
-    BodyCreateEntity,
-    BodyPatchEntity,
-    BodyUpdateEntity,
-    Item,
-)
+from store.db_service import EntityIntelligenceData, EntitySchema
+from store.db_service.db_internals import Entity
+from store.db_service.schemas import VersionInfo
 
 from ..common.storage import StorageService
 from .config import StoreConfig
@@ -169,7 +164,7 @@ class EntityService:
 
         return False
 
-    def _entity_to_item(self, entity: Entity, intelligence_status: str | None = None) -> Item:
+    def _entity_to_item(self, entity: Entity) -> EntitySchema:
         """
         Convert SQLAlchemy Entity to Pydantic Item schema.
 
@@ -177,9 +172,20 @@ class EntityService:
             entity: SQLAlchemy Entity instance (or version object from SQLAlchemy-Continuum)
 
         Returns:
-            Pydantic Item instance
+            Pydantic EntitySchema instance
         """
-        return Item(
+
+
+        intelligence_data = None
+        if hasattr(entity, "intelligence_data") and entity.intelligence_data:
+            try:
+                # Cast to dict just to silence pyright about Unknown
+                raw_data = cast(dict[str, object], entity.intelligence_data)
+                intelligence_data = EntityIntelligenceData.model_validate(raw_data)
+            except Exception:
+                pass
+
+        return EntitySchema(
             id=entity.id,
             is_collection=entity.is_collection,
             label=entity.label,
@@ -201,7 +207,7 @@ class EntityService:
             file_path=entity.file_path,
             is_deleted=entity.is_deleted,
             is_indirectly_deleted=self._check_ancestor_deleted(entity),
-            intelligence_status=intelligence_status,
+            intelligence_data=intelligence_data,
         )
 
     def get_entities(
@@ -212,7 +218,7 @@ class EntityService:
         filter_param: str | None = None,
         search_query: str | None = None,
         exclude_deleted: bool = False,
-    ) -> tuple[list[Item], int]:
+    ) -> tuple[list[EntitySchema], int]:
         """
         Retrieve all entities with optional pagination and versioning.
 
@@ -229,10 +235,8 @@ class EntityService:
         """
         _ = filter_param
         _ = search_query
-        # Join with ImageIntelligence to get status
-        query = self.db.query(Entity, ImageIntelligence.status).outerjoin(
-            ImageIntelligence, Entity.id == ImageIntelligence.entity_id
-        )
+        # Query entities directly (JSON status is already on the entity)
+        query = self.db.query(Entity)
 
         # Apply deleted filter
         if exclude_deleted:
@@ -247,24 +251,24 @@ class EntityService:
         offset = (page - 1) * page_size
         query = query.order_by(Entity.id.asc()).offset(offset).limit(page_size)
 
-        results = cast(list[tuple[Entity, str | None]], query.all())
+        results = query.all()
 
         # If version is specified, get that version of each entity
         if version is not None:
-            items_list: list[Item] = []
-            for entity, _ in results:
+            items_list: list[EntitySchema] = []
+            for entity in results:
                 versioned_item = self.get_entity_version(entity.id, version)
                 if versioned_item:  # Only include if version exists
                     items_list.append(versioned_item)
             return items_list, total_count
 
-        items: list[Item] = []
-        for entity, status in results:
-            items.append(self._entity_to_item(entity, intelligence_status=status))
+        items: list[EntitySchema] = []
+        for entity in results:
+            items.append(self._entity_to_item(entity))
 
         return items, total_count
 
-    def get_entity_by_id(self, entity_id: int, version: int | None = None) -> Item | None:
+    def get_entity_by_id(self, entity_id: int, version: int | None = None) -> EntitySchema | None:
         """
         Retrieve a single entity by ID, optionally at a specific version.
 
@@ -278,20 +282,17 @@ class EntityService:
         if version is not None:
             return self.get_entity_version(entity_id, version)
 
-        result = cast(
-            tuple[Entity, str | None] | None,
-            self.db.query(Entity, ImageIntelligence.status)
-            .outerjoin(ImageIntelligence, Entity.id == ImageIntelligence.entity_id)
+        result = (
+            self.db.query(Entity)
             .filter(Entity.id == entity_id)
-            .first(),
+            .first()
         )
 
         if result:
-            entity, status = result
-            return self._entity_to_item(entity, intelligence_status=status)
+            return self._entity_to_item(result)
         return None
 
-    def get_entity_version(self, entity_id: int, version: int) -> Item | None:
+    def get_entity_version(self, entity_id: int, version: int) -> EntitySchema | None:
         """
         Retrieve a specific version of an entity.
 
@@ -300,7 +301,7 @@ class EntityService:
             version: Version number to retrieve (1-indexed)
 
         Returns:
-            Item instance for the specified version or None if not found
+            EntitySchema instance for the specified version or None if not found
         """
         # First check if the entity exists
         entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
@@ -318,7 +319,7 @@ class EntityService:
 
         return None
 
-    def get_entity_versions(self, entity_id: int) -> list[schemas.VersionInfo]:
+    def get_entity_versions(self, entity_id: int) -> list[VersionInfo]:
         """
         Get all versions of an entity with metadata.
 
@@ -336,7 +337,7 @@ class EntityService:
             return []
 
         versions_list = entity.versions.all()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
-        result: list[schemas.VersionInfo] = []
+        result: list[VersionInfo] = []
         for idx, version in enumerate(versions_list, start=1):  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
             # SQLAlchemy-Continuum version objects can be validated via model_validate
             # with from_attributes=True enabled in the schema
@@ -346,29 +347,35 @@ class EntityService:
                 "updated_date": version.updated_date,  # pyright: ignore[reportUnknownMemberType]
                 "version": idx,
             }
-            version_info = schemas.VersionInfo.model_validate(version_data)
+            version_info = VersionInfo.model_validate(version_data)
             result.append(version_info)
 
         return result
 
     def create_entity(
         self,
-        body: BodyCreateEntity,
+        is_collection: bool,
+        label: str | None = None,
+        description: str | None = None,
+        parent_id: int | None = None,
         image: bytes | None = None,
         filename: str = "file",
         user_id: str | None = None,
-    ) -> tuple[Item, bool]:
+    ) -> tuple[EntitySchema, bool]:
         """
         Create a new entity.
 
         Args:
-            body: Entity creation data
+            is_collection: Whether the entity is a collection
+            label: Entity label
+            description: Entity description
+            parent_id: Parent entity ID
             image: Optional image file bytes
             filename: Original filename
             user_id: Optional user identifier from JWT (None in demo mode)
 
         Returns:
-            Created Item instance
+            Created EntitySchema instance
 
         Raises:
             DuplicateFileError: If file with same MD5 already exists
@@ -378,17 +385,17 @@ class EntityService:
         file_path = None
 
         # Validation: image is required if is_collection is False
-        if not body.is_collection and not image:
+        if not is_collection and not image:
             raise ValueError("Image is required when is_collection is False")
 
         # Validation: image should not be present if is_collection is True
-        if body.is_collection and image:
+        if is_collection and image:
             raise ValueError("Image should not be provided when is_collection is True")
 
         # Validation: parent_id must follow hierarchy rules
         self._validate_parent_id(
-            parent_id=body.parent_id,
-            _is_collection=body.is_collection,
+            parent_id=parent_id,
+            _is_collection=is_collection,
             entity_id=None,  # Creating new entity
         )
 
@@ -431,10 +438,10 @@ class EntityService:
             md5 = None
 
         entity = Entity(
-            is_collection=body.is_collection,
-            label=body.label,
-            description=body.description,
-            parent_id=body.parent_id,
+            is_collection=is_collection,
+            label=label,
+            description=description,
+            parent_id=parent_id,
             added_date=now,
             updated_date=now,
             create_date=now,
@@ -495,17 +502,23 @@ class EntityService:
     def update_entity(
         self,
         entity_id: int,
-        body: BodyUpdateEntity,
+        is_collection: bool,
+        label: str | None,
+        description: str | None,
+        parent_id: int | None,
         image: bytes | None,
         filename: str = "file",
         user_id: str | None = None,
-    ) -> tuple[Item, bool] | None:
+    ) -> tuple[EntitySchema, bool] | None:
         """
         Fully update an existing entity (PUT) - file upload is optional for non-collections.
 
         Args:
             entity_id: Entity ID
-            body: Entity update data
+            is_collection: Whether the entity is a collection
+            label: Entity label
+            description: Entity description
+            parent_id: Parent entity ID
             image: Image file bytes (optional - if None, only metadata is updated)
             filename: Original filename
             user_id: Optional user identifier from JWT (None in demo mode)
@@ -521,10 +534,10 @@ class EntityService:
             return None
 
         # Validation: is_collection should not be changed
-        # The body.is_collection from the request should match the existing entity.is_collection
-        if body.is_collection != entity.is_collection:
+        # The is_collection from the request should match the existing entity.is_collection
+        if is_collection != entity.is_collection:
             raise ValueError(
-                f"Cannot change is_collection from {entity.is_collection} to {body.is_collection}. "
+                f"Cannot change is_collection from {entity.is_collection} to {is_collection}. "
                 + "is_collection is immutable after entity creation."
             )
 
@@ -539,7 +552,7 @@ class EntityService:
         if image:
             # Validation: parent_id must follow hierarchy rules
             self._validate_parent_id(
-                parent_id=body.parent_id,
+                parent_id=parent_id,
                 _is_collection=entity.is_collection,  # Use existing is_collection (immutable)
                 entity_id=entity_id,
             )
@@ -575,9 +588,9 @@ class EntityService:
         # Update entity with new metadata and client-provided fields
         now = self._now_timestamp()
 
-        entity.label = body.label
-        entity.description = body.description
-        entity.parent_id = body.parent_id
+        entity.label = label
+        entity.description = description
+        entity.parent_id = parent_id
         entity.updated_date = now
         entity.updated_by = user_id
 
@@ -596,14 +609,17 @@ class EntityService:
         return (self._entity_to_item(entity), False)  # is_duplicate=False
 
     def patch_entity(
-        self, entity_id: int, body: BodyPatchEntity, user_id: str | None = None
-    ) -> Item | None:
+        self,
+        entity_id: int,
+        changes: dict[str, object] | None = None,
+        user_id: str | None = None,
+    ) -> EntitySchema | None:
         """
         Partially update an existing entity (PATCH).
 
         Args:
             entity_id: Entity ID
-            body: Entity patch data (only provided fields will be updated)
+            changes: Dictionary of fields to update
             user_id: Optional user identifier from JWT (None in demo mode)
 
         Returns:
@@ -613,10 +629,12 @@ class EntityService:
         if not entity:
             return None
 
+        if changes is None:
+            return self._entity_to_item(entity)
+
         # Validation: Check if parent_id is being modified
-        patch_fields = body.model_dump(exclude_unset=True)
-        if "parent_id" in patch_fields:
-            new_parent_id = body.parent_id
+        if "parent_id" in changes:
+            new_parent_id = cast(int | None, changes["parent_id"])
 
             # Validate the new parent_id (includes circular check and all other rules)
             self._validate_parent_id(
@@ -625,11 +643,10 @@ class EntityService:
                 entity_id=entity_id,
             )
 
-        # Update only provided fields (get values from Pydantic model to preserve types)
-        patch_fields = body.model_dump(exclude_unset=True)
-        for field_name in patch_fields:
-            value = cast(object, getattr(body, field_name))
-            setattr(entity, field_name, value)
+        # Update provided fields
+        for field_name, value in changes.items():
+            if hasattr(entity, field_name):
+                setattr(entity, field_name, value)
 
         entity.updated_date = self._now_timestamp()
         entity.updated_by = user_id
@@ -693,7 +710,7 @@ class EntityService:
 
         return True
 
-    def soft_delete_entity(self, entity_id: int) -> Item | None:
+    def soft_delete_entity(self, entity_id: int) -> EntitySchema | None:
         """
         Soft delete an entity (mark as deleted without removing).
 
@@ -707,7 +724,7 @@ class EntityService:
             entity_id: Entity ID
 
         Returns:
-            Soft-deleted Item instance or None if not found
+            Soft-deleted EntitySchema instance or None if not found
         """
         entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
         if not entity:
@@ -725,19 +742,13 @@ class EntityService:
         from sqlalchemy import text
 
         from ..db_service.db_internals import (
-            Base,
             Entity,
-            EntityJob,
             EntitySyncState,
             Face,
-            ImageIntelligence,
             KnownPerson,
-            ServiceConfig,
         )
-        # 1. Clear intelligence and related tables
-        _ = self.db.query(EntityJob).delete()
+        # 1. Clear related tables
         _ = self.db.query(Face).delete()
-        _ = self.db.query(ImageIntelligence).delete()
         _ = self.db.query(KnownPerson).delete()
 
         # 2. Clear versioning and transaction metadata (using raw SQL for Continuum tables)

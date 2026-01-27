@@ -7,8 +7,8 @@ from cl_ml_tools import BroadcasterBase, get_broadcaster
 from .schemas import MInsightStatus
 
 if TYPE_CHECKING:
-    from .config import MInsightConfig
-    from .schemas import MInsightStatus, EntityStatusPayload
+    from ..m_insight.config import MInsightConfig
+    from .schemas import EntityStatusPayload
 
 
 class MInsightBroadcaster:
