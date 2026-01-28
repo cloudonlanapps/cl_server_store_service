@@ -48,9 +48,9 @@ class BaseDBService(Generic[SchemaT]):
     model_class: type
     schema_class: type[SchemaT]
 
-    def __init__(self):
+    def __init__(self, db: Session | None = None):
         """Initialize service."""
-        pass
+        self.db = db
 
     @timed
     @with_retry(max_retries=10)

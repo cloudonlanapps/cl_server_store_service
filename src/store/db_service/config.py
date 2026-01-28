@@ -42,7 +42,8 @@ class ConfigDBService(BaseDBService[ServiceConfigSchema]):
         if self._is_cache_valid(key):
             return self._cache.get(key)
 
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             config = db.query(ServiceConfig).filter(ServiceConfig.key == key).first()
 
@@ -54,14 +55,16 @@ class ConfigDBService(BaseDBService[ServiceConfigSchema]):
 
             return default
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def set_config(self, key: str, value: str, user_id: str | None = None) -> None:
         """Set configuration value and update cache."""
         now = self._now_timestamp()
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             # Check if config exists
             config = db.query(ServiceConfig).filter(ServiceConfig.key == key).first()
@@ -85,7 +88,8 @@ class ConfigDBService(BaseDBService[ServiceConfigSchema]):
             db.rollback()
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     def get_read_auth_enabled(self) -> bool:
         """Get read authentication enabled status."""
@@ -100,7 +104,8 @@ class ConfigDBService(BaseDBService[ServiceConfigSchema]):
     @with_retry(max_retries=10)
     def get_config_metadata(self, key: str) -> dict[str, str | int | None] | None:
         """Get configuration with metadata."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             config = db.query(ServiceConfig).filter(ServiceConfig.key == key).first()
 
@@ -114,4 +119,5 @@ class ConfigDBService(BaseDBService[ServiceConfigSchema]):
 
             return None
         finally:
-            db.close()
+            if should_close:
+                db.close()

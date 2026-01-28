@@ -13,8 +13,9 @@ from sqlalchemy.orm import sessionmaker
 from cl_ml_tools import get_broadcaster
 from store.common import StorageService
 from store.db_service.db_internals import database
-from store.m_insight import MediaInsight, MInsightConfig
-from store.m_insight.broadcaster import MInsightBroadcaster
+from store.m_insight import MediaInsight
+from store.m_insight.config import MInsightConfig
+from store.broadcast_service.broadcaster import MInsightBroadcaster
 
 # Use a longer timeout for local testing if needed
 TIMEOUT = 30.0

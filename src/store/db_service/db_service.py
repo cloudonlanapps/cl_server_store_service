@@ -15,15 +15,19 @@ class DBService:
     Each service manages its own sessions internally for multi-process safety.
     """
 
-    def __init__(self):
-        """Initialize all table services."""
+    def __init__(self, db=None):
+        """Initialize all table services.
+        
+        Args:
+            db: Optional DB session to share across services (for testing/transactions)
+        """
         from . import database
         if database.SessionLocal is None:
             database.init_db()
 
-        self.entity = EntityDBService()
-        self.entity_version = EntityVersionDBService()
-        self.face = FaceDBService()
-        self.known_person = KnownPersonDBService()
-        self.sync_state = EntitySyncStateDBService()
-        self.config = ConfigDBService()
+        self.entity = EntityDBService(db=db)
+        self.entity_version = EntityVersionDBService(db=db)
+        self.face = FaceDBService(db=db)
+        self.known_person = KnownPersonDBService(db=db)
+        self.sync_state = EntitySyncStateDBService(db=db)
+        self.config = ConfigDBService(db=db)

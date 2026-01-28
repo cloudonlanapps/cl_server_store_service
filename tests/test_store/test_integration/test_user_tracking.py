@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from store.common.schemas import Item
+from store.db_service.schemas import EntitySchema as Item
 
 
 class TestUserTracking:

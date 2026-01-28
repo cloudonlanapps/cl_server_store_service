@@ -130,13 +130,17 @@ class TestAuthenticationLogic:
 
         # Mock ConfigService to return True for read_auth_enabled
         # This ensures the permission check proceeds normally
-        with patch("store.store.config_service.ConfigService") as mock_config_service_class:
+        with patch("store.db_service.config.ConfigDBService") as mock_config_service_class:
             mock_config_service = MagicMock()
             mock_config_service.get_read_auth_enabled.return_value = True
             mock_config_service_class.return_value = mock_config_service
 
+            mock_db = MagicMock()
+            mock_db.config.get_read_auth_enabled.return_value = True
+
             permission_checker = require_permission("media_store_read")
-            result = asyncio.run(permission_checker(request, user))
+            # We must pass db explicitly because Depends() is not resolved in direct calls
+            result = asyncio.run(permission_checker(request, user, db=mock_db))
             assert result == user
 
     def test_require_admin_allows_admin_user(self):

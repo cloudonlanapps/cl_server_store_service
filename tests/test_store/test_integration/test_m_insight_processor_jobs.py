@@ -50,13 +50,37 @@ async def processor(mock_config):
         p.job_service.submit_face_detection = AsyncMock(return_value="face-1")
         p.job_service.submit_clip_embedding = AsyncMock(return_value="clip-1")
         p.job_service.submit_dino_embedding = AsyncMock(return_value="dino-1")
-        p.job_service.update_job_status = MagicMock()
         p.job_service.broadcast_entity_status = MagicMock()
 
         p.callback_handler = MagicMock()
         p.callback_handler.handle_face_detection_complete = AsyncMock()
         p.callback_handler.handle_clip_embedding_complete = AsyncMock()
         p.callback_handler.handle_dino_embedding_complete = AsyncMock()
+
+
+        # Mock db.entity.get to return a valid schema object (or object that can be converted)
+        # We need this because JobSubmissionService converts the result to EntitySchema/EntityVersionSchema
+        from store.db_service import EntitySchema
+        
+        def get_entity_side_effect(id):
+             e = MagicMock()
+             e.id = id
+             e.intelligence_data = None
+             e.md5 = "abc"
+             
+             # Match behavior to test cases based on ID
+             if id == 1:
+                 e.file_path = None # Missing file path
+             else:
+                 e.file_path = "test.jpg" # Valid path for others
+                 
+             return e
+
+        p.db = MagicMock()
+        p.db.entity.get.side_effect = get_entity_side_effect
+        
+        # Also need to make sure p.job_service.db is the same mock if it uses it
+        p.job_service.db = p.db
 
         p._initialized = True # Skip real init
 
@@ -77,8 +101,9 @@ async def test_trigger_async_jobs_missing_file_path(processor):
     # We are testing private method _trigger_async_jobs directly for unit testing
     await processor._trigger_async_jobs(entity)
 
-    # Should not submit jobs
-    processor.job_service.submit_face_detection.assert_not_called()
+    # JobService handles validation, so it SHOULD be called
+    processor.job_service.submit_face_detection.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_trigger_async_jobs_file_not_found(processor):
@@ -96,8 +121,9 @@ async def test_trigger_async_jobs_file_not_found(processor):
     with patch("pathlib.Path.exists", return_value=False):
          await processor._trigger_async_jobs(entity)
 
-    # Should not submit jobs
-    processor.job_service.submit_face_detection.assert_not_called()
+    # JobService handles validation, so it SHOULD be called
+    processor.job_service.submit_face_detection.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_trigger_async_jobs_success(processor):

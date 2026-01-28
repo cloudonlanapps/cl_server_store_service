@@ -5,7 +5,7 @@ Tests for runtime configuration API and JWT user ID.
 import pytest
 
 from store.db_service.db_internals import ServiceConfig
-from store.store.config_service import ConfigService
+from store.db_service.config import ConfigDBService
 
 
 @pytest.fixture(scope="function")
@@ -15,27 +15,27 @@ def db_session(test_db_session):
     Wraps the conftest.py test_db_session but adds config cache clearing.
     """
     # Clear config cache before test
-    ConfigService._cache.clear()
+    ConfigDBService._cache.clear()
 
     yield test_db_session
 
     # Clear config cache after test
-    ConfigService._cache.clear()
-    ConfigService._cache_timestamps.clear()
+    ConfigDBService._cache.clear()
+    ConfigDBService._cache_timestamps.clear()
 
 
-class TestConfigService:
-    """Test ConfigService functionality."""
+class TestConfigDBService:
+    """Test ConfigDBService functionality."""
 
     def test_get_config_default(self, db_session):
         """Test getting config with default value."""
-        config_service = ConfigService(db_session)
+        config_service = ConfigDBService(db_session)
         value = config_service.get_config("nonexistent_key", "default_value")
         assert value == "default_value"
 
     def test_set_and_get_config(self, db_session):
         """Test setting and getting configuration."""
-        config_service = ConfigService(db_session)
+        config_service = ConfigDBService(db_session)
 
         # Set config
         config_service.set_config("test_key", "test_value", "user123")
@@ -52,7 +52,7 @@ class TestConfigService:
 
     def test_read_auth_enabled(self, db_session):
         """Test read auth enabled getter/setter."""
-        config_service = ConfigService(db_session)
+        config_service = ConfigDBService(db_session)
 
         # Default should be false
         assert config_service.get_read_auth_enabled() == False
@@ -67,7 +67,7 @@ class TestConfigService:
 
     def test_config_caching(self, db_session):
         """Test that config values are cached."""
-        config_service = ConfigService(db_session)
+        config_service = ConfigDBService(db_session)
 
         # Set initial value
         config_service.set_config("cached_key", "value1", "user1")
@@ -186,7 +186,7 @@ class TestReadAuthBehaviorWithConfig:
     def test_read_no_auth_allows_access(self, client, db_session):
         """Test that read endpoints are accessible when read auth is disabled."""
         # Set read auth to disabled
-        config_service = ConfigService(db_session)
+        config_service = ConfigDBService(db_session)
         config_service.set_read_auth_enabled(False)
 
         # Try to access read endpoint without auth
@@ -198,7 +198,7 @@ class TestReadAuthBehaviorWithConfig:
     def test_read_auth_enabled_requires_token(self, client, db_session):
         """Test that read endpoints require auth when read auth is enabled."""
         # Set read auth to enabled
-        config_service = ConfigService(db_session)
+        config_service = ConfigDBService(db_session)
         config_service.set_read_auth_enabled(True)
 
         # Try to access read endpoint without auth
@@ -211,15 +211,15 @@ class TestReadAuthBehaviorWithConfig:
     def test_config_persists_across_sessions(self, db_session):
         """Test that configuration persists in database."""
         # Set config in first session
-        config_service1 = ConfigService(db_session)
+        config_service1 = ConfigDBService(db_session)
         config_service1.set_read_auth_enabled(True, "admin1")
 
         # Create new config service instance (simulating restart)
-        config_service2 = ConfigService(db_session)
+        config_service2 = ConfigDBService(db_session)
 
         # Clear cache to force database read
-        ConfigService._cache.clear()
-        ConfigService._cache_timestamps.clear()
+        ConfigDBService._cache.clear()
+        ConfigDBService._cache_timestamps.clear()
 
         # Verify config persisted
         assert config_service2.get_read_auth_enabled() == True

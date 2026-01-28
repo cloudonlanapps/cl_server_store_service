@@ -23,7 +23,8 @@ class EntitySyncStateDBService(BaseDBService[EntitySyncStateSchema]):
     @with_retry(max_retries=10)
     def get_or_create(self) -> EntitySyncStateSchema:
         """Get singleton sync state, create if doesn't exist."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             obj = db.query(EntitySyncState).filter(EntitySyncState.id == 1).first()
             if not obj:
@@ -36,7 +37,8 @@ class EntitySyncStateDBService(BaseDBService[EntitySyncStateSchema]):
             db.rollback()
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
@@ -49,7 +51,8 @@ class EntitySyncStateDBService(BaseDBService[EntitySyncStateSchema]):
     @with_retry(max_retries=10)
     def update_last_version(self, version: int) -> EntitySyncStateSchema:
         """Update last processed version."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             obj = db.query(EntitySyncState).filter(EntitySyncState.id == 1).first()
             if not obj:
@@ -66,7 +69,8 @@ class EntitySyncStateDBService(BaseDBService[EntitySyncStateSchema]):
             db.rollback()
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     # Override base methods to prevent misuse
     def create(self, data: Any, ignore_exception: bool = False) -> Any:

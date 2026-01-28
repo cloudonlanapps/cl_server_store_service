@@ -18,6 +18,12 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from store.store.config import StoreConfig
+from store.common.auth import UserPayload, get_current_user
+from store.db_service import database
+from store.db_service.db_internals import get_db
+from store.store.store import app
+
 # Import test config and media files
 from tests.test_config import (
     IMAGES_DIR,
@@ -350,12 +356,6 @@ def client(
         finally:
             db.close()
 
-    # Import app and override dependency
-    from store.common.auth import UserPayload, get_current_user
-    from store.db_service import database
-    from store.db_service.db_internals import get_db
-    from store.store.store import app
-
     # CRITICAL: Also override the global SessionLocal for DBService
     monkeypatch.setattr(database, "SessionLocal", TestingSessionLocal)
 
@@ -372,8 +372,6 @@ def client(
     app.dependency_overrides[get_current_user] = override_auth
 
     # Create test client - FastAPI lifespan will connect to REAL services
-
-    from store.store.config import StoreConfig
 
     store_config = StoreConfig(
         cl_server_dir=clean_data_dir,
@@ -443,19 +441,16 @@ def auth_client(
         finally:
             db.close()
 
-    from store.common.auth import get_current_user
-    from store.db_service.db_internals import get_db
-    from store.store.store import app
-
     # Clear any existing auth override
     if get_current_user in app.dependency_overrides:
         del app.dependency_overrides[get_current_user]
 
     app.dependency_overrides[get_db] = override_get_db
-
+    
+    # CRITICAL: Copy SessionLocal patch from client fixture
+    monkeypatch.setattr(database, "SessionLocal", TestingSessionLocal)
+    
     # Create StoreConfig and set on app.state
-    from store.store.config import StoreConfig
-
     store_config = StoreConfig(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from store.db_service import DBService
 from store.db_service.dependencies import get_db_service
+from store.db_service.db_internals import get_db
 from store.db_service.config import ConfigDBService
 
 from .config import StoreConfig

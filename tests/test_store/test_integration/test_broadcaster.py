@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from store.m_insight.broadcaster import MInsightBroadcaster
+from store.broadcast_service.broadcaster import MInsightBroadcaster
 from store.m_insight.config import MInsightConfig
 
 
@@ -26,7 +26,7 @@ def test_broadcaster_init_disabled(mock_config):
     broadcaster.init()
     assert broadcaster.broadcaster is None
 
-@patch("store.m_insight.broadcaster.get_broadcaster")
+@patch("store.broadcast_service.broadcaster.get_broadcaster")
 def test_broadcaster_init_enabled(mock_get_broadcaster, mock_config):
     """Test successful initialization with MQTT."""
     mock_mqtt_broadcaster = MagicMock()
@@ -51,7 +51,7 @@ def test_broadcaster_publish_no_init(mock_config):
     broadcaster.publish_end(5)
     broadcaster.publish_status("running")
 
-@patch("store.m_insight.broadcaster.get_broadcaster")
+@patch("store.broadcast_service.broadcaster.get_broadcaster")
 def test_broadcaster_publish_methods(mock_get_broadcaster, mock_config):
     """Test various publish methods."""
     mock_mqtt_broadcaster = MagicMock()

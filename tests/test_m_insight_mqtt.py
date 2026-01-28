@@ -9,8 +9,8 @@ from sqlalchemy.orm import sessionmaker
 
 from store.db_service.db_internals import database
 from store.db_service.db_internals import Entity
-from store.common.schemas import MInsightStatus
-from store.m_insight.broadcaster import MInsightBroadcaster
+from store.broadcast_service.schemas import MInsightStatus
+from store.broadcast_service.broadcaster import MInsightBroadcaster
 from store.m_insight.config import MInsightConfig
 from store.m_insight.media_insight import MediaInsight
 

@@ -138,6 +138,8 @@ def create_session_factory(engine: Engine) -> sessionmaker[Session]:
 
 def init_db() -> None:
     """Initialize database connection."""
+def init_db() -> None:
+    """Initialize database connection."""
     global SessionLocal, engine
     if SessionLocal is not None:
         return

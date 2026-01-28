@@ -1,13 +1,11 @@
 from datetime import datetime
-
+import json
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from store.db_service.db_internals import models
-from store.db_service.db_internals import models as intelligence_models
-from store.db_service.db_internals import models as minsight_models
-
+from store.db_service import EntityIntelligenceData, JobInfo
 
 @pytest.mark.usefixtures("qdrant_service", "compute_service", "auth_service")
 class TestIntelligenceRoutes:
@@ -97,19 +95,9 @@ class TestIntelligenceRoutes:
         test_db_session.add(entity)
         test_db_session.commit()
 
-        # Add intelligence record
-        intel = minsight_models.ImageIntelligence(
-            entity_id=entity.id,
-            md5="abc123face",
-            status="complete",
-            image_path="/tmp/test_image.jpg",
-            version=1
-        )
-        test_db_session.add(intel)
-
         # Add face
         # Note: bbox is BBox model as JSON string
-        face = intelligence_models.Face(
+        face = models.Face(
             entity_id=entity.id,
             bbox='{"x1": 0.1, "y1": 0.1, "x2": 0.5, "y2": 0.5}',
             confidence=0.95,
@@ -128,25 +116,27 @@ class TestIntelligenceRoutes:
 
     def test_get_entity_jobs_success(self, client: TestClient, test_db_session: Session):
         """Test getting jobs for an entity with data."""
-        # Create entity
+        # Create entity with intelligence data
+        now = int(datetime.now().timestamp() * 1000)
+        
+        intel_data = EntityIntelligenceData(
+            last_updated=now,
+            active_jobs=[
+                JobInfo(
+                    job_id="job_abc_123",
+                    task_type="face_detection",
+                    started_at=now
+                )
+            ]
+        )
+        
         entity = models.Entity(
             is_collection=False,
             label="job_test.jpg",
             md5="job12345",
+            intelligence_data=intel_data.model_dump()
         )
         test_db_session.add(entity)
-        test_db_session.commit()
-
-        # Add intelligence job
-        job = intelligence_models.EntityJob(
-            entity_id=entity.id,
-            task_type="face_detection",
-            status="running",
-            job_id="job_abc_123",
-            created_at=int(datetime.now().timestamp() * 1000),
-            updated_at=int(datetime.now().timestamp() * 1000)
-        )
-        test_db_session.add(job)
         test_db_session.commit()
 
         response = client.get(f"/intelligence/entities/{entity.id}/jobs")
@@ -154,13 +144,13 @@ class TestIntelligenceRoutes:
         jobs = response.json()
         assert len(jobs) == 1
         assert jobs[0]["task_type"] == "face_detection"
-        assert jobs[0]["status"] == "running"
+        assert jobs[0]["job_id"] == "job_abc_123"
 
     def test_known_persons_operations(self, client: TestClient, test_db_session: Session):
         """Test creating and updating known persons."""
         # 1. Create a person
         now_ms = int(datetime.now().timestamp() * 1000)
-        person = intelligence_models.KnownPerson(
+        person = models.KnownPerson(
             name="John Doe",
             created_at=now_ms,
             updated_at=now_ms

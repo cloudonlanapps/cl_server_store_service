@@ -5,7 +5,7 @@ They verify that the dependency injection works correctly with real services.
 """
 
 
-from store.common.schemas import Item
+from store.db_service.schemas import EntitySchema
 
 # Use the standard client fixture from conftest.py which already tests real dependency injection
 
@@ -25,7 +25,7 @@ class TestDependencyInjection:
         If get_db() is broken, this will return 500 with:
         AttributeError: 'generator' object has no attribute 'query'
         """
-        from store.common.schemas import Item
+        
 
         # Create a collection entity (doesn't require file upload)
         response = client.post(
@@ -36,7 +36,7 @@ class TestDependencyInjection:
         assert response.status_code == 201, (
             f"Entity creation failed: {response.json() if response.status_code != 500 else response.text}"
         )
-        item = Item.model_validate(response.json())
+        item = EntitySchema.model_validate(response.json())
         assert item.label == "Test Collection"
         assert item.is_collection is True
 
@@ -50,20 +50,20 @@ class TestDependencyInjection:
 
     def test_entity_retrieval_works(self, client):
         """Test entity retrieval with real dependency injection."""
-        from store.common.schemas import Item
+        
 
         # Create entity first
         create_response = client.post(
             "/entities/", data={"is_collection": "true", "label": "Test Entity"}
         )
         assert create_response.status_code == 201
-        created_item = Item.model_validate(create_response.json())
+        created_item = EntitySchema.model_validate(create_response.json())
         entity_id = created_item.id
 
         # Retrieve entity
         get_response = client.get(f"/entities/{entity_id}")
         assert get_response.status_code == 200
-        retrieved_item = Item.model_validate(get_response.json())
+        retrieved_item = EntitySchema.model_validate(get_response.json())
         assert retrieved_item.id == entity_id
         assert retrieved_item.label == "Test Entity"
 
@@ -83,7 +83,7 @@ class TestEntityOperations:
             },
         )
         assert create_response.status_code == 201
-        created_item = Item.model_validate(create_response.json())
+        created_item = EntitySchema.model_validate(create_response.json())
         entity_id = created_item.id
 
         # Update entity
@@ -92,7 +92,7 @@ class TestEntityOperations:
             data={"label": "Updated Name", "description": "Updated description"},
         )
         assert update_response.status_code == 200
-        updated_item = Item.model_validate(update_response.json())
+        updated_item = EntitySchema.model_validate(update_response.json())
         assert updated_item.label == "Updated Name"
         assert updated_item.description == "Updated description"
 
@@ -105,7 +105,7 @@ class TestEntityOperations:
                 "/entities/", data={"is_collection": "true", "label": f"Entity {i}"}
             )
             assert response.status_code == 201
-            created_item = Item.model_validate(response.json())
+            created_item = EntitySchema.model_validate(response.json())
             entity_ids.append(created_item.id)
 
         # Verify all entities exist
@@ -120,7 +120,7 @@ class TestEntityOperations:
             "/entities/", data={"is_collection": "true", "label": "To Be Deleted"}
         )
         assert create_response.status_code == 201
-        created_item = Item.model_validate(create_response.json())
+        created_item = EntitySchema.model_validate(create_response.json())
         entity_id = created_item.id
 
         # Soft-delete entity first
@@ -156,7 +156,7 @@ class TestFileUpload:
             files={"image": ("test.png", png_data, "image/png")},
         )
         assert create_response.status_code == 201
-        created_item = Item.model_validate(create_response.json())
+        created_item = EntitySchema.model_validate(create_response.json())
         assert created_item.file_path is not None
         assert created_item.mime_type == "image/png"
 
@@ -173,7 +173,7 @@ class TestMultipleSequentialRequests:
                 "/entities/", data={"is_collection": "true", "label": f"Seq {i}"}
             )
             assert response.status_code == 201
-            created_item = Item.model_validate(response.json())
+            created_item = EntitySchema.model_validate(response.json())
             entity_ids.append(created_item.id)
 
         # Verify all entities are accessible
@@ -188,7 +188,7 @@ class TestMultipleSequentialRequests:
             "/entities/", data={"is_collection": "true", "label": "Mixed Test"}
         )
         assert create_resp.status_code == 201
-        created_item = Item.model_validate(create_resp.json())
+        created_item = EntitySchema.model_validate(create_resp.json())
         entity_id = created_item.id
 
         # Read
@@ -204,7 +204,7 @@ class TestMultipleSequentialRequests:
         # Read again
         read_resp2 = client.get(f"/entities/{entity_id}")
         assert read_resp2.status_code == 200
-        updated_item = Item.model_validate(read_resp2.json())
+        updated_item = EntitySchema.model_validate(read_resp2.json())
         assert updated_item.label == "Updated Mixed Test"
 
         # Soft-delete first

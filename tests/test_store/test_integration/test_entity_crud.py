@@ -7,8 +7,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from store.db_service.db_internals import Entity, ImageIntelligence
-from store.common.schemas import Item, PaginatedResponse
+from store.db_service.db_internals import Entity
+from store.db_service.schemas import EntitySchema, PaginatedResponse
 
 
 class TestEntityCRUD:
@@ -26,7 +26,7 @@ class TestEntityCRUD:
         )
 
         assert response.status_code == 201
-        item = Item.model_validate(response.json())
+        item = EntitySchema.model_validate(response.json())
         assert item.id is not None
         assert item.is_collection is True
         assert item.label == "Test Collection"
@@ -41,17 +41,18 @@ class TestEntityCRUD:
                 data={"is_collection": "false", "label": "Test Entity"}
             )
 
-        created_item = Item.model_validate(create_response.json())
+        created_item = EntitySchema.model_validate(create_response.json())
         assert created_item.id is not None
         entity_id = created_item.id
 
         # Get entity
         get_response = client.get(f"/entities/{entity_id}")
         assert get_response.status_code == 200
-        item = Item.model_validate(get_response.json())
+        item = EntitySchema.model_validate(get_response.json())
         assert item.id == entity_id
         assert item.label == "Test Entity"
-        assert item.intelligence_status is None  # Default is None
+        # EntitySchema has explicit intelligence_data which is None by default
+        assert item.intelligence_data is None
 
     def test_get_entity_with_intelligence_status(
         self, client: TestClient, sample_image: Path, test_db_session: Session
@@ -64,27 +65,34 @@ class TestEntityCRUD:
                 files={"image": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Intel Test"}
             )
-        item = Item.model_validate(resp.json())
+        item = EntitySchema.model_validate(resp.json())
         entity_id = item.id
 
         # Manually create intelligence record
-        intel = ImageIntelligence(
-            entity_id=entity_id,
-            md5=item.md5,
-            status="completed",
-            image_path="/tmp/fake.jpg",
-            version=1,
-        )
-        test_db_session.add(intel)
+        entity_obj = test_db_session.get(Entity, entity_id)
+        assert entity_obj is not None
+        entity_obj.intelligence_data = {
+            "overall_status": "completed",
+            "active_processing_md5": item.md5 or "",
+            "last_updated": 0,
+            "inference_status": {
+                "face_detection": "pending",
+                "clip_embedding": "pending",
+                "dino_embedding": "pending",
+            }
+        }
         test_db_session.commit()
 
         # Get entity
         get_response = client.get(f"/entities/{entity_id}")
         assert get_response.status_code == 200
-        fetched_item = Item.model_validate(get_response.json())
+        fetched_item = EntitySchema.model_validate(get_response.json())
 
         # Verify status
-        assert fetched_item.intelligence_status == "completed"
+        # Note: We now return EntitySchema, which has intelligence_data dictionary/model
+        # We need to access intelligence_data.overall_status
+        assert fetched_item.intelligence_data is not None
+        assert fetched_item.intelligence_data.overall_status == "completed"
 
     def test_get_all_entities(
         self,
@@ -119,7 +127,7 @@ class TestEntityCRUD:
                 "description": "Original Description"
             }
         )
-        created_item = Item.model_validate(create_response.json())
+        created_item = EntitySchema.model_validate(create_response.json())
         assert created_item.id is not None
         entity_id = created_item.id
 
@@ -130,7 +138,7 @@ class TestEntityCRUD:
         )
 
         assert patch_response.status_code == 200
-        patched_item = Item.model_validate(patch_response.json())
+        patched_item = EntitySchema.model_validate(patch_response.json())
         assert patched_item.label == "Updated Label"
         assert patched_item.description == "Original Description"  # Should remain unchanged
         assert isinstance(patched_item.updated_date, int)
@@ -142,7 +150,7 @@ class TestEntityCRUD:
             "/entities/",
             data={"is_collection": "true", "label": "Parent Collection"}
         )
-        parent_item = Item.model_validate(parent_resp.json())
+        parent_item = EntitySchema.model_validate(parent_resp.json())
         assert parent_item.id is not None
         parent_id = parent_item.id
 
@@ -151,7 +159,7 @@ class TestEntityCRUD:
             "/entities/",
             data={"is_collection": "true", "label": "Child Entity"}
         )
-        child_item = Item.model_validate(child_resp.json())
+        child_item = EntitySchema.model_validate(child_resp.json())
         assert child_item.id is not None
         child_id = child_item.id
 
@@ -161,7 +169,7 @@ class TestEntityCRUD:
             data={"parent_id": str(parent_id)}
         )
         assert resp.status_code == 200
-        updated_child = Item.model_validate(resp.json())
+        updated_child = EntitySchema.model_validate(resp.json())
         assert updated_child.parent_id == parent_id
 
         # 2. Try to remove child from parent (should fail for files, but this is a collection)
@@ -171,7 +179,7 @@ class TestEntityCRUD:
             data={"parent_id": ""}
         )
         assert resp.status_code == 200
-        updated_child = Item.model_validate(resp.json())
+        updated_child = EntitySchema.model_validate(resp.json())
         assert updated_child.parent_id is None
 
         # 3. Test circular hierarchy
@@ -324,7 +332,7 @@ class TestEntityCRUD:
                     "parent_id": str(parent_id),
                 },
             )
-        created_item = Item.model_validate(response.json())
+        created_item = EntitySchema.model_validate(response.json())
         assert created_item.id is not None
         entity_id = created_item.id
 
@@ -365,7 +373,7 @@ class TestEntityCRUD:
                     "parent_id": str(parent_id),
                 },
             )
-        created_item = Item.model_validate(response.json())
+        created_item = EntitySchema.model_validate(response.json())
         assert created_item.id is not None
         entity_id = created_item.id
 
@@ -375,13 +383,13 @@ class TestEntityCRUD:
             data={"is_deleted": "true"}
         )
         assert response.status_code == 200
-        deleted_item = Item.model_validate(response.json())
+        deleted_item = EntitySchema.model_validate(response.json())
         assert deleted_item.is_deleted is True
 
         # Verify entity still exists but is marked deleted
         response = client.get(f"/entities/{entity_id}")
         assert response.status_code == 200
-        get_item = Item.model_validate(response.json())
+        get_item = EntitySchema.model_validate(response.json())
         assert get_item.is_deleted is True
 
         # Restore (PATCH is_deleted=False)
@@ -390,13 +398,13 @@ class TestEntityCRUD:
             data={"is_deleted": "false"}
         )
         assert response.status_code == 200
-        restored_item = Item.model_validate(response.json())
+        restored_item = EntitySchema.model_validate(response.json())
         assert restored_item.is_deleted is False
 
         # Verify entity is restored
         response = client.get(f"/entities/{entity_id}")
         assert response.status_code == 200
-        final_item = Item.model_validate(response.json())
+        final_item = EntitySchema.model_validate(response.json())
         assert final_item.is_deleted is False
 
     def test_get_nonexistent_entity(self, client: TestClient) -> None:

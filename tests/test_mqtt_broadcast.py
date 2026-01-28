@@ -215,12 +215,17 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
             time.sleep(0.1)
 
         assert len(events_received) > 0, f"No MQTT message received. Checked for {(time.time() - start_time):.2f}s"
-        received_payload = json.loads(events_received[0])
-        # The update might result in a new ID (e.g. if implementation does copy-on-write or similar),
-        # so we should check against the ID returned by the PUT response.
-        assert received_payload["id"] == updated_item["id"]
-        assert received_payload["md5"] == updated_item["md5"]
-        assert received_payload["md5"] != item["md5"]
+        # Find matching message in received events
+        found_match = False
+        for msg in events_received:
+            payload = json.loads(msg)
+            if payload.get("id") == updated_item["id"]:
+                assert payload["md5"] == updated_item["md5"]
+                assert payload["md5"] != item["md5"]
+                found_match = True
+                break
+        
+        assert found_match, f"No matching MQTT update message found for ID {updated_item['id']} in {len(events_received)} events"
 
     finally:
         subscriber.loop_stop()

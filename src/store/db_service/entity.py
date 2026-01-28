@@ -40,9 +40,12 @@ class EntityDBService(BaseDBService[EntitySchema]):
 
     @timed
     @with_retry(max_retries=10)
+    @timed
+    @with_retry(max_retries=10)
     def update_intelligence_data(self, id: int, data: EntityIntelligenceData) -> EntitySchema | None:
         """Update intelligence_data JSON field."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             entity = db.query(Entity).filter(Entity.id == id).first()
             if not entity:
@@ -56,7 +59,8 @@ class EntityDBService(BaseDBService[EntitySchema]):
             db.rollback()
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     def _log_cascade_deletes(self, orm_obj: Entity, db: Session) -> None:
         """Log what will be cascade deleted."""
@@ -78,9 +82,12 @@ class EntityDBService(BaseDBService[EntitySchema]):
 
     @timed
     @with_retry(max_retries=10)
+    @timed
+    @with_retry(max_retries=10)
     def delete_all(self) -> None:
         """Bulk delete all entities and related data (for tests/admin)."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             # Delete related data first (order matters for FKs)
             db.query(Face).delete()
@@ -110,14 +117,16 @@ class EntityDBService(BaseDBService[EntitySchema]):
             db.rollback()
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
 
 class EntityVersionDBService:
-    def __init__(self):
+    def __init__(self, db: Session | None = None):
         # Get the EntityVersion model class
         configure_mappers()
         self.EntityVersion = version_class(Entity)
+        self.db = db
 
     @timed
     @with_retry(max_retries=10)
@@ -126,7 +135,8 @@ class EntityVersionDBService:
 
         Works even if entity is deleted from main table.
         """
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             logger.debug(f"Getting all versions for entity_id={entity_id}")
             stmt = select(self.EntityVersion).where(self.EntityVersion.id == entity_id).order_by(self.EntityVersion.transaction_id)
@@ -134,8 +144,11 @@ class EntityVersionDBService:
             logger.debug(f"Found {len(versions)} versions for entity_id={entity_id}")
             return [EntityVersionSchema.model_validate(v) for v in versions]
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
+    @timed
+    @with_retry(max_retries=10)
     @timed
     @with_retry(max_retries=10)
     def get_by_transaction_id(self, entity_id: int, transaction_id: int) -> EntityVersionSchema | None:
@@ -143,7 +156,8 @@ class EntityVersionDBService:
 
         Works even if entity is deleted from main table.
         """
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             logger.debug(f"Getting version entity_id={entity_id}, transaction_id={transaction_id}")
             stmt = select(self.EntityVersion).where(
@@ -154,7 +168,8 @@ class EntityVersionDBService:
             logger.debug(f"Version {'found' if result else 'not found'}")
             return result
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
@@ -164,7 +179,16 @@ class EntityVersionDBService:
         end_transaction_id: int | None = None
     ) -> dict[int, EntityVersionSchema]:
         """Get entity changes in transaction ID range, coalesced by entity ID."""
-        db = database.SessionLocal()
+    @timed
+    @with_retry(max_retries=10)
+    def get_versions_in_range(
+        self,
+        start_transaction_id: int,
+        end_transaction_id: int | None = None
+    ) -> dict[int, EntityVersionSchema]:
+        """Get entity changes in transaction ID range, coalesced by entity ID."""
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             if end_transaction_id is None:
                 logger.debug(f"Getting entity deltas from transaction_id > {start_transaction_id} to latest")
@@ -194,13 +218,19 @@ class EntityVersionDBService:
             logger.debug(f"Found {len(entity_map)} entities with changes in range")
             return entity_map
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def query(self, **kwargs: Any) -> list[EntityVersionSchema]:
         """Query version table with filters."""
-        db = database.SessionLocal()
+    @timed
+    @with_retry(max_retries=10)
+    def query(self, **kwargs: Any) -> list[EntityVersionSchema]:
+        """Query version table with filters."""
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             logger.debug(f"Querying EntityVersion with filters: {kwargs}")
             filters = []
@@ -228,4 +258,5 @@ class EntityVersionDBService:
             logger.debug(f"Found {len(results)} EntityVersion records")
             return [EntityVersionSchema.model_validate(r) for r in results]
         finally:
-            db.close()
+            if should_close:
+                db.close()

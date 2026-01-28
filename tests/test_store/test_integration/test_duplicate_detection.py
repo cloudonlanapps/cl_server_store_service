@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from store.common.schemas import Item
+from store.db_service.schemas import EntitySchema as Item
 
 
 class TestDuplicateDetection:

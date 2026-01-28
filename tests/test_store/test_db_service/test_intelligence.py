@@ -1,91 +1,87 @@
-from store.db_service import EntitySchema, EntityJobSchema, ImageIntelligenceSchema
-import pytest
+from store.db_service import EntitySchema, EntityIntelligenceData, JobInfo, InferenceStatus
+from store.db_service.db_internals import Entity
 
-def test_intelligence_crud(db_service):
-    # Entity must exist
-    db_service.entity.create(EntitySchema(id=50, label="Img"))
-    
-    # Create Intelligence
-    intel = db_service.intelligence.create_or_update(ImageIntelligenceSchema(
-        entity_id=50,
-        md5="hash123",
-        image_path="/path/img",
-        version=1
-    ))
-    assert intel is not None
-    assert intel.md5 == "hash123"
-    
-    # Update Job IDs
-    updated = db_service.intelligence.update_job_ids(
-        50, 
-        face_detection_job_id="job_123"
+def test_intelligence_crud_via_entity(db_service):
+    """Test creating and updating intelligence data via Entity service."""
+    # 1. Create Entity with initial intelligence
+    intel_init = EntityIntelligenceData(
+        last_updated=1000,
+        overall_status="queued"
     )
-    assert updated.face_detection_job_id == "job_123"
+    entity_data = EntitySchema(
+        id=50, 
+        label="Img", 
+        intelligence_data=intel_init
+    )
+    db_service.entity.create(entity_data)
     
-    # Verify via get
-    retrieved = db_service.intelligence.get_by_entity_id(50)
-    # Wait, ImageIntelligence PK is entity_id.
-    # BaseDBService.get(id) expects filtering by `id`.
-    # ImageIntelligence has `entity_id` as PK, but we might have defined `id` attribute?
-    # In models.py: entity_id is primary_key=True. There is no `id` column.
+    # Verify creation
+    retrieved = db_service.entity.get(50)
+    assert retrieved is not None
+    assert retrieved.intelligence_data.last_updated == 1000
+    assert retrieved.intelligence_data.overall_status == "queued"
     
-    # BaseDBService.get uses:
-    # obj = db.query(self.model_class).filter_by(id=id).first()
-    # It assumes PK is named 'id'.
+    # 2. Simulate "Update Job IDs" (feature test)
+    # The feature was: adding a job ID.
+    # New way: Add to active_jobs list.
     
-    # ImageIntelligenceDBService overrides `get_by_entity_id`.
-    # It does NOT override `get`.
-    # If I call `db_service.intelligence.get(50)`, it will try `filter_by(id=50)`.
-    # Since ImageIntelligence model has no `id` attribute, this will fail or return error.
+    current_data = retrieved.intelligence_data
+    new_job = JobInfo(job_id="job_123", task_type="face_detection", started_at=1001)
     
-    # Let's check intelligence.py.
-    # It defines `get_by_entity_id`. `get` is inherited from BaseDBService.
-    pass
+    # Append job
+    current_data.active_jobs.append(new_job)
+    current_data.last_updated = 1002
+    current_data.inference_status.face_detection = "processing"
+    
+    # Update via update_intelligence_data
+    updated = db_service.entity.update_intelligence_data(50, current_data)
+    
+    assert updated is not None
+    assert len(updated.intelligence_data.active_jobs) == 1
+    assert updated.intelligence_data.active_jobs[0].job_id == "job_123"
+    assert updated.intelligence_data.inference_status.face_detection == "processing"
 
-def test_intelligence_base_get_issue(db_service):
-    db_service.entity.create(EntitySchema(id=51, label="Img"))
-    db_service.intelligence.create_or_update(ImageIntelligenceSchema(entity_id=51, md5="abc", image_path="p", version=1))
-    
-    # Calling inherited get() -> likely failure as no 'id' column
-    # We should probably test `get_by_entity_id` which is the intended method.
-    res = db_service.intelligence.get_by_entity_id(51)
-    assert res is not None
-    assert res.entity_id == 51
 
-def test_entity_job_lifecycle(db_service):
+def test_entity_job_lifecycle_simulation(db_service):
+    """Test the lifecycle of a job as stored in intelligence_data."""
+    # Create Entity
     db_service.entity.create(EntitySchema(id=60, label="Video"))
     
-    # Create Job
-    job = db_service.job.create(EntityJobSchema(
-        entity_id=60,
-        job_id="uuid-1",
-        task_type="face_detection",
-        status="queued",
-        created_at=1000,
-        updated_at=1000
-    ))
-    assert job is not None
+    # 1. Start Job (Queued/Processing)
+    job_info = JobInfo(job_id="uuid-1", task_type="clip_embedding", started_at=2000)
+    intel_data = EntityIntelligenceData(
+        last_updated=2000,
+        overall_status="processing",
+        active_jobs=[job_info],
+        inference_status=InferenceStatus(clip_embedding="processing")
+    )
     
-    # Update Status
-    updated, eid = db_service.job.update_status("uuid-1", "completed", completed_at=2000)
-    assert updated.status == "completed"
-    assert updated.completed_at == 2000
-    assert eid == 60
+    db_service.entity.update_intelligence_data(60, intel_data)
     
-    # Delete by job_id
-    assert db_service.job.delete_by_job_id("uuid-1") is True
-    assert db_service.job.get_by_job_id("uuid-1") is None
+    e1 = db_service.entity.get(60)
+    assert len(e1.intelligence_data.active_jobs) == 1
+    assert e1.intelligence_data.inference_status.clip_embedding == "processing"
+    
+    # 2. Job Completes (Remove from active_jobs, update status)
+    # Logic similar to JobSubmissionService.update_job_status
+    current_intel = e1.intelligence_data
+    # Remove job
+    current_intel.active_jobs = [j for j in current_intel.active_jobs if j.job_id != "uuid-1"]
+    current_intel.inference_status.clip_embedding = "completed"
+    current_intel.last_updated = 3000
+    
+    db_service.entity.update_intelligence_data(60, current_intel)
+    
+    e2 = db_service.entity.get(60)
+    assert len(e2.intelligence_data.active_jobs) == 0
+    assert e2.intelligence_data.inference_status.clip_embedding == "completed"
+
 
 def test_missing_entity_prevention(db_service):
-    # Try to create job for non-existent entity
-    with pytest.raises(ValueError):
-        db_service.job.create(EntityJobSchema(
-            entity_id=999, job_id="j1", task_type="t", status="q", created_at=0, updated_at=0
-        ))
-        
-    # Ignore exception=True
-    res = db_service.job.create(
-        EntityJobSchema(entity_id=999, job_id="j1", task_type="t", status="q", created_at=0, updated_at=0),
-        ignore_exception=True
-    )
+    """Test updating intelligence for non-existent entity."""
+    intel = EntityIntelligenceData(last_updated=0, overall_status="new")
+    
+    # Should check return value or raise?
+    # update_intelligence_data returns None if not found
+    res = db_service.entity.update_intelligence_data(999, intel)
     assert res is None

@@ -43,43 +43,51 @@ class FaceDBService(BaseDBService[FaceSchema]):
     @with_retry(max_retries=10)
     def get_by_entity_id(self, entity_id: int) -> list[FaceSchema]:
         """Get all faces for an entity."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             objs = db.query(Face).filter(Face.entity_id == entity_id).all()
             return [self._to_schema(obj) for obj in objs]
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def get_by_known_person_id(self, known_person_id: int) -> list[FaceSchema]:
         """Get all faces for a known person."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             objs = db.query(Face).filter(Face.known_person_id == known_person_id).all()
             return [self._to_schema(obj) for obj in objs]
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def count_by_entity_id(self, entity_id: int) -> int:
         """Count faces for an entity."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             return db.query(Face).filter(Face.entity_id == entity_id).count()
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def count_by_known_person_id(self, known_person_id: int) -> int:
         """Count faces for a known person."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             return db.query(Face).filter(Face.known_person_id == known_person_id).count()
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     def _prepare_data(self, data: FaceSchema) -> dict:
         """Prepare dict for DB with serialized JSON fields."""
@@ -94,7 +102,8 @@ class FaceDBService(BaseDBService[FaceSchema]):
     @with_retry(max_retries=10)
     def create(self, data: FaceSchema, ignore_exception: bool = False) -> FaceSchema | None:
         """Create face (overridden to handle JSON serialization)."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             # Check entity exists
             entity_exists = db.query(Entity.id).filter(Entity.id == data.entity_id).scalar() is not None
@@ -117,13 +126,15 @@ class FaceDBService(BaseDBService[FaceSchema]):
             logger.error(f"Failed to create Face: {e}")
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def update(self, id: int, data: FaceSchema, ignore_exception: bool = False) -> FaceSchema | None:
         """Update face (overridden to handle JSON serialization)."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             obj = db.query(Face).filter(Face.id == id).first()
             if not obj:
@@ -142,7 +153,8 @@ class FaceDBService(BaseDBService[FaceSchema]):
                 return None
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
@@ -151,7 +163,8 @@ class FaceDBService(BaseDBService[FaceSchema]):
         if not data_list:
             return []
 
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             # Group by entity_id to verify existence efficiently
             entity_ids = {d.entity_id for d in data_list}
@@ -177,7 +190,8 @@ class FaceDBService(BaseDBService[FaceSchema]):
                 return []
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
@@ -188,7 +202,8 @@ class FaceDBService(BaseDBService[FaceSchema]):
             data: Face data
             ignore_exception: If True, return None on errors (e.g., entity deleted during callback)
         """
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             # Check if entity exists before writing face
             entity_exists = db.query(Entity.id).filter(Entity.id == data.entity_id).scalar() is not None
@@ -225,13 +240,15 @@ class FaceDBService(BaseDBService[FaceSchema]):
             logger.error(f"Failed to create/update Face id={data.id}: {e}")
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def update_known_person_id(self, face_id: int, known_person_id: int | None) -> FaceSchema | None:
         """Link/unlink face to known person."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             obj = db.query(Face).filter(Face.id == face_id).first()
             if not obj:
@@ -245,7 +262,8 @@ class FaceDBService(BaseDBService[FaceSchema]):
             db.rollback()
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
 
 class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
@@ -256,7 +274,8 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
     @with_retry(max_retries=10)
     def delete(self, id: int) -> bool:
         """Delete person only if no faces linked."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             person = db.query(KnownPerson).filter_by(id=id).first()
             if not person:
@@ -277,13 +296,15 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
             db.rollback()
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def get(self, id: int) -> KnownPersonSchema | None:
         """Get known person by ID with face count."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             obj = db.query(KnownPerson).filter_by(id=id).first()
             if not obj:
@@ -294,13 +315,15 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
             schema.face_count = db.query(Face).filter(Face.known_person_id == id).count()
             return schema
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def create_with_flush(self) -> KnownPersonSchema:
         """Create new person and flush to get ID (for immediate linking)."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             now = _now_timestamp()
             obj = KnownPerson(created_at=now, updated_at=now)
@@ -316,13 +339,15 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
             db.rollback()
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def update_name(self, person_id: int, name: str) -> KnownPersonSchema | None:
         """Update person name."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             obj = db.query(KnownPerson).filter(KnownPerson.id == person_id).first()
             if not obj:
@@ -340,22 +365,26 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
             db.rollback()
             raise
         finally:
-            db.close()
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
     def exists(self, person_id: int) -> bool:
         """Check if person exists."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             return db.query(KnownPerson.id).filter(KnownPerson.id == person_id).scalar() is not None
         finally:
-            db.close()
+            if should_close:
+                db.close()
     @timed
     @with_retry(max_retries=10)
     def get_all(self) -> list[KnownPersonSchema]:
         """Get all known persons with face counts."""
-        db = database.SessionLocal()
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
         try:
             from sqlalchemy import func
             # Efficiently fetch persons with their face counts
@@ -373,5 +402,6 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
                 schemas.append(s)
             return schemas
         finally:
-            db.close()
+            if should_close:
+                db.close()
 

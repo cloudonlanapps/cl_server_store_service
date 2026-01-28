@@ -7,7 +7,7 @@ from datetime import datetime
 
 import pytest
 
-from store.common.schemas import Item
+from store.db_service.schemas import EntitySchema as Item
 from tests.test_media_files import get_test_media_files
 
 

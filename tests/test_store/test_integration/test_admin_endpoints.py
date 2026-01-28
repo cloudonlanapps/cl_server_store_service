@@ -91,11 +91,11 @@ class TestAdminConfigPutEndpoint:
         self, auth_client, admin_token, test_db_session
     ):
         """Config changes via PUT should be persisted in database."""
-        from store.store.config_service import ConfigService
+        from store.db_service.config import ConfigDBService
 
         # Clear cache before test
-        ConfigService._cache.clear()
-        ConfigService._cache_timestamps.clear()
+        ConfigDBService._cache.clear()
+        ConfigDBService._cache_timestamps.clear()
 
         # Update config via API (guest_mode=false means read_auth_enabled=true)
         headers = {"Authorization": f"Bearer {admin_token}"}
@@ -106,7 +106,7 @@ class TestAdminConfigPutEndpoint:
         assert response.status_code == 200
 
         # Verify it was persisted in database
-        config_service = ConfigService(test_db_session)
+        config_service = ConfigDBService(test_db_session)
         is_enabled = config_service.get_read_auth_enabled()
         assert is_enabled is True
 

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from store.store.config import StoreConfig
-from store.store.monitor import MInsightMonitor
+from store.broadcast_service.monitor import MInsightMonitor
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ def test_monitor_start_disabled(mock_store_config):
     monitor.start()
     assert monitor.broadcaster is None
 
-@patch("store.store.monitor.get_broadcaster")
+@patch("store.broadcast_service.monitor.get_broadcaster")
 def test_monitor_start_enabled(mock_get_broadcaster, mock_store_config):
     """Test successful monitor start."""
     mock_mqtt_broadcaster = MagicMock()
@@ -42,7 +42,7 @@ def test_monitor_start_enabled(mock_get_broadcaster, mock_store_config):
     mock_client.subscribe.assert_called()
     mock_client.loop_start.assert_called_once()
 
-@patch("store.store.monitor.get_broadcaster")
+@patch("store.broadcast_service.monitor.get_broadcaster")
 def test_monitor_start_failure(mock_get_broadcaster, mock_store_config):
     """Test monitor start with exception."""
     mock_get_broadcaster.side_effect = Exception("MQTT Fail")
@@ -92,7 +92,7 @@ def test_monitor_on_message_variants(mock_store_config):
 def test_monitor_get_status(mock_store_config):
     """Test get_status logic."""
     monitor = MInsightMonitor(mock_store_config)
-    from store.common.schemas import MInsightStatus
+    from store.broadcast_service.schemas import MInsightStatus
     monitor.process_status = MInsightStatus(status="ok", timestamp=0)
 
     # Get status
