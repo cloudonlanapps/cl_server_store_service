@@ -65,6 +65,9 @@ class JobInfo(BaseModel):
     job_id: str
     task_type: str  # clip_embedding, dino_embedding, face_detection, etc.
     started_at: int
+    status: str = "queued"
+    completed_at: int | None = None
+    error_message: str | None = None
 
 
 class InferenceStatus(BaseModel):
@@ -90,6 +93,7 @@ class EntityIntelligenceData(BaseModel):
 
     # Job Tracking (Explicit List)
     active_jobs: list[JobInfo] = Field(default_factory=list)
+    job_history: list[JobInfo] = Field(default_factory=list)
 
     # Fine-grained status for UI (Explicit Model)
     inference_status: InferenceStatus = Field(default_factory=InferenceStatus)

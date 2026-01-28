@@ -63,7 +63,14 @@ class JobSubmissionService:
         """
         return int(datetime.now(UTC).timestamp() * 1000)
 
-    def update_job_status(self, entity_id: int, job_id: str, status: str, error_message: str | None = None) -> None:
+    def update_job_status(
+        self, 
+        entity_id: int, 
+        job_id: str, 
+        status: str, 
+        error_message: str | None = None,
+        completed_at: int | None = None
+    ) -> None:
         """Update job status in Entity.intelligence_data.
 
         Args:
@@ -71,6 +78,7 @@ class JobSubmissionService:
             job_id: Job ID to update
             status: New job status (e.g., "completed", "failed")
             error_message: Optional error message if job failed
+            completed_at: Optional completion timestamp from compute service
         """
         try:
             entity = self.db.entity.get(entity_id)
@@ -81,8 +89,13 @@ class JobSubmissionService:
             data = entity.intelligence_data
             
             # Find and update job in active_jobs
+            finished_job: JobInfo | None = None
             for job in data.active_jobs:
                 if job.job_id == job_id:
+                    job.status = status
+                    job.completed_at = completed_at
+                    job.error_message = error_message
+                    
                     # Update status in inference_status
                     if job.task_type == "face_detection":
                         data.inference_status.face_detection = status
@@ -91,14 +104,15 @@ class JobSubmissionService:
                     elif job.task_type == "dino_embedding":
                         data.inference_status.dino_embedding = status
                     
-                    # Remove from active_jobs if finished
+                    # Store reference if finished
                     if status in ("completed", "failed"):
-                        data.active_jobs = [j for j in data.active_jobs if j.job_id != job_id]
+                        finished_job = job
                     break
-            else:
-                # Might be a face embedding job (if we track them differently or search list)
-                # For now just use the task_type if known.
-                pass
+            
+            # Move to history if finished
+            if finished_job:
+                data.active_jobs = [j for j in data.active_jobs if j.job_id != job_id]
+                data.job_history.append(finished_job)
             
             if error_message:
                 data.error_message = error_message
@@ -171,7 +185,8 @@ class JobSubmissionService:
         data.active_jobs.append(JobInfo(
             job_id=job_id,
             task_type=task_type,
-            started_at=now
+            started_at=now,
+            status="queued"
         ))
         data.last_updated = now
         _ = self.db.entity.update_intelligence_data(entity.id, data)

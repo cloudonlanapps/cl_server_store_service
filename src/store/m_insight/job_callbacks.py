@@ -244,7 +244,7 @@ class JobCallbackHandler:
                             )
                             if self.job_submission_service:
                                 self.job_submission_service.update_job_status(
-                                    entity_id, job_resp.job_id, job_resp.status, job_resp.error_message
+                                    entity_id, job_resp.job_id, job_resp.status, job_resp.error_message, job_resp.completed_at
                                 )
 
                         await self.job_submission_service.submit_face_embedding(
@@ -261,7 +261,7 @@ class JobCallbackHandler:
             # Update job status in store database
             if self.job_submission_service:
                 self.job_submission_service.update_job_status(
-                    entity_id, job.job_id, job.status, job.error_message
+                    entity_id, job.job_id, job.status, job.error_message, job.completed_at
                 )
 
         except Exception as e:
@@ -333,7 +333,7 @@ class JobCallbackHandler:
             # Update job status in store database
             if self.job_submission_service:
                 self.job_submission_service.update_job_status(
-                    entity_id, job.job_id, job.status, job.error_message
+                    entity_id, job.job_id, job.status, job.error_message, job.completed_at
                 )
 
         except Exception as e:
@@ -404,7 +404,7 @@ class JobCallbackHandler:
             # Update job status in store database
             if self.job_submission_service:
                 self.job_submission_service.update_job_status(
-                    entity_id, job.job_id, job.status, job.error_message
+                    entity_id, job.job_id, job.status, job.error_message, job.completed_at
                 )
 
         except Exception as e:

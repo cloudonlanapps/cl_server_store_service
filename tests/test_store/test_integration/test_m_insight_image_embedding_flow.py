@@ -60,7 +60,7 @@ async def test_m_insight_image_embedding_flow(
     
     import paho.mqtt.client as mqtt
     
-    mqtt_client = mqtt.Client()
+    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     
     def on_message(client, userdata, msg):
         try:
