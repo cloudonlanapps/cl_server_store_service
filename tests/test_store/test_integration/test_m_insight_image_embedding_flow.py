@@ -22,7 +22,7 @@ TIMEOUT = 30.0
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Skipping temporarily as this test is expeected to fail")
+#@pytest.mark.skip(reason="Skipping temporarily as this test is expeected to fail")
 async def test_m_insight_image_embedding_flow(
     client: Any, 
     integration_config: Any, 
@@ -70,8 +70,12 @@ async def test_m_insight_image_embedding_flow(
             entity_id = int(parts[-1])
             
             payload_str = msg.payload.decode()
+            print(f"\n[DEBUG TEST MQTT] Received message on topic: {msg.topic}")
+            print(f"[DEBUG TEST MQTT] Payload: {payload_str}")
+            
             if not payload_str:
                 # Empty payload = cleanup
+                print(f"[DEBUG TEST MQTT] Empty payload for entity {entity_id}, clearing")
                 asyncio.run_coroutine_threadsafe(
                     message_queue.put((entity_id, "CLEARED", {})), 
                     loop
@@ -80,7 +84,7 @@ async def test_m_insight_image_embedding_flow(
 
             data = json.loads(payload_str)
             status = data.get("status")
-            timestamp = data.get("timestamp")
+            print(f"[DEBUG TEST MQTT] Parsed status: {status} for entity {entity_id}")
             
             # Put in queue
             asyncio.run_coroutine_threadsafe(
@@ -89,13 +93,13 @@ async def test_m_insight_image_embedding_flow(
             )
             
         except Exception as e:
-            logging.error(f"Test MQTT handler failed: {e}")
+            print(f"[DEBUG TEST MQTT] Error in handler: {e}")
 
     mqtt_client.on_message = on_message
     
     loop = asyncio.get_running_loop()
     
-    logging.info(f"Connecting to MQTT broker {mqtt_broker}:{mqtt_port}...")
+    print(f"\n[DEBUG TEST] Connecting to MQTT broker {mqtt_broker}:{mqtt_port}...")
     mqtt_client.connect(mqtt_broker, mqtt_port, 60)
     mqtt_client.subscribe(topic_filter)
     mqtt_client.loop_start()
@@ -104,15 +108,6 @@ async def test_m_insight_image_embedding_flow(
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
     # Prepare MInsight Processor
-    # Need to construct MInsightConfig from integration_config
-    # Note: integration_config is pydantic model IntegrationConfig (from conftest)
-    # MInsightConfig is different.
-    
-    # We need absolute path for dirs
-    # client fixture uses clean_data_dir setup in app.state.config
-    # We can try to reuse that or just assume standard structure since clean_data_dir is session/function scoped 
-    # but clean_data_dir path is available in client fixture... wait, client fixture overrides CL_SERVER_DIR env var to str(clean_data_dir)
-    # We can get it from os.environ
     import os
     server_dir = Path(os.environ["CL_SERVER_DIR"])
     
@@ -141,6 +136,7 @@ async def test_m_insight_image_embedding_flow(
     image_path = TEST_VECTORS_DIR / "images" / "test_face_single.jpg"
     
     if not image_path.exists():
+        print(f"[DEBUG TEST] Image NOT FOUND: {image_path}")
         pytest.skip(f"Test image not found: {image_path}")
 
     try:
@@ -148,10 +144,11 @@ async def test_m_insight_image_embedding_flow(
         with patch("store.db_service.database.SessionLocal", side_effect=TestingSessionLocal):
             
             # Initialize Processor inside patch context so it gets correct DB session
+            print("[DEBUG TEST] Initializing processor...")
             processor = MediaInsight(config=min_config, broadcaster=proc_broadcaster)
         
             # 2. Upload Image
-            # client is a synchronous TestClient
+            print(f"[DEBUG TEST] Uploading image: {image_path}")
             with open(image_path, "rb") as f:
                 response = client.post(
                     "/entities", 
@@ -160,12 +157,11 @@ async def test_m_insight_image_embedding_flow(
                 )
             assert response.status_code == 201
             entity_id = response.json()["id"]
-            logging.info(f"Created entity {entity_id}")
+            print(f"[DEBUG TEST] Created entity {entity_id}")
 
             # 3. Trigger Processing & Wait for Events
             
             # Run processor once to pick up the job
-            # This simulates the worker waking up on valid interaction
             logging.info("Triggering processor run_once...")
             await processor.run_once()
 
@@ -173,11 +169,9 @@ async def test_m_insight_image_embedding_flow(
             final_payload = None
             
             start_time = loop.time()
+            logging.info(f"Waiting for events (timeout {TIMEOUT}s)...")
             while (loop.time() - start_time) < TIMEOUT:
                 try:
-                    # Check if we should re-trigger (simulating loop)
-                    # Use asyncio.sleep to yield control
-                    
                     # Wait for next message
                     try:
                         eid, status, payload = await asyncio.wait_for(message_queue.get(), timeout=1.0)
@@ -197,38 +191,31 @@ async def test_m_insight_image_embedding_flow(
                             pytest.fail(f"Entity processing failed: {payload}")
                             
                     except asyncio.TimeoutError:
-                        # Timeout on queue, maybe processing is slow?
-                        # Trigger run_once again to poll/continue
-                        # (Not strictly needed if async jobs run in background, but run_once might handle transitions)
-                        # Actually, run_once submits jobs. Callbacks update status.
-                        # Do we need to keep calling something?
-                        # If callbacks are handled by ComputeClient automatically (if it has background thread), we just wait.
                         pass
                         
-                except asyncio.TimeoutError:
+                except Exception as e:
+                    logging.error(f"Loop error: {e}")
                     continue
                     
             assert "completed" in received_statuses, f"Did not receive 'completed' status. Got: {received_statuses}"
             assert final_payload is not None
             
-            # Verify payload details (Pydantic model serialized to dict)
-            details = final_payload.get("details", {})
-            
-            # Flattened structure: details { face_detection: "completed", clip_embedding: "completed", ... }
-            assert details.get("face_detection") == "completed"
-            assert details.get("clip_embedding") == "completed"
-            assert details.get("dino_embedding") == "completed"
+            # Verify payload (Pydantic model serialized to dict for the test handler)
+            # Flattened structure: { face_detection: "completed", clip_embedding: "completed", ... }
+            assert final_payload.get("face_detection") == "completed"
+            assert final_payload.get("clip_embedding") == "completed"
+            assert final_payload.get("dino_embedding") == "completed"
             
             # Face embeddings check
-            face_embeddings = details.get("face_embeddings")
-            assert isinstance(face_embeddings, list)
+            face_embeddings = final_payload.get("face_embeddings")
             if face_embeddings:
+                assert isinstance(face_embeddings, list)
                 assert all(s == "completed" for s in face_embeddings)
             
             # 4. Verify Admin Clear
             # Skip as planned
             
-            logging.info("MQTT flow verification successful")
+            print("[DEBUG TEST] MQTT flow verification successful")
 
     finally:
         mqtt_client.loop_stop()

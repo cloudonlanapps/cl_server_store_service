@@ -107,19 +107,33 @@ class JobSubmissionService:
             
             # Re-calculate overall status
             inf = data.inference_status
-            critical = [inf.face_detection, inf.clip_embedding, inf.dino_embedding]
             
-            if any(s == "failed" for s in critical):
-                data.overall_status = "failed"
-            elif all(s == "completed" for s in critical):
-                data.overall_status = "completed"
-            elif all(s == "pending" for s in critical):
+            # 1. Collect all status fields that must be terminal
+            all_statuses: list[str] = [
+                inf.face_detection, 
+                inf.clip_embedding, 
+                inf.dino_embedding
+            ]
+            if inf.face_embeddings is not None:
+                all_statuses.extend(inf.face_embeddings)
+            
+            # 2. Check terminal states
+            is_terminal = all(s in ("completed", "failed") for s in all_statuses)
+            any_failed = any(s == "failed" for s in all_statuses)
+            all_pending = all(s == "pending" for s in all_statuses)
+            
+            if is_terminal:
+                data.overall_status = "failed" if any_failed else "completed"
+            elif all_pending:
                 data.overall_status = "queued"
             else:
                 data.overall_status = "processing"
 
             _ = self.db.entity.update_intelligence_data(entity_id, data)
-            logger.debug(f"Updated job {job_id} for entity {entity_id} to status {status}")
+            logger.debug(
+                f"Updated job {job_id} for entity {entity_id} to status {status}. "
+                f"Overall: {data.overall_status}"
+            )
             self.broadcast_entity_status(entity_id)
 
         except Exception as e:
