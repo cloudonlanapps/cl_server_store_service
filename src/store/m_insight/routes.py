@@ -162,8 +162,10 @@ async def get_entity_jobs(
             data = entity.intelligence_data
             if isinstance(data, dict):
                 raw_data = cast(dict[str, object], data)
-                return cast(list[JobInfo], raw_data.get("active_jobs", []))
-            return data.active_jobs
+                active = cast(list[JobInfo], raw_data.get("active_jobs", []))
+                history = cast(list[JobInfo], raw_data.get("job_history", []))
+                return active + history
+            return data.active_jobs + data.job_history
         return []
     except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -251,101 +253,3 @@ async def update_person_name(
     return result
 
 
-@router.get(
-    "/entities/{entity_id}/similar",
-    tags=["entity", "similarity"],
-    summary="Find Similar Images",
-    description="Finds images similar to the specified entity using CLIP embeddings.",
-    operation_id="find_similar_images",
-)
-async def find_similar_images(
-    entity_id: int = Path(..., title="Entity Id"),
-    limit: int = Query(20, gt=0, le=100),
-    threshold: float = Query(0.7, ge=0.0, le=1.0),
-    user: UserPayload | None = Depends(require_permission("media_store_read")),
-    db: DBService = Depends(get_db_service),
-    clip_store: QdrantVectorStore = Depends(get_clip_store_dep),
-) -> list[intel_schemas.SearchResult]:
-    """Find similar images using CLIP."""
-    _ = user
-
-    try:
-        _ = db.entity.get_or_raise(entity_id)
-        # Get vector for entity
-        vector_item = clip_store.get_vector(entity_id)
-        if not vector_item:
-            raise VectorResourceNotFound(f"CLIP vector for entity {entity_id} not found")
-
-        # Search similar
-        prefs = SearchPreferences(score_threshold=threshold)
-        results = clip_store.search(vector_item.embedding, limit=limit, search_options=prefs)
-        
-        # Exclude self
-        return [r for r in results if r.id != entity_id]
-    except ResourceNotFoundError:
-        raise HTTPException(status_code=404, detail="Entity not found")
-    except VectorResourceNotFound:
-        return []
-
-
-@router.get(
-    "/faces/{face_id}/similar",
-    tags=["face-detection", "similarity"],
-    summary="Find Similar Faces",
-    description="Finds faces similar to the specified face using face embeddings.",
-    operation_id="find_similar_faces",
-)
-async def find_similar_faces(
-    face_id: int = Path(..., title="Face Id"),
-    limit: int = Query(20, gt=0, le=100),
-    threshold: float = Query(0.6, ge=0.0, le=1.0),
-    user: UserPayload | None = Depends(require_permission("media_store_read")),
-    db: DBService = Depends(get_db_service),
-    face_store: QdrantVectorStore = Depends(get_face_store_dep),
-) -> list[intel_schemas.SearchResult]:
-    """Find similar faces."""
-    _ = user
-
-    try:
-        _ = db.face.get_or_raise(face_id)
-        # Get vector
-        vector_item = face_store.get_vector(face_id)
-        if not vector_item:
-            raise VectorResourceNotFound(f"Face vector for face {face_id} not found")
-
-        # Search similar
-        prefs = SearchPreferences(score_threshold=threshold)
-        results = face_store.search(vector_item.embedding, limit=limit, search_options=prefs)
-
-        # Exclude self
-        return [r for r in results if r.id != face_id]
-    except ResourceNotFoundError:
-        raise HTTPException(status_code=404, detail="Face not found")
-    except VectorResourceNotFound:
-        return []
-
-
-@router.get(
-    "/faces/{face_id}/matches",
-    tags=["face-detection", "similarity"],
-    summary="Get Face Matches",
-    description="Finds matching faces for the specified face with a higher threshold.",
-    operation_id="get_face_matches",
-)
-async def get_face_matches(
-    face_id: int = Path(..., title="Face Id"),
-    limit: int = Query(10, gt=0, le=50),
-    user: UserPayload | None = Depends(require_permission("media_store_read")),
-    db: DBService = Depends(get_db_service),
-    face_store: QdrantVectorStore = Depends(get_face_store_dep),
-) -> list[intel_schemas.SearchResult]:
-    """Get face matches (higher threshold)."""
-    # Use higher threshold for "matches"
-    return await find_similar_faces(
-        face_id=face_id,
-        limit=limit,
-        threshold=0.85,
-        user=user,
-        db=db,
-        face_store=face_store
-    )

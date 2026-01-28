@@ -189,6 +189,11 @@ class JobCallbackHandler:
 
             if not faces_data:
                 logger.warning(f"No faces found in job output for image {entity_id}")
+                # Update job status as completed (with 0 faces) so the pipeline doesn't stall
+                if self.job_submission_service:
+                    self.job_submission_service.update_job_status(
+                        entity_id, job.job_id, "completed", None, job.completed_at
+                    )
                 return
 
             entity = self.db.entity.get(entity_id) # Already checked in verify_job_safety but need for schema

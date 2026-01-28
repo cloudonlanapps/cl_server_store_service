@@ -9,7 +9,6 @@ from store.db_service.schemas import (
     FaceSchema as FaceSchema,
     KnownPersonSchema as KnownPersonSchema,
 )
-from store.vectorstore_services.schemas import SearchResult as SearchResult
 
 # Processing and Entity schemas
 class JobSubmissionStatus(BaseModel):
