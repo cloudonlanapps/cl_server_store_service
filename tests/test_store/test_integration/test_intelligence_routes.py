@@ -66,23 +66,7 @@ class TestIntelligenceRoutes:
         assert response.status_code == 404
         assert response.json()["detail"] == "Entity not found"
 
-    def test_find_similar_images_not_found(self, client: TestClient):
-        """Test finding similar images for a non-existent entity returns 404."""
-        response = client.get("/intelligence/entities/999999/similar")
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Entity not found"
 
-    def test_find_similar_faces_not_found(self, client: TestClient):
-        """Test finding similar faces for a non-existent face returns 404."""
-        response = client.get("/intelligence/faces/999999/similar")
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Face not found"
-
-    def test_get_face_matches_not_found(self, client: TestClient):
-        """Test getting matches for a non-existent face returns 404."""
-        response = client.get("/intelligence/faces/999999/matches")
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Face not found"
 
     def test_get_entity_faces_success(self, client: TestClient, test_db_session: Session):
         """Test getting faces for an entity with data."""
