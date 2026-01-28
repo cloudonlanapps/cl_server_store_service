@@ -177,7 +177,10 @@ def with_retry(
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator to retry a function on SQLite locking errors."""
 
+    from functools import wraps
+
     def decorator(func: Callable[P, T]) -> Callable[P, T]:
+        @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             last_error: OperationalError | None = None
             delay = initial_delay
