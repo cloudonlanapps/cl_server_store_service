@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING
+from loguru import logger
 
 from cl_ml_tools import BroadcasterBase, get_broadcaster
 from .schemas import MInsightStatus
@@ -94,6 +95,7 @@ class MInsightBroadcaster:
             return
 
         topic = f"{self.topic_base}/entity_item_status/{entity_id}"
+        logger.debug(f"Publishing entity status for {entity_id} to {topic}: {payload.status}")
         _ = self.broadcaster.publish_retained(
             topic=topic,
             payload=payload.model_dump_json(),
