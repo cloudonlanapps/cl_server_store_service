@@ -191,6 +191,43 @@ class JobSubmissionService:
         data.last_updated = now
         _ = self.db.entity.update_intelligence_data(entity.id, data)
 
+    def _register_failed_job(self, entity: EntitySchema | EntityVersionSchema, task_type: str, error_message: str) -> None:
+        """Helper to register a failed job submission."""
+        now = self._now_timestamp()
+        db_entity = self.db.entity.get(entity.id)
+        if not db_entity:
+            return
+
+        data = db_entity.intelligence_data or EntityIntelligenceData(last_updated=now)
+        data.active_processing_md5 = db_entity.md5
+        
+        # Set specific task status to failed
+        if task_type == "face_detection":
+            data.inference_status.face_detection = "failed"
+        elif task_type == "clip_embedding":
+            data.inference_status.clip_embedding = "failed"
+        elif task_type == "dino_embedding":
+            data.inference_status.dino_embedding = "failed"
+            
+        data.error_message = error_message
+        data.last_updated = now
+        
+        # Add to history
+        data.job_history.append(JobInfo(
+            job_id=f"failed_submission_{now}",
+            task_type=task_type,
+            started_at=now,
+            status="failed",
+            error_message=error_message,
+            completed_at=now
+        ))
+
+        # Update overall status
+        data.overall_status = "failed"
+
+        _ = self.db.entity.update_intelligence_data(entity.id, data)
+        self.broadcast_entity_status(entity.id)
+
     @timed
     def _get_entity_status(self, entity_id: int) -> EntityStatusPayload | None:
         """Get status payload from denormalized field."""
@@ -271,6 +308,7 @@ class JobSubmissionService:
 
         except Exception as e:
             logger.error(f"Failed to submit face_detection job for entity {entity.id}: {e}")
+            self._register_failed_job(entity, "face_detection", str(e))
             return None
 
     @timed
@@ -307,6 +345,7 @@ class JobSubmissionService:
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit clip_embedding job for entity {entity.id}: {e}")
+            self._register_failed_job(entity, "clip_embedding", str(e))
             return None
 
     @timed
@@ -343,6 +382,7 @@ class JobSubmissionService:
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit dino_embedding job for entity {entity.id}: {e}")
+            self._register_failed_job(entity, "dino_embedding", str(e))
             return None
 
     @timed
@@ -382,4 +422,8 @@ class JobSubmissionService:
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit face_embedding job for face {face.id}: {e}")
+            # Note: face embedding failure doesn't necessarily fail the whole entity,
+            # but we should probably record it. However, face embedding structure is distinct.
+            # Tracking validation: face_embeddings status is a list.
+            # For now, relying on log for face embedding specific failure to avoid complexity with list indices.
             return None
