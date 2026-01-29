@@ -91,7 +91,7 @@ class JobCallbackHandler:
         """Verify if job should be processed (safety checks)."""
         entity = self.db.entity.get(entity_id)
         if not entity:
-            logger.error(f"Entity {entity_id} not found for job {job_id}")
+            logger.info(f"Entity {entity_id} no longer exists, skipping callback for job {job_id}")
             return False
 
         if entity.is_deleted:

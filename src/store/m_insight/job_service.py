@@ -128,18 +128,17 @@ class JobSubmissionService:
                 inf.clip_embedding, 
                 inf.dino_embedding
             ]
-            if inf.face_embeddings is not None:
+            if inf.face_embeddings is not None and len(inf.face_embeddings) > 0:
                 all_statuses.extend(inf.face_embeddings)
             
             # 2. Check terminal states
+            # If we just finished face detection but haven't sent face embeddings yet,
+            # face_embeddings list will be configured but all will be 'pending'.
             is_terminal = all(s in ("completed", "failed") for s in all_statuses)
             any_failed = any(s == "failed" for s in all_statuses)
-            all_pending = all(s == "pending" for s in all_statuses)
             
             if is_terminal:
                 data.overall_status = "failed" if any_failed else "completed"
-            elif all_pending:
-                data.overall_status = "queued"
             else:
                 data.overall_status = "processing"
 
