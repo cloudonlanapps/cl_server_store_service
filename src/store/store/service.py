@@ -563,8 +563,16 @@ class EntityService:
             # Check for duplicate MD5 (excluding current entity)
             duplicate = self._check_duplicate_md5(file_meta.md5, exclude_entity_id=entity_id)
             if duplicate:
-                # Return the existing item instead of raising an error
-                return (self._entity_to_item(duplicate), True)  # is_duplicate=True
+                # Raise error if this content already exists as a DIFFERENT entity
+                raise DuplicateFileError(
+                    f"File content matches existing entity {duplicate.id}. "
+                    "Update would create a duplicate across entities."
+                )
+            
+            # If MD5 is the same as current entity, we can potentially skip re-saving?
+            # But the metadata (mime_type, width, etc.) might still be useful to update.
+            # Currently we continue with saving for simplicity, but MD5 check above 
+            # ensures we don't duplicate *across* entities.
 
             # Delete old file if exists
             old_file_path = entity.file_path

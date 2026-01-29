@@ -140,14 +140,18 @@ async def create_entity(
         else:
             response.status_code = status.HTTP_201_CREATED
 
+        # CRITICAL: Clear retained MQTT status to prevent "ghost" statuses from ID reuse
+        if broadcaster:
+            status_topic = f"mInsight/{config.port}/entity_item_status/{item.id}"
+            _ = broadcaster.clear_retained(status_topic)
+            logger.debug(f"Cleared retained status for entity {item.id} on {status_topic}")
+
         # Broadcast MQTT event only if this was a new entity (not a duplicate)
         if broadcaster and item.md5 and not is_duplicate:
             topic = f"store/{config.port}/items"
             payload = {"id": item.id, "md5": item.md5, "timestamp": int(time.time() * 1000)}
             _ = broadcaster.publish_event(topic=topic, payload=json.dumps(payload))
             logger.info(f"Broadcasted creation event for item {item.id} on {topic}")
-
-        # Trigger async jobs for images (NON-BLOCKING)
 
         return item
     except ValueError as e:
@@ -173,8 +177,20 @@ async def create_entity(
 async def delete_collection(
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
+    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
 ):
     _ = user
+    config = service.config
+    
+    # Query all existing entity IDs to clear their MQTT retained statuses
+    if broadcaster:
+        from store.db_service.db_internals import Entity
+        all_ids = [row[0] for row in service.db.query(Entity.id).all()]
+        for eid in all_ids:
+            topic = f"mInsight/{config.port}/entity_item_status/{eid}"
+            _ = broadcaster.clear_retained(topic)
+        logger.info(f"Cleared retained status for {len(all_ids)} entities before collection deletion")
+
     service.delete_all_entities()
     # No return statement - FastAPI will return 204 automatically
 
@@ -250,23 +266,31 @@ async def put_entity(
             filename=filename,
             user_id=user_id,
         )
-        if not result:
+        if result is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
 
-        item, is_duplicate = result
+        item, _ = result
 
-        # Broadcast MQTT event only if file was actually updated (not a duplicate)
+        # CRITICAL: Clear retained MQTT status if we are updating with a new file (re-processing)
+        if broadcaster and image:
+            status_topic = f"mInsight/{config.port}/entity_item_status/{item.id}"
+            _ = broadcaster.clear_retained(status_topic)
+            logger.debug(f"Cleared retained status for entity {item.id} on {status_topic}")
+
+        # Broadcast MQTT event only if file was actually updated
         # Note: Broadcaster only emits if a file was actually updated (item.md5 is not None for media)
-        if broadcaster and item.md5 and image and not is_duplicate:
+        if broadcaster and item.md5 and image:
             topic = f"store/{config.port}/items"
             payload = {"id": item.id, "md5": item.md5, "timestamp": int(time.time() * 1000)}
             _ = broadcaster.publish_event(topic=topic, payload=json.dumps(payload))
             logger.info(f"Broadcasted update event for item {item.id} on {topic}")
 
         return item
+    except DuplicateFileError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         # Validation errors or invalid file format
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except RuntimeError as e:
         # Tool execution failure (ExifTool, ffprobe)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -362,13 +386,21 @@ async def delete_entity(
     entity_id: int,
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
+    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
 ):
     _ = user
+    config = service.config
 
     # Delete entity (will raise ValueError if not soft-deleted first)
     deleted = service.delete_entity(entity_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
+
+    # CRITICAL: Clear retained MQTT status on deletion
+    if broadcaster:
+        status_topic = f"mInsight/{config.port}/entity_item_status/{entity_id}"
+        _ = broadcaster.clear_retained(status_topic)
+        logger.debug(f"Cleared retained status for entity {entity_id} on {status_topic} (deletion)")
 
     # No return statement - FastAPI will return 204 automatically
 
