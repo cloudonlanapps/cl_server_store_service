@@ -6,10 +6,11 @@ if TYPE_CHECKING:
     from store.broadcast_service.broadcaster import MInsightBroadcaster
     from store.broadcast_service.schemas import EntityStatusPayload
 
+import asyncio
 from datetime import UTC, datetime
 
 from cl_client import ComputeClient
-from cl_client.models import OnJobResponseCallback
+from cl_client.models import OnJobResponseCallback, JobResponse
 from cl_ml_tools.utils.profiling import timed
 from loguru import logger
 
@@ -24,6 +25,30 @@ from store.db_service import (
 )
 
 from store.broadcast_service.schemas import EntityStatusPayload
+
+
+def make_once_only_callback(callback: OnJobResponseCallback) -> tuple[OnJobResponseCallback, asyncio.Lock]:
+    """Wrap a callback to ensure it only executes once, even if called multiple times.
+
+    This prevents race conditions when both MQTT and manual invocation trigger the same callback.
+
+    Returns:
+        Tuple of (wrapped_callback, lock) - lock can be used to check if callback already fired
+    """
+    executed = False
+    lock = asyncio.Lock()
+
+    async def wrapper(job: JobResponse) -> None:
+        nonlocal executed
+        async with lock:
+            if executed:
+                logger.debug(f"Callback for job {job.job_id} already executed, skipping duplicate call")
+                return
+            executed = True
+        # Execute outside the lock to avoid holding it during callback execution
+        await callback(job)
+
+    return wrapper, lock
 
 
 class JobSubmissionService:
@@ -293,16 +318,30 @@ class JobSubmissionService:
                 logger.warning(f"File not found for entity {entity.id}: {file_path}")
                 return None
 
+            # Wrap callback to ensure it only executes once (prevents race condition)
+            wrapped_callback, callback_lock = make_once_only_callback(on_complete_callback)
+
             job_response = await self.compute_client.face_detection.detect(
                 image=file_path,
                 wait=False,
-                on_complete=on_complete_callback,
+                on_complete=wrapped_callback,
             )
 
             self._register_job(entity, job_response.job_id, "face_detection")
             logger.info(f"Submitted face_detection job {job_response.job_id} for entity {entity.id}")
 
             self.broadcast_entity_status(entity.id)
+
+            # RACE CONDITION FIX: Check if job already completed (for very fast jobs)
+            try:
+                await asyncio.sleep(0.05)  # Small delay to allow MQTT to propagate
+                full_job = await self.compute_client.get_job(job_response.job_id)
+                if full_job and full_job.status in ("completed", "failed"):
+                    logger.debug(f"Job {job_response.job_id} already completed, invoking callback manually")
+                    await wrapped_callback(full_job)  # Use wrapped callback
+            except Exception as e_check:
+                logger.warning(f"Failed to check job status for {job_response.job_id}: {e_check}")
+
             return job_response.job_id
 
         except Exception as e:
@@ -331,16 +370,30 @@ class JobSubmissionService:
                 return None
             file_path = self.storage_service.get_absolute_path(entity.file_path)
 
+            # Wrap callback to ensure it only executes once (prevents race condition)
+            wrapped_callback, callback_lock = make_once_only_callback(on_complete_callback)
+
             job_response = await self.compute_client.clip_embedding.embed_image(
                 image=file_path,
                 wait=False,
-                on_complete=on_complete_callback,
+                on_complete=wrapped_callback,
             )
 
             self._register_job(entity, job_response.job_id, "clip_embedding")
             logger.info(f"Submitted clip_embedding job {job_response.job_id} for entity {entity.id}")
 
             self.broadcast_entity_status(entity.id)
+
+            # RACE CONDITION FIX: Check if job already completed (for very fast jobs)
+            try:
+                await asyncio.sleep(0.05)  # Small delay to allow MQTT to propagate
+                full_job = await self.compute_client.get_job(job_response.job_id)
+                if full_job and full_job.status in ("completed", "failed"):
+                    logger.debug(f"Job {job_response.job_id} already completed, invoking callback manually")
+                    await wrapped_callback(full_job)  # Use wrapped callback
+            except Exception as e_check:
+                logger.warning(f"Failed to check job status for {job_response.job_id}: {e_check}")
+
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit clip_embedding job for entity {entity.id}: {e}")
@@ -368,16 +421,30 @@ class JobSubmissionService:
                 return None
             file_path = self.storage_service.get_absolute_path(entity.file_path)
 
+            # Wrap callback to ensure it only executes once (prevents race condition)
+            wrapped_callback, callback_lock = make_once_only_callback(on_complete_callback)
+
             job_response = await self.compute_client.dino_embedding.embed_image(
                 image=file_path,
                 wait=False,
-                on_complete=on_complete_callback,
+                on_complete=wrapped_callback,
             )
 
             self._register_job(entity, job_response.job_id, "dino_embedding")
             logger.info(f"Submitted dino_embedding job {job_response.job_id} for entity {entity.id}")
 
             self.broadcast_entity_status(entity.id)
+
+            # RACE CONDITION FIX: Check if job already completed (for very fast jobs)
+            try:
+                await asyncio.sleep(0.05)  # Small delay to allow MQTT to propagate
+                full_job = await self.compute_client.get_job(job_response.job_id)
+                if full_job and full_job.status in ("completed", "failed"):
+                    logger.debug(f"Job {job_response.job_id} already completed, invoking callback manually")
+                    await wrapped_callback(full_job)  # Use wrapped callback
+            except Exception as e_check:
+                logger.warning(f"Failed to check job status for {job_response.job_id}: {e_check}")
+
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit dino_embedding job for entity {entity.id}: {e}")
@@ -408,16 +475,31 @@ class JobSubmissionService:
 
             file_path = self.storage_service.get_absolute_path(face.file_path)
 
+            # Wrap callback to ensure it only executes once (prevents race condition)
+            wrapped_callback, callback_lock = make_once_only_callback(on_complete_callback)
+
             job_response = await self.compute_client.face_embedding.embed_faces(
                 image=file_path,
                 wait=False,
-                on_complete=on_complete_callback,
+                on_complete=wrapped_callback,
             )
 
             self._register_job(entity, job_response.job_id, "face_embedding")
             logger.info(f"Submitted face_embedding job {job_response.job_id} for face {face.id}")
 
             self.broadcast_entity_status(entity.id)
+
+            # RACE CONDITION FIX: Check if job already completed (for very fast jobs)
+            # to avoid missing MQTT callback
+            try:
+                await asyncio.sleep(0.05)  # Small delay to allow MQTT to propagate
+                full_job = await self.compute_client.get_job(job_response.job_id)
+                if full_job and full_job.status in ("completed", "failed"):
+                    logger.debug(f"Job {job_response.job_id} already completed, invoking callback manually")
+                    await wrapped_callback(full_job)  # Use wrapped callback
+            except Exception as e:
+                logger.warning(f"Failed to check job status for {job_response.job_id}: {e}")
+
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit face_embedding job for face {face.id}: {e}")
