@@ -101,6 +101,7 @@ async def get_entities(
     responses={201: {"model": EntitySchema, "description": "Successful Response"}},
 )
 async def create_entity(
+    response: Response,
     is_collection: bool = Form(..., title="Is Collection"),
     label: str | None = Form(None, title="Label"),
     description: str | None = Form(None, title="Description"),
@@ -132,6 +133,11 @@ async def create_entity(
             filename=filename,
             user_id=user_id
         )
+
+        if is_duplicate:
+            response.status_code = status.HTTP_200_OK
+        else:
+            response.status_code = status.HTTP_201_CREATED
 
         # Broadcast MQTT event only if this was a new entity (not a duplicate)
         if broadcaster and item.md5 and not is_duplicate:

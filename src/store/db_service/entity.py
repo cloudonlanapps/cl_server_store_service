@@ -97,7 +97,7 @@ class EntityDBService(BaseDBService[EntitySchema]):
             # Note: table names might differ if configured differently, but defaults are usually pluralized + _version
             # or just _version suffix.
             # Plan lists: "entities_version", "known_persons_version", "transaction_changes", "transaction"
-            for table in ["entities_version", "known_persons_version", "transaction_changes", "transaction"]:
+            for table in ["entities_version", "known_persons_version", "transaction_changes", '"transaction"']:
                 try:
                     db.execute(text(f"DELETE FROM {table}"))
                 except Exception as e:
