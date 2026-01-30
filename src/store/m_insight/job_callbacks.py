@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import functools
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +23,39 @@ from .config import MInsightConfig
 from .job_service import JobSubmissionService
 from store.vectorstore_services.schemas import StoreItem
 from store.vectorstore_services.vector_stores import QdrantVectorStore
+
+
+def with_entity_lock(func):
+    """Decorator to wrap callback with entity-level lock for serialization.
+
+    This ensures only one callback runs at a time for a given entity,
+    preventing all race conditions in intelligence_data updates.
+    """
+    @functools.wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        # Extract entity_id from kwargs or positional args
+        # Check both handle_face_embedding_complete(face_id, entity_id, ...)
+        # and other callbacks(entity_id, ...)
+        if 'entity_id' in kwargs:
+            entity_id = kwargs['entity_id']
+        elif len(args) >= 2 and func.__name__ == 'handle_face_embedding_complete':
+            # For handle_face_embedding_complete: (face_id, entity_id, job, face_index)
+            entity_id = args[1]
+        elif len(args) >= 1:
+            # For other callbacks: (entity_id, job)
+            entity_id = args[0]
+        else:
+            raise ValueError(f"Could not extract entity_id from {func.__name__} arguments")
+
+        lock = await self._get_entity_lock(entity_id)
+        async with lock:
+            logger.debug(f"[{func.__name__}] Acquired lock for entity {entity_id}")
+            try:
+                result = await func(self, *args, **kwargs)
+                return result
+            finally:
+                logger.debug(f"[{func.__name__}] Released lock for entity {entity_id}")
+    return wrapper
 
 
 class JobCallbackHandler:
@@ -61,6 +96,23 @@ class JobCallbackHandler:
         self.job_submission_service: JobSubmissionService | None = (
             job_submission_service
         )
+        # Per-entity locks to serialize callbacks for the same entity
+        self._entity_locks: dict[int, asyncio.Lock] = {}
+        self._locks_lock = asyncio.Lock()  # Lock for accessing the locks dict
+
+    async def _get_entity_lock(self, entity_id: int) -> asyncio.Lock:
+        """Get or create lock for specific entity.
+
+        Args:
+            entity_id: Entity ID
+
+        Returns:
+            asyncio.Lock for this entity
+        """
+        async with self._locks_lock:
+            if entity_id not in self._entity_locks:
+                self._entity_locks[entity_id] = asyncio.Lock()
+            return self._entity_locks[entity_id]
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -89,6 +141,7 @@ class JobCallbackHandler:
 
     async def _verify_job_safety(self, entity_id: int, job_id: str) -> bool:
         """Verify if job should be processed (safety checks)."""
+        logger.debug(f"[_verify_job_safety] Checking entity {entity_id}, job {job_id}")
         entity = self.db.entity.get(entity_id)
         if not entity:
             logger.info(f"Entity {entity_id} no longer exists, skipping callback for job {job_id}")
@@ -104,8 +157,10 @@ class JobCallbackHandler:
             return False
 
         # Safety Check: Job must be active
+        active_job_ids = [j.job_id for j in data.active_jobs]
+        logger.debug(f"[_verify_job_safety] Entity {entity_id} active_jobs: {active_job_ids}")
         if not any(j.job_id == job_id for j in data.active_jobs):
-            logger.warning(f"Job {job_id} is no longer active for entity {entity_id}, discarding stale results")
+            logger.warning(f"Job {job_id} is no longer active for entity {entity_id}, discarding stale results. Active jobs: {active_job_ids}")
             return False
 
         # Safety Check: MD5 must match
@@ -140,6 +195,7 @@ class JobCallbackHandler:
         return dir_path / filename
 
     @timed
+    @with_entity_lock
     async def handle_face_detection_complete(
         self, entity_id: int, job: JobResponse
     ) -> None:
@@ -229,10 +285,14 @@ class JobCallbackHandler:
             self.db.face.create_many(face_schemas, ignore_exception=True)
             logger.info(f"Successfully saved {len(face_schemas)} faces for image {entity_id}")
 
-            # Update intelligence_data before submitting next jobs
-            data.face_count = len(face_schemas)
-            data.inference_status.face_embeddings = ["pending"] * len(face_schemas)
-            self.db.entity.update_intelligence_data(entity_id, data)
+            # Update intelligence_data before submitting next jobs (atomically)
+            face_count = len(face_schemas)
+            def update_face_data(data):
+                """Update function for atomic update."""
+                data.face_count = face_count
+                data.inference_status.face_embeddings = ["pending"] * face_count
+
+            self.db.entity.atomic_update_intelligence_data(entity_id, update_face_data)
 
             # Phase 2: Submit face_embedding jobs
             if self.job_submission_service:
@@ -275,6 +335,7 @@ class JobCallbackHandler:
             )
 
     @timed
+    @with_entity_lock
     async def handle_clip_embedding_complete(
         self, entity_id: int, job: JobResponse
     ) -> None:
@@ -347,6 +408,7 @@ class JobCallbackHandler:
             )
 
     @timed
+    @with_entity_lock
     async def handle_dino_embedding_complete(
         self, entity_id: int, job: JobResponse
     ) -> None:
@@ -418,10 +480,13 @@ class JobCallbackHandler:
             )
 
     @timed
+    @with_entity_lock
     async def handle_face_embedding_complete(
         self, face_id: int, entity_id: int, job: JobResponse, face_index: int
     ) -> None:
         """Handle face embedding job completion."""
+
+        logger.info(f"[handle_face_embedding_complete] ENTERED: face_id={face_id}, entity_id={entity_id}, job_id={job.job_id}, face_index={face_index}, status={job.status}")
 
         try:
             # Check if job failed
@@ -429,8 +494,11 @@ class JobCallbackHandler:
                 logger.error(f"Face embedding job {job.job_id} failed for face {face_id}: {job.error_message}")
                 return
 
+            logger.info(f"[handle_face_embedding_complete] About to verify job safety for entity {entity_id}, job {job.job_id}")
             if not await self._verify_job_safety(entity_id, job.job_id):
+                logger.warning(f"[handle_face_embedding_complete] Job safety check FAILED for entity {entity_id}, job {job.job_id}")
                 return
+            logger.info(f"[handle_face_embedding_complete] Job safety check PASSED for entity {entity_id}, job {job.job_id}")
 
             # MQTT callbacks don't include task_output - fetch full job via HTTP
             full_job = await self.compute_client.get_job(job.job_id)
@@ -470,13 +538,18 @@ class JobCallbackHandler:
                 )
             )
 
-            # Update intelligence_data face status
-            entity = self.db.entity.get(entity_id)
-            if entity and entity.intelligence_data:
-                data = entity.intelligence_data
+            # Update intelligence_data face status atomically
+            def update_face_status(data):
+                """Update function for atomic update."""
                 if data.inference_status.face_embeddings is not None and face_index < len(data.inference_status.face_embeddings):
+                    old_status = data.inference_status.face_embeddings.copy()
                     data.inference_status.face_embeddings[face_index] = "completed"
-                    self.db.entity.update_intelligence_data(entity_id, data)
+                    logger.debug(
+                        f"[handle_face_embedding_complete] Entity {entity_id}, Face {face_id} (index={face_index}): "
+                        f"Updating face_embeddings from {old_status} to {data.inference_status.face_embeddings}"
+                    )
+
+            self.db.entity.atomic_update_intelligence_data(entity_id, update_face_status)
 
             logger.info(f"Successfully processed face embedding for face {face_id}")
 

@@ -384,6 +384,7 @@ async def patch_entity(
 )
 async def delete_entity(
     entity_id: int,
+    force: bool = False,
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
     broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
@@ -391,8 +392,8 @@ async def delete_entity(
     _ = user
     config = service.config
 
-    # Delete entity (will raise ValueError if not soft-deleted first)
-    deleted = service.delete_entity(entity_id)
+    # Delete entity (with optional force to auto-soft-delete first)
+    deleted = service.delete_entity(entity_id, force=force)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
 

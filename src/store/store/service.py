@@ -53,9 +53,9 @@ class EntityService:
             exclude_entity_id: Optional entity ID to exclude from check (for updates)
 
         Returns:
-            Entity if duplicate found, None otherwise
+            Entity if duplicate found, None otherwise (excludes soft-deleted entities)
         """
-        query = self.db.query(Entity).filter(Entity.md5 == md5)
+        query = self.db.query(Entity).filter(Entity.md5 == md5).filter(Entity.is_deleted == False)  # noqa: E712
 
         if exclude_entity_id is not None:
             query = query.filter(Entity.id != exclude_entity_id)
@@ -664,12 +664,13 @@ class EntityService:
 
         return self._entity_to_item(entity)
 
-    def delete_entity(self, entity_id: int, *, _from_parent: bool = False) -> bool:
+    def delete_entity(self, entity_id: int, *, _from_parent: bool = False, force: bool = False) -> bool:
         """
         Delete an entity (hard delete with proper versioning).
 
         When called directly (from API route):
-        - Entity MUST already be soft-deleted, otherwise raises ValueError
+        - If force=True: Auto-soft-deletes the entity if not already soft-deleted, then hard-deletes
+        - If force=False: Entity MUST already be soft-deleted, otherwise raises ValueError
         - Recursively soft-deletes and hard-deletes all children
 
         When called recursively (from parent's deletion):
@@ -679,28 +680,32 @@ class EntityService:
         Args:
             entity_id: Entity ID
             _from_parent: Internal flag indicating this is a recursive call from parent deletion
+            force: If True, automatically soft-delete before hard-delete (default: False for backwards compatibility)
 
         Returns:
             True if entity was deleted, False if entity not found
 
         Raises:
-            ValueError: If entity is not soft-deleted (only for direct calls)
+            ValueError: If entity is not soft-deleted and force=False (only for direct calls)
         """
         entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
         if not entity:
             return False
 
-        # Direct call: require entity to be soft-deleted first
-        if not _from_parent and not entity.is_deleted:
-            raise ValueError(
-                f"Cannot delete entity {entity_id}: entity must be soft-deleted first. "
-                + "Call soft_delete_entity() before deletion."
-            )
-
-        # Recursive call from parent: soft-delete if not already
-        if _from_parent and not entity.is_deleted:
-            entity.is_deleted = True
-            self.db.commit()  # Create version record
+        # Handle soft-deletion based on call context
+        if not entity.is_deleted:
+            # Recursive call or force delete: auto-soft-delete
+            if _from_parent or force:
+                from loguru import logger
+                logger.info(f"Auto soft-deleting entity {entity_id} before hard deletion (force={force}, _from_parent={_from_parent})")
+                entity.is_deleted = True
+                self.db.commit()  # Create version record
+            else:
+                # Direct call without force: require pre-soft-deletion
+                raise ValueError(
+                    f"Cannot delete entity {entity_id}: entity must be soft-deleted first. "
+                    + "Call soft_delete_entity() before deletion, or use force=True."
+                )
 
         # Recursively handle children if this is a collection
         children = self.db.query(Entity).filter(Entity.parent_id == entity_id).all()
@@ -716,6 +721,27 @@ class EntityService:
         self.db.delete(entity)
         self.db.commit()
 
+        # Verify deletion completed successfully
+        from loguru import logger
+        logger.info(f"Deleted entity {entity_id}, verifying cleanup...")
+
+        # Re-query to confirm entity is gone
+        verify_entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
+        if verify_entity:
+            logger.error(f"DELETION FAILED: Entity {entity_id} still exists in database after deletion!")
+            return False
+
+        # Check if intelligence_data was cleaned up (should be cascade deleted)
+        # The intelligence_data is a JSON field on Entity, so if entity is gone, so is the data
+
+        # Verify faces were cascade deleted
+        from .db_service.models import Face
+        remaining_faces = self.db.query(Face).filter(Face.entity_id == entity_id).count()
+        if remaining_faces > 0:
+            logger.error(f"DELETION FAILED: Entity {entity_id} still has {remaining_faces} faces after deletion!")
+            return False
+
+        logger.info(f"Entity {entity_id} deletion verified: entity and all related data removed")
         return True
 
     def soft_delete_entity(self, entity_id: int) -> EntitySchema | None:

@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from store.broadcast_service.schemas import EntityStatusPayload
 
 import asyncio
+import threading
 from datetime import UTC, datetime
 
 from cl_client import ComputeClient
@@ -78,6 +79,23 @@ class JobSubmissionService:
         self.storage_service = storage_service
         self.broadcaster = broadcaster
         self.db = db or DBService()
+        # Per-entity locks to serialize updates for the same entity
+        self._entity_locks: dict[int, threading.Lock] = {}
+        self._locks_lock = threading.Lock()
+
+    def _get_entity_lock(self, entity_id: int) -> threading.Lock:
+        """Get or create lock for specific entity.
+
+        Args:
+            entity_id: Entity ID
+
+        Returns:
+            threading.Lock for this entity
+        """
+        with self._locks_lock:
+            if entity_id not in self._entity_locks:
+                self._entity_locks[entity_id] = threading.Lock()
+            return self._entity_locks[entity_id]
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -89,10 +107,10 @@ class JobSubmissionService:
         return int(datetime.now(UTC).timestamp() * 1000)
 
     def update_job_status(
-        self, 
-        entity_id: int, 
-        job_id: str, 
-        status: str, 
+        self,
+        entity_id: int,
+        job_id: str,
+        status: str,
         error_message: str | None = None,
         completed_at: int | None = None
     ) -> None:
@@ -105,14 +123,28 @@ class JobSubmissionService:
             error_message: Optional error message if job failed
             completed_at: Optional completion timestamp from compute service
         """
-        try:
-            entity = self.db.entity.get(entity_id)
-            if not entity or not entity.intelligence_data:
-                logger.warning(f"Entity {entity_id} not found or has no intelligence_data")
-                return
+        lock = self._get_entity_lock(entity_id)
+        with lock:
+            logger.debug(f"[update_job_status] Acquired lock for entity {entity_id}")
+            self._update_job_status_locked(entity_id, job_id, status, error_message, completed_at)
+            logger.debug(f"[update_job_status] Released lock for entity {entity_id}")
 
-            data = entity.intelligence_data
-            
+    def _update_job_status_locked(
+        self,
+        entity_id: int,
+        job_id: str,
+        status: str,
+        error_message: str | None = None,
+        completed_at: int | None = None
+    ) -> None:
+        """Internal method that performs the actual update (called with lock held)."""
+        def update_fn(data):
+            """Update function for atomic update."""
+            logger.debug(
+                f"[update_job_status] START - Entity {entity_id}, Job {job_id}: "
+                f"Read from DB (with lock): face_embeddings={data.inference_status.face_embeddings}"
+            )
+
             # Find and update job in active_jobs
             finished_job: JobInfo | None = None
             for job in data.active_jobs:
@@ -120,7 +152,7 @@ class JobSubmissionService:
                     job.status = status
                     job.completed_at = completed_at
                     job.error_message = error_message
-                    
+
                     # Update status in inference_status
                     if job.task_type == "face_detection":
                         data.inference_status.face_detection = status
@@ -128,49 +160,70 @@ class JobSubmissionService:
                         data.inference_status.clip_embedding = status
                     elif job.task_type == "dino_embedding":
                         data.inference_status.dino_embedding = status
-                    
+
                     # Store reference if finished
                     if status in ("completed", "failed"):
                         finished_job = job
                     break
-            
+
             # Move to history if finished
             if finished_job:
                 data.active_jobs = [j for j in data.active_jobs if j.job_id != job_id]
                 data.job_history.append(finished_job)
-            
+
             if error_message:
                 data.error_message = error_message
-            
+
             data.last_updated = self._now_timestamp()
-            
+
             # Re-calculate overall status
             inf = data.inference_status
-            
+
+            # DEBUG LOGGING: Track face_embeddings state during updates
+            task_type = finished_job.task_type if finished_job else "unknown"
+            logger.debug(
+                f"[update_job_status] Entity {entity_id}, Job {job_id} (task={task_type}, status={status}): "
+                f"face_embeddings={inf.face_embeddings}, "
+                f"face_detection={inf.face_detection}, "
+                f"clip={inf.clip_embedding}, "
+                f"dino={inf.dino_embedding}"
+            )
+
             # 1. Collect all status fields that must be terminal
             all_statuses: list[str] = [
-                inf.face_detection, 
-                inf.clip_embedding, 
+                inf.face_detection,
+                inf.clip_embedding,
                 inf.dino_embedding
             ]
             if inf.face_embeddings is not None and len(inf.face_embeddings) > 0:
                 all_statuses.extend(inf.face_embeddings)
-            
+
             # 2. Check terminal states
             # If we just finished face detection but haven't sent face embeddings yet,
             # face_embeddings list will be configured but all will be 'pending'.
             is_terminal = all(s in ("completed", "failed") for s in all_statuses)
             any_failed = any(s == "failed" for s in all_statuses)
-            
+
             if is_terminal:
                 data.overall_status = "failed" if any_failed else "completed"
             else:
                 data.overall_status = "processing"
 
-            _ = self.db.entity.update_intelligence_data(entity_id, data)
+            logger.debug(
+                f"[update_job_status] Entity {entity_id} overall status calculation: "
+                f"all_statuses={all_statuses}, is_terminal={is_terminal}, overall={data.overall_status}"
+            )
+
+        try:
+            # Perform atomic read-modify-write with row-level locking
+            result = self.db.entity.atomic_update_intelligence_data(entity_id, update_fn)
+            if not result:
+                logger.warning(f"Entity {entity_id} not found or has no intelligence_data")
+                return
+
             logger.debug(
                 f"Updated job {job_id} for entity {entity_id} to status {status}. "
-                f"Overall: {data.overall_status}"
+                f"Overall: {result.intelligence_data.overall_status if result.intelligence_data else 'unknown'}"
             )
             self.broadcast_entity_status(entity_id)
 
@@ -180,40 +233,54 @@ class JobSubmissionService:
     def delete_job_record(self, entity_id: int, job_id: str) -> None:
         """Remove job from active_jobs list."""
         try:
-            entity = self.db.entity.get(entity_id)
-            if entity and entity.intelligence_data:
-                data = entity.intelligence_data
+            def remove_job(data: EntityIntelligenceData):
+                """Remove job from active_jobs."""
                 data.active_jobs = [j for j in data.active_jobs if j.job_id != job_id]
-                _ = self.db.entity.update_intelligence_data(entity_id, data)
+
+            _ = self.db.entity.atomic_update_intelligence_data(entity_id, remove_job)
         except Exception as e:
             logger.error(f"Failed to delete job record {job_id} for entity {entity_id}: {e}")
 
     def _register_job(self, entity: EntitySchema | EntityVersionSchema, job_id: str, task_type: str) -> None:
         """Helper to register an active job in the denormalized intelligence_data."""
         now = self._now_timestamp()
+
+        # Check if entity exists first
         db_entity = self.db.entity.get(entity.id)
         if not db_entity:
             return
 
-        data = db_entity.intelligence_data or EntityIntelligenceData(last_updated=now)
-        data.active_processing_md5 = db_entity.md5
-        data.overall_status = "processing"
-        
-        if task_type == "face_detection":
-            data.inference_status.face_detection = "processing"
-        elif task_type == "clip_embedding":
-            data.inference_status.clip_embedding = "processing"
-        elif task_type == "dino_embedding":
-            data.inference_status.dino_embedding = "processing"
-            
-        data.active_jobs.append(JobInfo(
-            job_id=job_id,
-            task_type=task_type,
-            started_at=now,
-            status="queued"
-        ))
-        data.last_updated = now
-        _ = self.db.entity.update_intelligence_data(entity.id, data)
+        # If no intelligence_data exists, create it first
+        if not db_entity.intelligence_data:
+            initial_data = EntityIntelligenceData(
+                last_updated=now,
+                active_processing_md5=db_entity.md5,
+                overall_status="processing"
+            )
+            _ = self.db.entity.update_intelligence_data(entity.id, initial_data)
+
+        # Now atomically update to add the job
+        def add_job(data: EntityIntelligenceData):
+            """Add job to active_jobs."""
+            data.active_processing_md5 = db_entity.md5
+            data.overall_status = "processing"
+
+            if task_type == "face_detection":
+                data.inference_status.face_detection = "processing"
+            elif task_type == "clip_embedding":
+                data.inference_status.clip_embedding = "processing"
+            elif task_type == "dino_embedding":
+                data.inference_status.dino_embedding = "processing"
+
+            data.active_jobs.append(JobInfo(
+                job_id=job_id,
+                task_type=task_type,
+                started_at=now,
+                status="queued"
+            ))
+            data.last_updated = now
+
+        _ = self.db.entity.atomic_update_intelligence_data(entity.id, add_job)
 
     def _register_failed_job(self, entity: EntitySchema | EntityVersionSchema, task_type: str, error_message: str) -> None:
         """Helper to register a failed job submission."""
@@ -222,34 +289,45 @@ class JobSubmissionService:
         if not db_entity:
             return
 
-        data = db_entity.intelligence_data or EntityIntelligenceData(last_updated=now)
-        data.active_processing_md5 = db_entity.md5
-        
-        # Set specific task status to failed
-        if task_type == "face_detection":
-            data.inference_status.face_detection = "failed"
-        elif task_type == "clip_embedding":
-            data.inference_status.clip_embedding = "failed"
-        elif task_type == "dino_embedding":
-            data.inference_status.dino_embedding = "failed"
-            
-        data.error_message = error_message
-        data.last_updated = now
-        
-        # Add to history
-        data.job_history.append(JobInfo(
-            job_id=f"failed_submission_{now}",
-            task_type=task_type,
-            started_at=now,
-            status="failed",
-            error_message=error_message,
-            completed_at=now
-        ))
+        # If no intelligence_data exists, create it first
+        if not db_entity.intelligence_data:
+            initial_data = EntityIntelligenceData(
+                last_updated=now,
+                active_processing_md5=db_entity.md5,
+                overall_status="failed"
+            )
+            _ = self.db.entity.update_intelligence_data(entity.id, initial_data)
 
-        # Update overall status
-        data.overall_status = "failed"
+        # Now atomically update to register failure
+        def register_failure(data: EntityIntelligenceData):
+            """Register failed job submission."""
+            data.active_processing_md5 = db_entity.md5
 
-        _ = self.db.entity.update_intelligence_data(entity.id, data)
+            # Set specific task status to failed
+            if task_type == "face_detection":
+                data.inference_status.face_detection = "failed"
+            elif task_type == "clip_embedding":
+                data.inference_status.clip_embedding = "failed"
+            elif task_type == "dino_embedding":
+                data.inference_status.dino_embedding = "failed"
+
+            data.error_message = error_message
+            data.last_updated = now
+
+            # Add to history
+            data.job_history.append(JobInfo(
+                job_id=f"failed_submission_{now}",
+                task_type=task_type,
+                started_at=now,
+                status="failed",
+                error_message=error_message,
+                completed_at=now
+            ))
+
+            # Update overall status
+            data.overall_status = "failed"
+
+        _ = self.db.entity.atomic_update_intelligence_data(entity.id, register_failure)
         self.broadcast_entity_status(entity.id)
 
     @timed
