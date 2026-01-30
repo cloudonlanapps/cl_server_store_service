@@ -218,7 +218,7 @@ class TestEntityDeletion:
             time.sleep(0.5)  # Wait for subscription
 
             # Soft-delete entity
-            client.patch(f"/entities/{entity_id}", json={"is_deleted": True})
+            client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
             time.sleep(0.5)  # Wait for any potential message
 
             # Hard delete entity (should clear retained message)
