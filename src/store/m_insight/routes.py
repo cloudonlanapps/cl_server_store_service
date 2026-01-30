@@ -4,7 +4,7 @@ from typing import cast
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Response
 
 from store.common.auth import UserPayload, require_permission
-from store.db_service.schemas import JobInfo
+from store.db_service.schemas import JobInfo, EntityIntelligenceData
 from store.db_service import DBService
 from store.db_service.exceptions import ResourceNotFoundError
 from store.vectorstore_services.exceptions import VectorResourceNotFound
@@ -19,6 +19,31 @@ from store.vectorstore_services.vector_stores import QdrantVectorStore
 from store.vectorstore_services.schemas import SearchPreferences
 
 router = APIRouter(tags=["intelligence"])
+
+
+@router.get(
+    "/entities/{entity_id}",
+    tags=["entity", "intelligence"],
+    summary="Get Entity Intelligence Data",
+    description="Retrieves intelligence data (processing status, jobs, etc.) for a specific entity.",
+    operation_id="get_entity_intelligence",
+)
+async def get_entity_intelligence(
+    entity_id: int = Path(..., title="Entity Id"),
+    user: UserPayload | None = Depends(require_permission("media_store_read")),
+    db: DBService = Depends(get_db_service),
+) -> EntityIntelligenceData | None:
+    """Get intelligence data for an entity."""
+    _ = user
+
+    try:
+        # Verify entity exists
+        _ = db.entity.get_or_raise(entity_id)
+
+        # Get intelligence data from separate table
+        return db.intelligence.get_intelligence_data(entity_id)
+    except ResourceNotFoundError:
+        raise HTTPException(status_code=404, detail="Entity not found")
 
 
 @router.get(
