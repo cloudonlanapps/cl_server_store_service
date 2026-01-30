@@ -9,6 +9,7 @@ from store.db_service import DBService, EntityIntelligenceData
 from sqlalchemy_continuum import version_class  # pyright: ignore[reportAttributeAccessIssue]
 from store.db_service.db_internals import (
     Entity,
+    EntityIntelligence,
     EntitySyncState,
     database,
 )
@@ -189,19 +190,19 @@ class MediaInsight:
 
         session = database.SessionLocal()
         try:
-            entity = session.query(Entity).filter(Entity.id == entity_version.id).first()
-            if not entity:
-                return False
-
-            if not entity.intelligence_data:
+            # Direct query to intelligence table
+            intel = session.query(EntityIntelligence).filter(EntityIntelligence.entity_id == entity_version.id).first()
+            
+            if not intel or not intel.intelligence_data:
                 # New image or no intelligence data yet
                 return True
 
             # Check if active_processing_md5 changed
             try:
-                raw_data = cast(dict[str, object], entity.intelligence_data)
-                intel = EntityIntelligenceData.model_validate(raw_data)
-                active_md5 = intel.active_processing_md5
+                # intel.intelligence_data is already a dict (JSON type)
+                raw_data = cast(dict[str, object], intel.intelligence_data)
+                intel_obj = EntityIntelligenceData.model_validate(raw_data)
+                active_md5 = intel_obj.active_processing_md5
                 return active_md5 != entity_version.md5
             except Exception:
                 return True

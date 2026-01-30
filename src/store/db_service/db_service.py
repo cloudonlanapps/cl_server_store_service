@@ -6,6 +6,8 @@ from .face import FaceDBService, KnownPersonDBService
 from .sync import EntitySyncStateDBService
 from .config import ConfigDBService
 
+from .intelligence import EntityIntelligenceDBService
+
 if TYPE_CHECKING:
     from ..common.config import BaseConfig
 
@@ -26,6 +28,7 @@ class DBService:
             database.init_db()
 
         self.entity = EntityDBService(db=db)
+        self.intelligence = EntityIntelligenceDBService(db=db)
         self.entity_version = EntityVersionDBService(db=db)
         self.face = FaceDBService(db=db)
         self.known_person = KnownPersonDBService(db=db)

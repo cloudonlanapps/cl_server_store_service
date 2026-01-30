@@ -73,12 +73,12 @@ class Entity(Base):
     # Soft delete flag
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    # Intelligence (Denormalized)
-    intelligence_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-
     # Relationships
     faces: Mapped[list[Face]] = relationship(
         "Face", back_populates="image", cascade="all, delete-orphan"
+    )
+    intelligence_rel: Mapped[EntityIntelligence | None] = relationship(
+        "EntityIntelligence", back_populates="entity", cascade="all, delete-orphan", uselist=False
     )
 
     @override
@@ -120,6 +120,34 @@ class EntitySyncState(Base):
     @override
     def __repr__(self) -> str:
         return f"<EntitySyncState(id={self.id}, last_version={self.last_version})>"
+
+
+class EntityIntelligence(Base):
+    """Sidecar table for entity intelligence data (not versioned).
+
+    Intelligence data is computed metadata (embeddings, face detection, etc.)
+    that should not trigger entity versioning. Stored separately to avoid
+    creating versions on AI processing updates.
+    """
+
+    __tablename__ = "entity_intelligence"  # pyright: ignore[reportUnannotatedClassAttribute]
+
+    # Primary key (same as entity_id)
+    entity_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    # Intelligence data as JSON
+    intelligence_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # Relationship back to entity
+    entity: Mapped[Entity] = relationship("Entity", back_populates="intelligence_rel")
+
+    @override
+    def __repr__(self) -> str:
+        return f"<EntityIntelligence(entity_id={self.entity_id})>"
 
 
 

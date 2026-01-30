@@ -216,14 +216,14 @@ class JobSubmissionService:
 
         try:
             # Perform atomic read-modify-write with row-level locking
-            result = self.db.entity.atomic_update_intelligence_data(entity_id, update_fn)
+            result = self.db.intelligence.atomic_update_intelligence_data(entity_id, update_fn)
             if not result:
                 logger.warning(f"Entity {entity_id} not found or has no intelligence_data")
                 return
 
             logger.debug(
                 f"Updated job {job_id} for entity {entity_id} to status {status}. "
-                f"Overall: {result.intelligence_data.overall_status if result.intelligence_data else 'unknown'}"
+                f"Overall: {result.overall_status}"
             )
             self.broadcast_entity_status(entity_id)
 
@@ -247,7 +247,7 @@ class JobSubmissionService:
             if len(data.active_jobs) != initial_count:
                 data.last_updated = self._now_timestamp()
 
-        _ = self.db.entity.atomic_update_intelligence_data(entity_id, remove_job)
+        _ = self.db.intelligence.atomic_update_intelligence_data(entity_id, remove_job)
         self.broadcast_entity_status(entity_id)
 
 
@@ -261,13 +261,13 @@ class JobSubmissionService:
             return
 
         # If no intelligence_data exists, create it first
-        if not db_entity.intelligence_data:
+        if not self.db.intelligence.get_intelligence_data(entity.id):
             initial_data = EntityIntelligenceData(
                 last_updated=now,
                 active_processing_md5=db_entity.md5,
                 overall_status="processing"
             )
-            _ = self.db.entity.update_intelligence_data(entity.id, initial_data)
+            _ = self.db.intelligence.update_intelligence_data(entity.id, initial_data)
 
         # Now atomically update to add the job
         def add_job(data: EntityIntelligenceData):
@@ -290,7 +290,7 @@ class JobSubmissionService:
             ))
             data.last_updated = now
 
-        _ = self.db.entity.atomic_update_intelligence_data(entity.id, add_job)
+        _ = self.db.intelligence.atomic_update_intelligence_data(entity.id, add_job)
 
     def _register_failed_job(self, entity: EntitySchema | EntityVersionSchema, task_type: str, error_message: str) -> None:
         """Helper to register a failed job submission."""
@@ -300,13 +300,13 @@ class JobSubmissionService:
             return
 
         # If no intelligence_data exists, create it first
-        if not db_entity.intelligence_data:
+        if not self.db.intelligence.get_intelligence_data(entity.id):
             initial_data = EntityIntelligenceData(
                 last_updated=now,
                 active_processing_md5=db_entity.md5,
                 overall_status="failed"
             )
-            _ = self.db.entity.update_intelligence_data(entity.id, initial_data)
+            _ = self.db.intelligence.update_intelligence_data(entity.id, initial_data)
 
         # Now atomically update to register failure
         def register_failure(data: EntityIntelligenceData):
@@ -337,25 +337,18 @@ class JobSubmissionService:
             # Update overall status
             data.overall_status = "failed"
 
-        _ = self.db.entity.atomic_update_intelligence_data(entity.id, register_failure)
+        _ = self.db.intelligence.atomic_update_intelligence_data(entity.id, register_failure)
         self.broadcast_entity_status(entity.id)
 
     @timed
     def _get_entity_status(self, entity_id: int) -> EntityStatusPayload | None:
         """Get status payload from denormalized field."""
-        entity = self.db.entity.get(entity_id)
-        if not entity or not entity.intelligence_data:
+        # entity = self.db.entity.get(entity_id) # Not needed if we only need status
+        # but we might want to check existence check if strict
+        
+        data = self.db.intelligence.get_intelligence_data(entity_id)
+        if not data:
             return None
-
-        # Convert dict to Pydantic model if it's a dict
-        raw_data = entity.intelligence_data
-        if isinstance(raw_data, dict):
-            try:
-                data = EntityIntelligenceData.model_validate(raw_data)
-            except Exception:
-                return None
-        else:
-            data = raw_data
         
         return EntityStatusPayload(
             entity_id=entity_id,

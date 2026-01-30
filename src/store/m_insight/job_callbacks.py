@@ -151,7 +151,7 @@ class JobCallbackHandler:
             logger.warning(f"Entity {entity_id} is deleted, skipping results for job {job_id}")
             return False
 
-        data = entity.intelligence_data
+        data = self.db.intelligence.get_intelligence_data(entity_id)
         if not data:
             logger.warning(f"Entity {entity_id} has no intelligence_data, skipping job {job_id}")
             return False
@@ -255,7 +255,7 @@ class JobCallbackHandler:
             entity = self.db.entity.get(entity_id) # Already checked in verify_job_safety but need for schema
             if not entity: return
             
-            data = entity.intelligence_data
+            data = self.db.intelligence.get_intelligence_data(entity_id)
             if not data: return
 
             # 2. Downloads 
@@ -292,7 +292,7 @@ class JobCallbackHandler:
                 data.face_count = face_count
                 data.inference_status.face_embeddings = ["pending"] * face_count
 
-            self.db.entity.atomic_update_intelligence_data(entity_id, update_face_data)
+            self.db.intelligence.atomic_update_intelligence_data(entity_id, update_face_data)
 
             # Phase 2: Submit face_embedding jobs
             if self.job_submission_service:
@@ -549,7 +549,7 @@ class JobCallbackHandler:
                         f"Updating face_embeddings from {old_status} to {data.inference_status.face_embeddings}"
                     )
 
-            self.db.entity.atomic_update_intelligence_data(entity_id, update_face_status)
+            self.db.intelligence.atomic_update_intelligence_data(entity_id, update_face_status)
 
             logger.info(f"Successfully processed face embedding for face {face_id}")
 

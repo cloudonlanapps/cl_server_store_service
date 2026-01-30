@@ -7,7 +7,7 @@ from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from store.db_service import EntityIntelligenceData, EntitySchema
+from store.db_service import EntitySchema
 from store.db_service.db_internals import Entity
 from store.db_service.schemas import VersionInfo
 
@@ -204,15 +204,6 @@ class EntityService:
         """
 
 
-        intelligence_data = None
-        if hasattr(entity, "intelligence_data") and entity.intelligence_data:
-            try:
-                # Cast to dict just to silence pyright about Unknown
-                raw_data = cast(dict[str, object], entity.intelligence_data)
-                intelligence_data = EntityIntelligenceData.model_validate(raw_data)
-            except Exception:
-                pass
-
         return EntitySchema(
             id=entity.id,
             is_collection=entity.is_collection,
@@ -235,7 +226,6 @@ class EntityService:
             file_path=entity.file_path,
             is_deleted=entity.is_deleted,
             is_indirectly_deleted=self._check_ancestor_deleted(entity),
-            intelligence_data=intelligence_data,
         )
 
     def get_entities(
@@ -802,10 +792,8 @@ class EntityService:
                 except Exception as e:
                     logger.warning(f"Failed to clear MQTT message for entity {entity_id}: {e}")
 
-            # Step 8: Clear intelligence data before deletion (as suggested)
-            # This ensures the final version tombstone has no stale intelligence metadata
-            entity.intelligence_data = None
-            self.db.flush()
+            # Step 8: (Optional) Verify intelligence data cleanup (handled by cascade)
+            # No manual action needed as FK has ON DELETE CASCADE
 
             # Step 9: Delete entity from database
             self.db.delete(entity)

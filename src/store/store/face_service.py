@@ -160,33 +160,15 @@ class FaceService:
         Args:
             entity_id: Entity ID
         """
-        entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
-        if not entity:
-            logger.warning(f"Entity {entity_id} not found for face_count update")
-            return
+        def update_fn(data: EntityIntelligenceData):
+            if data.face_count and data.face_count > 0:
+                data.face_count -= 1
+                logger.debug(
+                    f"Decremented face_count for entity {entity_id} "
+                    f"to {data.face_count}"
+                )
+            else:
+                data.face_count = 0
+                logger.warning(f"face_count was already 0 or None for entity {entity_id}")
 
-        # Get current intelligence data
-        intelligence_data = None
-        if hasattr(entity, "intelligence_data") and entity.intelligence_data:
-            try:
-                intelligence_data = EntityIntelligenceData.model_validate(entity.intelligence_data)
-            except Exception as e:
-                logger.warning(f"Failed to parse intelligence_data for entity {entity_id}: {e}")
-                intelligence_data = EntityIntelligenceData()
-        else:
-            intelligence_data = EntityIntelligenceData()
-
-        # Decrement face_count
-        if intelligence_data.face_count and intelligence_data.face_count > 0:
-            intelligence_data.face_count -= 1
-            logger.debug(
-                f"Decremented face_count for entity {entity_id} "
-                f"to {intelligence_data.face_count}"
-            )
-        else:
-            intelligence_data.face_count = 0
-            logger.warning(f"face_count was already 0 or None for entity {entity_id}")
-
-        # Update entity
-        entity.intelligence_data = intelligence_data.model_dump()
-        self.db.flush()
+        self.db_service.intelligence.atomic_update_intelligence_data(entity_id, update_fn)

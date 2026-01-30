@@ -156,17 +156,12 @@ async def get_entity_jobs(
     _ = user
 
     try:
-        entity = db.entity.get_or_raise(entity_id)
-        if hasattr(entity, "intelligence_data") and entity.intelligence_data is not None:
-            # If it's a dict (from JSON column), convert or return Field
-            data = entity.intelligence_data
-            if isinstance(data, dict):
-                raw_data = cast(dict[str, object], data)
-                active = cast(list[JobInfo], raw_data.get("active_jobs", []))
-                history = cast(list[JobInfo], raw_data.get("job_history", []))
-                return active + history
-            return data.active_jobs + data.job_history
-        return []
+        # Verify entity exists
+        _ = db.entity.get_or_raise(entity_id)
+        
+        # Get intelligence data using service
+        intel_data = db.intelligence.get_intelligence_data(entity_id)
+        return intel_data.active_jobs + intel_data.job_history
     except ResourceNotFoundError:
         raise HTTPException(status_code=404, detail="Entity not found")
 

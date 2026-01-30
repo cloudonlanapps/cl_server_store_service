@@ -56,7 +56,6 @@ class EntitySchema(BaseModel):
     is_indirectly_deleted: bool | None = Field(
         None, description="True if any ancestor in the parent chain is soft-deleted"
     )
-    intelligence_data: EntityIntelligenceData | None = None
 
 
 class JobInfo(BaseModel):
@@ -139,7 +138,8 @@ class EntityVersionSchema(BaseModel):
 
     # Soft delete
     is_deleted: bool | None = None
-    intelligence_data: EntityIntelligenceData | None = None
+
+    # Note: intelligence_data is excluded from versioning and not available in version records
 
     # Version tracking
     transaction_id: int | None = None
