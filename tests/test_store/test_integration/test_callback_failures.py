@@ -110,7 +110,6 @@ async def test_callback_missing_detections(callback_handler):
         assert "No faces found" in mock_logger.warning.call_args[0][0]
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Needs investigation - unrelated to delete")
 async def test_callback_entity_not_found(callback_handler):
     """Test callback when entity is not found in database."""
     job = JobResponse(
@@ -147,8 +146,8 @@ async def test_callback_entity_not_found(callback_handler):
 
     with patch("store.m_insight.job_callbacks.logger") as mock_logger:
         await callback_handler.handle_face_detection_complete(entity_id=999, job=job)
-        assert mock_logger.error.called
-        assert "not found" in mock_logger.error.call_args[0][0].lower()
+        assert mock_logger.info.called
+        assert "no longer exists" in mock_logger.info.call_args[0][0].lower()
 
 @pytest.mark.asyncio
 async def test_callback_database_error(callback_handler):

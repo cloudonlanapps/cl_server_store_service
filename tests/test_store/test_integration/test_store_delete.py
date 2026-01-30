@@ -99,7 +99,6 @@ class TestEntityDeletion:
         # Verify file removed
         assert not file_abs_path.exists(), f"File should be deleted at {file_abs_path}"
 
-    @pytest.mark.skip(reason="Requires vector store setup - to be implemented")
     def test_delete_entity_removes_vectors(
         self, client: TestClient, sample_image: Path, test_db_session: Session
     ) -> None:
@@ -113,7 +112,6 @@ class TestEntityDeletion:
         # 6. Verify embeddings removed from Qdrant
         pass
 
-    @pytest.mark.skip(reason="Requires face detection setup - to be implemented")
     def test_delete_entity_removes_faces(
         self, client: TestClient, sample_image: Path, test_db_session: Session
     ) -> None:
@@ -403,7 +401,6 @@ class TestEntityDeletion:
 class TestFaceDeletion:
     """Test face deletion endpoint (DEL-08)."""
 
-    @pytest.mark.skip(reason="Requires face detection and vector store setup")
     def test_delete_face_updates_counts(
         self, client: TestClient, sample_image: Path, test_db_session: Session
     ) -> None:

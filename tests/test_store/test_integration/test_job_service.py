@@ -22,7 +22,7 @@ def job_service(mock_compute, mock_storage):
     js.db = MagicMock()
     return js
 
-@pytest.mark.skip(reason="Needs refactor for job tracking changes")
+
 @pytest.mark.asyncio
 async def test_submit_face_detection(job_service, mock_compute):
     """Test face detection job submission."""
@@ -50,15 +50,19 @@ async def test_submit_face_detection(job_service, mock_compute):
     mock_compute.face_detection.detect.assert_called_once()
     
     # Verify entity update was called with active job
-    job_service.db.entity.update_intelligence_data.assert_called_once()
-    args = job_service.db.entity.update_intelligence_data.call_args
+    job_service.db.entity.atomic_update_intelligence_data.assert_called_once()
+    args = job_service.db.entity.atomic_update_intelligence_data.call_args
     assert args[0][0] == 1 # entity_id
-    data = args[0][1]
+    update_fn = args[0][1]
+    
+    # Create dummy data and run update_fn to verify its logic
+    data = EntityIntelligenceData(last_updated=0)
+    update_fn(data)
     assert len(data.active_jobs) == 1
     assert data.active_jobs[0].job_id == "job-123"
     assert data.active_jobs[0].task_type == "face_detection"
 
-@pytest.mark.skip(reason="Needs refactor for job tracking changes")
+
 @pytest.mark.asyncio
 async def test_submit_clip_embedding(job_service, mock_compute):
     """Test CLIP embedding job submission."""
@@ -82,11 +86,13 @@ async def test_submit_clip_embedding(job_service, mock_compute):
     assert job_id == "clip-123"
     mock_compute.clip_embedding.embed_image.assert_called_once()
     
-    job_service.db.entity.update_intelligence_data.assert_called_once()
-    data = job_service.db.entity.update_intelligence_data.call_args[0][1]
+    job_service.db.entity.atomic_update_intelligence_data.assert_called_once()
+    update_fn = job_service.db.entity.atomic_update_intelligence_data.call_args[0][1]
+    data = EntityIntelligenceData(last_updated=0)
+    update_fn(data)
     assert data.active_jobs[0].job_id == "clip-123"
 
-@pytest.mark.skip(reason="Needs refactor for job tracking changes")
+
 @pytest.mark.asyncio
 async def test_submit_dino_embedding(job_service, mock_compute):
     """Test DINO embedding job submission."""
@@ -110,11 +116,12 @@ async def test_submit_dino_embedding(job_service, mock_compute):
     assert job_id == "dino-123"
     mock_compute.dino_embedding.embed_image.assert_called_once()
     
-    job_service.db.entity.update_intelligence_data.assert_called_once()
-    data = job_service.db.entity.update_intelligence_data.call_args[0][1]
+    job_service.db.entity.atomic_update_intelligence_data.assert_called_once()
+    update_fn = job_service.db.entity.atomic_update_intelligence_data.call_args[0][1]
+    data = EntityIntelligenceData(last_updated=0)
+    update_fn(data)
     assert data.active_jobs[0].job_id == "dino-123"
 
-@pytest.mark.skip(reason="delete_job_record method not implemented")
 def test_delete_job_record(job_service):
     """Test job record deletion."""
     mock_entity = MagicMock()
@@ -130,11 +137,11 @@ def test_delete_job_record(job_service):
 
     job_service.delete_job_record(1, "job-123")
     
-    job_service.db.entity.update_intelligence_data.assert_called_once()
-    updated_data = job_service.db.entity.update_intelligence_data.call_args[0][1]
-    assert len(updated_data.active_jobs) == 0
+    job_service.db.entity.atomic_update_intelligence_data.assert_called_once()
+    update_fn = job_service.db.entity.atomic_update_intelligence_data.call_args[0][1]
+    update_fn(data)
+    assert len(data.active_jobs) == 0
 
-@pytest.mark.skip(reason="Needs refactor for job tracking changes")
 def test_update_job_status(job_service):
     """Test job status update."""
     mock_entity = MagicMock()
@@ -150,10 +157,11 @@ def test_update_job_status(job_service):
 
     job_service.update_job_status(1, "job-123", "completed")
     
-    job_service.db.entity.update_intelligence_data.assert_called_once()
-    updated_data = job_service.db.entity.update_intelligence_data.call_args[0][1]
+    job_service.db.entity.atomic_update_intelligence_data.assert_called_once()
+    update_fn = job_service.db.entity.atomic_update_intelligence_data.call_args[0][1]
+    update_fn(data)
     
     # Should update inference status
-    assert updated_data.inference_status.face_detection == "completed"
+    assert data.inference_status.face_detection == "completed"
     # Should remove from active jobs (completed)
-    assert len(updated_data.active_jobs) == 0
+    assert len(data.active_jobs) == 0
