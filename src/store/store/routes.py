@@ -30,7 +30,7 @@ from ..broadcast_service import schemas as broadcast_schemas
 from ..common.auth import UserPayload, require_admin, require_permission
 from .dependencies import get_broadcaster, get_config_service, get_entity_service, get_monitor
 from ..broadcast_service.monitor import MInsightMonitor
-from .service import EntityService
+from .service import DuplicateFileError, EntityService
 
 router = APIRouter()
 

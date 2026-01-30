@@ -1,5 +1,6 @@
 from store.db_service import EntitySchema, FaceSchema, KnownPersonSchema
 from cl_ml_tools import BBox, FaceLandmarks
+import pytest
 
 
 @pytest.mark.skip(reason="delete not supported")

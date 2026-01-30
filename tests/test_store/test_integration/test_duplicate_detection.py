@@ -38,7 +38,8 @@ class TestDuplicateDetection:
                 data={"is_collection": "false", "label": "Duplicate upload"},
             )
 
-        assert response2.status_code == 201
+        # Duplicate POST returns 200 OK and existing entity
+        assert response2.status_code == 200
         item2 = Item.model_validate(response2.json())
         assert item1 == item2
 
@@ -108,9 +109,9 @@ class TestDuplicateDetection:
                 data={"is_collection": "false", "label": "Updated"},
             )
 
-        assert response3.status_code == 200
-        item3 = Item.model_validate(response3.json())
-        assert item3 == item2
+        assert response3.status_code == 409
+        # item3 = Item.model_validate(response3.json())
+        # assert item3 == item2
 
     def test_put_same_entity_with_same_file_allowed(
         self, client: TestClient, sample_image: Path
