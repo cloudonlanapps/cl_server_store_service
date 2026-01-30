@@ -347,6 +347,41 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
         finally:
             if should_close:
                 db.close()
+
+    @timed
+    @with_retry(max_retries=10)
+    def delete(self, id: int) -> bool:
+        """Delete known person record from database.
+
+        Raises:
+            ValueError: If person has linked faces
+
+        Returns:
+            True if deleted, False if not found
+        """
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
+        try:
+            obj = db.query(KnownPerson).filter(KnownPerson.id == id).first()
+            if not obj:
+                return False
+
+            # Check for linked faces
+            linked_faces = db.query(Face).filter(Face.known_person_id == id).count()
+            if linked_faces > 0:
+                raise ValueError(f"Face(s) are linked to known person {id}. Cannot delete.")
+
+            db.delete(obj)
+            db.commit()
+            logger.debug(f"Deleted KnownPerson id={id}")
+            return True
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to delete KnownPerson id={id}: {e}")
+            raise
+        finally:
+            if should_close:
+                db.close()
     @timed
     @with_retry(max_retries=10)
     def get_all(self) -> list[KnownPersonSchema]:

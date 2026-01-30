@@ -1,7 +1,7 @@
 from store.db_service import EntitySchema, EntityIntelligenceData
 
 import pytest
-@pytest.mark.skip(reason="delete not supported")
+
 def test_entity_crud(db_service):
     # Create
     intel_data = EntityIntelligenceData(last_updated=100, overall_status="queued")

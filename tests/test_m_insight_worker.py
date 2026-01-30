@@ -377,7 +377,6 @@ async def test_no_duplicate_processing(
 # ============================================================================
 
 
-@pytest.mark.skip(reason="delete not supported")
 async def test_delete_image_removes_intelligence(
     client: TestClient,
     sample_image: Path,
@@ -403,9 +402,8 @@ async def test_delete_image_removes_intelligence(
     assert get_intelligence_for_image(test_db_session, entity_id) is not None
 
     # Soft-delete image first
-    from store.store.service import EntityService
-    service = EntityService(test_db_session, client.app.state.config)
-    service.soft_delete_entity(entity_id)
+    response = client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
+    assert response.status_code == 200
 
     # Hard delete image
     # Note: Hard delete Entity row will delete the intelligence_data column too.
@@ -417,7 +415,6 @@ async def test_delete_image_removes_intelligence(
     assert get_intelligence_for_image(test_db_session, entity_id) is None
 
 
-@pytest.mark.skip(reason="delete not supported")
 async def test_restart_does_not_reinsert_deleted(
     client: TestClient,
     sample_image: Path,
@@ -438,10 +435,10 @@ async def test_restart_does_not_reinsert_deleted(
     await m_insight_worker.run_once()
 
     # Soft-delete then hard-delete
-    from store.store.service import EntityService
-    service = EntityService(test_db_session, client.app.state.config)
-    service.soft_delete_entity(entity_id)
-    client.delete(f"/entities/{entity_id}")
+    response = client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
+    assert response.status_code == 200
+    response = client.delete(f"/entities/{entity_id}")
+    assert response.status_code == 204
 
     # Clear mock
     m_insight_processor_mock.clear()

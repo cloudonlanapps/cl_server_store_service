@@ -49,8 +49,7 @@ def test_get_versions_in_range(db_service):
     # Should contain entity 600 with latest state "Update 2"
     assert 600 in changes
     assert changes[600].label == "Update 2"
-    
-@pytest.mark.skip(reason="delete not supported")
+
 def test_deleted_entity_version(db_service):
     # Create and Delete
     db_service.entity.create(EntitySchema(id=700, label="To Delete"))

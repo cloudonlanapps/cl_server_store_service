@@ -114,7 +114,6 @@ class TestEntityOperations:
             response = client.get(f"/entities/{entity_id}")
             assert response.status_code == 200
 
-    @pytest.mark.skip(reason="delete not supported")
     def test_delete_entity(self, client):
         """Test entity deletion with real dependency injection."""
         # Create entity
@@ -183,7 +182,6 @@ class TestMultipleSequentialRequests:
             response = client.get(f"/entities/{entity_id}")
             assert response.status_code == 200
 
-    @pytest.mark.skip(reason="delete not supported")
     def test_mixed_operations_sequential(self, client):
         """Test mixed create/read/update/delete operations."""
         # Create

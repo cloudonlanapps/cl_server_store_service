@@ -3,7 +3,6 @@ from cl_ml_tools import BBox, FaceLandmarks
 import pytest
 
 
-@pytest.mark.skip(reason="delete not supported")
 def test_face_cascade(db_service):
     """Test standard cascade from Entity -> Face."""
     
@@ -89,7 +88,6 @@ def test_known_person_linking(db_service):
     assert faces[0].id == 200
 
 
-@pytest.mark.skip(reason="delete not supported")
 def test_known_person_delete_prevention(db_service):
     """Test that KnownPerson cannot be deleted if faces are linked."""
     
@@ -112,7 +110,7 @@ def test_known_person_delete_prevention(db_service):
     
     # Try to delete Person -> Should raise ValueError
     import pytest
-    with pytest.raises(ValueError, match="Face\(s\) are linked"):
+    with pytest.raises(ValueError, match=r"Face\(s\) are linked"):
         db_service.known_person.delete(person.id)
         
     # Unlink

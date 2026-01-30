@@ -114,7 +114,7 @@ async def test_submit_dino_embedding(job_service, mock_compute):
     data = job_service.db.entity.update_intelligence_data.call_args[0][1]
     assert data.active_jobs[0].job_id == "dino-123"
 
-@pytest.mark.skip(reason="delete not supported")
+@pytest.mark.skip(reason="delete_job_record method not implemented")
 def test_delete_job_record(job_service):
     """Test job record deletion."""
     mock_entity = MagicMock()

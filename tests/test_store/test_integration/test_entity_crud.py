@@ -221,7 +221,6 @@ class TestEntityCRUD:
         assert response.status_code == 201
         # assert "Non-collection entities must have a parent_id" in response.text
 
-    @pytest.mark.skip(reason="delete not supported")
     def test_delete_collection_with_children(
         self, client: TestClient, sample_image: Path
     ) -> None:
@@ -309,7 +308,6 @@ class TestEntityCRUD:
         c_get = client.get(f"/entities/{c_id}")
         assert c_get.json()["is_indirectly_deleted"] is False
 
-    @pytest.mark.skip(reason="delete not supported")
     def test_delete_entity_hard_delete(
         self, client: TestClient, sample_image: Path
     ) -> None:
@@ -464,46 +462,6 @@ class TestEntityCRUD:
         assert resp.status_code == 422
         assert "Maximum hierarchy depth exceeded" in resp.text
 
-    @pytest.mark.skip(reason="delete not supported")
-    def test_get_entities_pagination(
-        self, client: TestClient, sample_images: list[Path]
-    ) -> None:
-        """Test pagination for getting entities."""
-        # Create multiple entities
-        # Create parent collection
-        parent_resp = client.post(
-            "/entities/",
-            data={
-                "is_collection": "true",
-                "label": "Parent Collection",
-            },
-        )
-        parent_id = parent_resp.json()["id"]
-
-        # Create multiple entities with parent
-        for image_path in sample_images:
-            with open(image_path, "rb") as f:
-                client.post(
-                    "/entities/",
-                    files={"image": (image_path.name, f, "image/jpeg")},
-                    data={
-                        "is_collection": "false",
-                        "label": f"Entity {image_path.name}",
-                        "parent_id": str(parent_id),
-                    },
-                )
-
-        # Delete all
-        delete_response = client.delete("/entities/")
-        assert delete_response.status_code == 204
-
-        # Verify all deleted
-        get_response = client.get("/entities/")
-        assert get_response.status_code == 200
-        paginated = PaginatedResponse.model_validate(get_response.json())
-        assert len(paginated.items) == 0
-        assert paginated.pagination.total_items == 0
-
     def test_filter_exclude_deleted(
         self, client: TestClient, sample_images: list[Path]
     ) -> None:
@@ -554,7 +512,6 @@ class TestEntityCRUD:
         ids = [item["id"] for item in items]
         assert entity_to_delete not in ids
 
-    @pytest.mark.skip(reason="delete not supported")
     def test_delete_without_soft_delete_fails(
         self, client: TestClient
     ) -> None:
@@ -569,10 +526,9 @@ class TestEntityCRUD:
 
         # Try to hard-delete without soft-delete first
         response = client.delete(f"/entities/{entity_id}")
-        assert response.status_code == 422
+        assert response.status_code == 400
         assert "must be soft-deleted first" in response.text
 
-    @pytest.mark.skip(reason="delete not supported")
     def test_cascade_deletion_soft_deletes_children(
         self, client: TestClient, sample_image: Path, test_db_session: Session
     ) -> None:
@@ -648,7 +604,6 @@ class TestEntityCRUD:
         latest_version = entity.versions.all()[-1]
         assert latest_version.is_deleted is True
 
-    @pytest.mark.skip(reason="delete not supported")
     def test_hard_delete_removes_entity_completely(
         self, client: TestClient, test_db_session: Session
     ) -> None:

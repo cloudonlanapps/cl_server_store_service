@@ -117,9 +117,35 @@ class EntityDBService(BaseDBService[EntitySchema]):
             if should_close:
                 db.close()
 
+    @timed
+    @with_retry(max_retries=10)
+    def delete(self, id: int) -> bool:
+        """Delete entity record from database.
 
+        Low-level deletion - only removes DB row.
+        Does NOT handle files, vectors, or cascade logic.
+        For full deletion, use EntityService.delete_entity().
 
-
+        Returns:
+            True if deleted, False if not found
+        """
+        db = self.db if self.db else database.SessionLocal()
+        should_close = self.db is None
+        try:
+            obj = db.query(Entity).filter(Entity.id == id).first()
+            if not obj:
+                return False
+            db.delete(obj)
+            db.commit()
+            logger.debug(f"Deleted Entity id={id}")
+            return True
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to delete Entity id={id}: {e}")
+            raise
+        finally:
+            if should_close:
+                db.close()
 
     @timed
     @with_retry(max_retries=10)
