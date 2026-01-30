@@ -117,15 +117,7 @@ class EntityDBService(BaseDBService[EntitySchema]):
             if should_close:
                 db.close()
 
-    def _log_cascade_deletes(self, orm_obj: Entity, db: Session) -> None:
-        """Log what will be cascade deleted."""
-        try:
-            faces_count = len(orm_obj.faces)
 
-            logger.info(f"Deleting Entity {orm_obj.id} will cascade delete:")
-            logger.info(f"  - Faces: {faces_count}")
-        except Exception as e:
-            logger.warning(f"Failed to log cascade deletes for Entity {orm_obj.id}: {e}")
 
 
 
@@ -135,45 +127,7 @@ class EntityDBService(BaseDBService[EntitySchema]):
         """Get all child entities of a parent."""
         return self.query(parent_id=parent_id)
 
-    @timed
-    @with_retry(max_retries=10)
-    @timed
-    @with_retry(max_retries=10)
-    def delete_all(self) -> None:
-        """Bulk delete all entities and related data (for tests/admin)."""
-        db = self.db if self.db else database.SessionLocal()
-        should_close = self.db is None
-        try:
-            # Delete related data first (order matters for FKs)
-            db.query(Face).delete()
-            db.query(KnownPerson).delete()
 
-            # Clear Continuum version tables
-            # Note: table names might differ if configured differently, but defaults are usually pluralized + _version
-            # or just _version suffix.
-            # Plan lists: "entities_version", "known_persons_version", "transaction_changes", "transaction"
-            for table in ["entities_version", "known_persons_version", "transaction_changes", '"transaction"']:
-                try:
-                    db.execute(text(f"DELETE FROM {table}"))
-                except Exception as e:
-                    logger.warning(f"Failed to clear table {table}: {e}")
-
-            # Delete all entities
-            db.query(Entity).delete()
-
-            # Reset sqlite sequence
-            try:
-                db.execute(text("DELETE FROM sqlite_sequence"))
-            except Exception as e:
-                logger.debug(f"sqlite_sequence clear failed: {e}")
-
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            if should_close:
-                db.close()
 
 
 class EntityVersionDBService:
@@ -187,8 +141,6 @@ class EntityVersionDBService:
     @with_retry(max_retries=10)
     def get_all_for_entity(self, entity_id: int) -> list[EntityVersionSchema]:
         """Get all versions of a specific entity.
-
-        Works even if entity is deleted from main table.
         """
         db = self.db if self.db else database.SessionLocal()
         should_close = self.db is None
@@ -208,8 +160,6 @@ class EntityVersionDBService:
     @with_retry(max_retries=10)
     def get_by_transaction_id(self, entity_id: int, transaction_id: int) -> EntityVersionSchema | None:
         """Get specific version by entity_id and transaction_id.
-
-        Works even if entity is deleted from main table.
         """
         db = self.db if self.db else database.SessionLocal()
         should_close = self.db is None

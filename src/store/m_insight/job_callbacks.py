@@ -167,8 +167,8 @@ class JobCallbackHandler:
         if data.active_processing_md5 != entity.md5:
             logger.warning(f"Entity {entity_id} MD5 changed (was {data.active_processing_md5}, now {entity.md5}), discarding stale results")
             # Cleanup job record
-            if self.job_submission_service:
-                self.job_submission_service.delete_job_record(entity_id, job_id)
+            # if self.job_submission_service:
+            #    self.job_submission_service.delete_job_record(entity_id, job_id)
             return False
 
         return True

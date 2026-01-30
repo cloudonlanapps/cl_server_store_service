@@ -230,16 +230,6 @@ class JobSubmissionService:
         except Exception as e:
             logger.error(f"Failed to update job {job_id} status for entity {entity_id}: {e}")
 
-    def delete_job_record(self, entity_id: int, job_id: str) -> None:
-        """Remove job from active_jobs list."""
-        try:
-            def remove_job(data: EntityIntelligenceData):
-                """Remove job from active_jobs."""
-                data.active_jobs = [j for j in data.active_jobs if j.job_id != job_id]
-
-            _ = self.db.entity.atomic_update_intelligence_data(entity_id, remove_job)
-        except Exception as e:
-            logger.error(f"Failed to delete job record {job_id} for entity {entity_id}: {e}")
 
     def _register_job(self, entity: EntitySchema | EntityVersionSchema, job_id: str, task_type: str) -> None:
         """Helper to register an active job in the denormalized intelligence_data."""

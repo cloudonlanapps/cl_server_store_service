@@ -165,34 +165,7 @@ async def create_entity(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
-@router.delete(
-    "/entities",
-    tags=["entity"],
-    summary="Delete Collection",
-    description="Deletes the entire collection.",
-    operation_id="delete_collection",
-    status_code=status.HTTP_204_NO_CONTENT,
-    responses={204: {"description": "All entities deleted successfully"}},
-)
-async def delete_collection(
-    user: UserPayload | None = Depends(require_permission("media_store_write")),
-    service: EntityService = Depends(get_entity_service),
-    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
-):
-    _ = user
-    config = service.config
-    
-    # Query all existing entity IDs to clear their MQTT retained statuses
-    if broadcaster:
-        from store.db_service.db_internals import Entity
-        all_ids = [row[0] for row in service.db.query(Entity.id).all()]
-        for eid in all_ids:
-            topic = f"mInsight/{config.port}/entity_item_status/{eid}"
-            _ = broadcaster.clear_retained(topic)
-        logger.info(f"Cleared retained status for {len(all_ids)} entities before collection deletion")
 
-    service.delete_all_entities()
-    # No return statement - FastAPI will return 204 automatically
 
 
 @router.get(
@@ -370,40 +343,7 @@ async def patch_entity(
     return item
 
 
-@router.delete(
-    "/entities/{entity_id}",
-    tags=["entity"],
-    summary="Delete Entity",
-    description="Permanently deletes an entity and its associated file (Hard Delete).",
-    operation_id="delete_entity",
-    status_code=status.HTTP_204_NO_CONTENT,
-    responses={
-        204: {"description": "Entity deleted successfully"},
-        404: {"description": "Entity not found"},
-    },
-)
-async def delete_entity(
-    entity_id: int,
-    force: bool = False,
-    user: UserPayload | None = Depends(require_permission("media_store_write")),
-    service: EntityService = Depends(get_entity_service),
-    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
-):
-    _ = user
-    config = service.config
 
-    # Delete entity (with optional force to auto-soft-delete first)
-    deleted = service.delete_entity(entity_id, force=force)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
-
-    # CRITICAL: Clear retained MQTT status on deletion
-    if broadcaster:
-        status_topic = f"mInsight/{config.port}/entity_item_status/{entity_id}"
-        _ = broadcaster.clear_retained(status_topic)
-        logger.debug(f"Cleared retained status for entity {entity_id} on {status_topic} (deletion)")
-
-    # No return statement - FastAPI will return 204 automatically
 
 
 @router.get(

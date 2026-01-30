@@ -32,12 +32,7 @@ class FaceDBService(BaseDBService[FaceSchema]):
             raise ResourceNotFoundError(f"Face {id} not found")
         return face
 
-    def _log_cascade_deletes(self, orm_obj: Face, db: Session) -> None:
-        """Log what will be cascade deleted."""
-        try:
-            logger.info(f"Deleting Face {orm_obj.id} (entity_id={orm_obj.entity_id}) will cascade delete:")
-        except Exception as e:
-            logger.warning(f"Failed to log cascade deletes for Face {orm_obj.id}: {e}")
+
 
     @timed
     @with_retry(max_retries=10)
@@ -270,34 +265,7 @@ class KnownPersonDBService(BaseDBService[KnownPersonSchema]):
     model_class = KnownPerson
     schema_class = KnownPersonSchema
 
-    @timed
-    @with_retry(max_retries=10)
-    def delete(self, id: int) -> bool:
-        """Delete person only if no faces linked."""
-        db = self.db if self.db else database.SessionLocal()
-        should_close = self.db is None
-        try:
-            person = db.query(KnownPerson).filter_by(id=id).first()
-            if not person:
-                return False
-
-            # Check for linked faces
-            face_count = db.query(Face).filter_by(known_person_id=id).count()
-            if face_count > 0:
-                raise ValueError(
-                    f"Cannot delete KnownPerson {id}: {face_count} Face(s) are linked. "
-                    f"Unlink faces first by setting their known_person_id to NULL."
-                )
-
-            db.delete(person)
-            db.commit()
-            return True
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            if should_close:
-                db.close()
+    
 
     @timed
     @with_retry(max_retries=10)

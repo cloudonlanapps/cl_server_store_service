@@ -163,28 +163,7 @@ class BaseDBService(Generic[SchemaT]):
         finally:
             db.close()
 
-    @timed
-    @with_retry(max_retries=10)
-    def delete(self, id: int) -> bool:
-        """Delete record and log cascades.
 
-        Session: Creates and closes own session.
-        """
-        db = database.SessionLocal()
-        try:
-            obj = db.query(self.model_class).filter_by(id=id).first()
-            if not obj:
-                return False
-
-            self._log_cascade_deletes(obj, db) # Pass db session if needed
-            db.delete(obj)
-            db.commit()
-            return True
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            db.close()
 
     @timed
     @with_retry(max_retries=10)
@@ -279,6 +258,4 @@ class BaseDBService(Generic[SchemaT]):
         """Convert ORM to Pydantic."""
         return self.schema_class.model_validate(orm_obj)
 
-    def _log_cascade_deletes(self, orm_obj: Any, db: Session) -> None:
-        """Log what will be cascade deleted (override in subclasses)."""
-        pass
+
