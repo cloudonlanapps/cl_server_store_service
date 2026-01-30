@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +15,11 @@ from ..common.storage import StorageService
 from .config import StoreConfig
 from .media_metadata import MediaMetadataExtractor
 
+if TYPE_CHECKING:
+    from .face_service import FaceService
+    from store.vectorstore_services.vector_stores import QdrantVectorStore
+    from ..broadcast_service.broadcaster import MInsightBroadcaster
+
 
 class DuplicateFileError(Exception):
     """Raised when attempting to upload a file with duplicate MD5."""
@@ -22,15 +27,33 @@ class DuplicateFileError(Exception):
     pass
 
 
+class EntityNotSoftDeletedError(Exception):
+    """Raised when attempting to hard delete an entity that is not soft-deleted."""
+
+    pass
+
+
 class EntityService:
     """Service layer for entity operations."""
 
-    def __init__(self, db: Session, config: StoreConfig):
+    def __init__(
+        self,
+        db: Session,
+        config: StoreConfig,
+        face_service: FaceService | None = None,
+        clip_store: QdrantVectorStore | None = None,
+        dino_store: QdrantVectorStore | None = None,
+        broadcaster: MInsightBroadcaster | None = None,
+    ):
         """Initialize the entity service.
 
         Args:
             db: SQLAlchemy database session
             config: Store configuration
+            face_service: Optional face service for deletion operations
+            clip_store: Optional CLIP vector store for deletion operations
+            dino_store: Optional DINO vector store for deletion operations
+            broadcaster: Optional MQTT broadcaster for clearing retained messages
         """
         self.db: Session = db
         self.config: StoreConfig = config
@@ -38,6 +61,11 @@ class EntityService:
         self.file_storage: StorageService = StorageService(base_dir=str(config.media_storage_dir))
         # Initialize metadata extractor
         self.metadata_extractor: MediaMetadataExtractor = MediaMetadataExtractor()
+        # Optional dependencies for deletion operations
+        self.face_service: FaceService | None = face_service
+        self.clip_store: QdrantVectorStore | None = clip_store
+        self.dino_store: QdrantVectorStore | None = dino_store
+        self.broadcaster: MInsightBroadcaster | None = broadcaster
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -486,7 +514,8 @@ class EntityService:
                 if "database is locked" in str(e).lower():
                     if attempt < max_retries - 1:
                         logger.warning(
-                            f"Database locked during entity creation, retry {attempt + 1}/{max_retries} after {retry_delay}s"
+                            f"Database locked during entity creation, "
+                            f"retry {attempt + 1}/{max_retries} after {retry_delay}s"
                         )
                         time.sleep(retry_delay)
                         retry_delay *= 2  # Exponential backoff
@@ -663,5 +692,121 @@ class EntityService:
         self.db.refresh(entity)
 
         return self._entity_to_item(entity)
+
+    def delete_entity(self, entity_id: int) -> bool:
+        """Permanently delete an entity (hard delete with full cleanup).
+
+        This method implements the deletion orchestration as specified in DEL-01 to DEL-09:
+        1. If entity is a collection, recursively delete all children
+        2. For each child: soft-delete first (if not already), then hard delete
+        3. Verify entity itself is soft-deleted (DEL-09 requirement)
+        4. Delete all associated faces (DB + Vector + Files)
+        5. Delete CLIP/DINO embeddings from vector stores
+        6. Delete entity file from storage
+        7. Clear MQTT retained messages
+        8. Delete entity record from database
+
+        Args:
+            entity_id: Entity ID to delete
+
+        Returns:
+            True if entity was deleted, False if entity not found
+
+        Raises:
+            EntityNotSoftDeletedError: If entity is not soft-deleted (DEL-09)
+            Exception: If deletion fails (DB will rollback)
+        """
+        try:
+            # Get entity
+            entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
+            if not entity:
+                logger.warning(f"Entity {entity_id} not found for deletion")
+                return False
+
+            logger.info(f"Starting hard delete for entity {entity_id}")
+
+            # Step 1: Handle collection children (DEL-06)
+            if entity.is_collection:
+                children = self.db.query(Entity).filter(Entity.parent_id == entity_id).all()
+                logger.info(f"Entity {entity_id} is a collection with {len(children)} children")
+
+                for child in children:
+                    # If child not soft-deleted, soft-delete it first (for version history)
+                    if not child.is_deleted:
+                        logger.info(
+                            f"Soft-deleting child {child.id} before hard delete "
+                            f"(DEL-06 requirement)"
+                        )
+                        child.is_deleted = True
+                        child.updated_date = self._now_timestamp()
+                        self.db.flush()  # Ensure soft-delete is persisted
+
+                    # Recursively hard-delete the child
+                    logger.info(f"Recursively hard-deleting child {child.id}")
+                    self.delete_entity(child.id)
+
+            # Step 2: Verify entity is soft-deleted (DEL-09)
+            if not entity.is_deleted:
+                raise EntityNotSoftDeletedError(
+                    f"Cannot hard delete entity {entity_id}: "
+                    f"entity must be soft-deleted first (is_deleted=True). "
+                    "Use PATCH /entities/{id} with is_deleted=true before hard deletion."
+                )
+
+            # Step 3: Delete all faces for this entity (DB + Vector + Files)
+            if self.face_service:
+                face_count = self.face_service.delete_faces_for_entity(entity_id)
+                logger.debug(f"Deleted {face_count} faces for entity {entity_id}")
+            else:
+                logger.warning("FaceService not available, skipping face deletion")
+
+            # Step 4: Delete CLIP embeddings from vector store
+            if self.clip_store:
+                try:
+                    self.clip_store.delete_vector(entity_id)
+                    logger.debug(f"Deleted CLIP embedding for entity {entity_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete CLIP embedding for entity {entity_id}: {e}")
+
+            # Step 5: Delete DINO embeddings from vector store
+            if self.dino_store:
+                try:
+                    self.dino_store.delete_vector(entity_id)
+                    logger.debug(f"Deleted DINO embedding for entity {entity_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete DINO embedding for entity {entity_id}: {e}")
+
+            # Step 6: Delete entity file from storage
+            if entity.file_path:
+                try:
+                    deleted = self.file_storage.delete_file(entity.file_path)
+                    if deleted:
+                        logger.debug(f"Deleted entity file: {entity.file_path}")
+                    else:
+                        logger.warning(f"Entity file not found: {entity.file_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete entity file {entity.file_path}: {e}")
+
+            # Step 7: Clear MQTT retained message
+            if self.broadcaster:
+                try:
+                    self.broadcaster.clear_entity_status(entity_id)
+                    logger.debug(f"Cleared MQTT message for entity {entity_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to clear MQTT message for entity {entity_id}: {e}")
+
+            # Step 8: Delete entity from database
+            self.db.delete(entity)
+            self.db.commit()
+            logger.info(f"Successfully hard-deleted entity {entity_id}")
+            return True
+
+        except EntityNotSoftDeletedError:
+            # Don't rollback for this validation error
+            raise
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Failed to delete entity {entity_id}: {e}")
+            raise
 
 

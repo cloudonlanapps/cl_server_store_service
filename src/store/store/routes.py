@@ -30,7 +30,8 @@ from ..broadcast_service import schemas as broadcast_schemas
 from ..common.auth import UserPayload, require_admin, require_permission
 from .dependencies import get_broadcaster, get_config_service, get_entity_service, get_monitor
 from ..broadcast_service.monitor import MInsightMonitor
-from .service import DuplicateFileError, EntityService
+from .service import DuplicateFileError, EntityService, EntityNotSoftDeletedError
+from .audit_service import AuditReport, AuditService, CleanupReport
 
 router = APIRouter()
 
@@ -251,7 +252,7 @@ async def put_entity(
             logger.debug(f"Cleared retained status for entity {item.id} on {status_topic}")
 
         # Broadcast MQTT event only if file was actually updated
-        # Note: Broadcaster only emits if a file was actually updated (item.md5 is not None for media)
+        # Note: Broadcaster only emits if file was updated (item.md5 not None for media)
         if broadcaster and item.md5 and image:
             topic = f"store/{config.port}/items"
             payload = {"id": item.id, "md5": item.md5, "timestamp": int(time.time() * 1000)}
@@ -279,7 +280,10 @@ async def put_entity(
     "/entities/{entity_id}",
     tags=["entity"],
     summary="Patch Entity",
-    description="Partially updates an entity. Use this endpoint to soft delete (is_deleted=true) or restore (is_deleted=false) an entity.",
+    description=(
+        "Partially updates an entity. Use this endpoint to soft delete (is_deleted=true) "
+        "or restore (is_deleted=false) an entity."
+    ),
     operation_id="patch_entity",
     responses={
         200: {"model": EntitySchema, "description": "Successful Response"},
@@ -479,3 +483,297 @@ async def get_m_insight_status(
     if monitor:
         return monitor.get_status()
     return None
+
+
+# ============================================================================
+# Deletion & Audit Endpoints (DEL-01 to DEL-10)
+# ============================================================================
+
+
+@router.delete(
+    "/entities/{entity_id}",
+    tags=["entity"],
+    summary="Delete Entity (Hard Delete)",
+    description="""Permanently delete an entity with full cleanup of all associated resources.
+
+    Requirements (DEL-09):
+    - Entity MUST be soft-deleted first (is_deleted=True) before hard deletion
+    - Use PATCH /entities/{id} with is_deleted=true to soft-delete first
+
+    This operation:
+    - Deletes all faces (DB + vectors + files)
+    - Deletes CLIP/DINO embeddings
+    - Deletes entity file
+    - Clears MQTT retained messages
+    - Removes entity from database
+    - For collections: recursively deletes all children (soft-deleting them first if needed)
+    """,
+    operation_id="delete_entity",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        204: {"description": "Entity successfully deleted"},
+        404: {"description": "Entity not found"},
+        400: {"description": "Entity not soft-deleted (DEL-09 violation)"},
+    },
+)
+async def delete_entity(
+    entity_id: int = Path(..., description="Entity ID to delete"),
+    user: UserPayload | None = Depends(require_permission("media_store_write")),
+    service: EntityService = Depends(get_entity_service),
+) -> Response:
+    """Delete an entity permanently (DEL-01 to DEL-06, DEL-09)."""
+    _ = user
+
+    try:
+        deleted = service.delete_entity(entity_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Entity {entity_id} not found",
+            )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    except EntityNotSoftDeletedError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Failed to delete entity {entity_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete entity: {str(e)}",
+        )
+
+
+@router.delete(
+    "/faces/{face_id}",
+    tags=["face"],
+    summary="Delete Face",
+    description="""Delete a face completely (DB + vector + file) and update entity face_count.
+
+    This operation (DEL-08):
+    - Removes face record from database
+    - Deletes face embedding from vector store
+    - Deletes face crop image file
+    - Decrements face_count in parent entity intelligence_data
+    """,
+    operation_id="delete_face",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        204: {"description": "Face successfully deleted"},
+        404: {"description": "Face not found"},
+    },
+)
+async def delete_face(
+    face_id: int = Path(..., description="Face ID to delete"),
+    user: UserPayload | None = Depends(require_permission("media_store_write")),
+    service: EntityService = Depends(get_entity_service),
+) -> Response:
+    """Delete a face and update entity face_count (DEL-08)."""
+    _ = user
+
+    if not service.face_service:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Face service not available",
+        )
+
+    try:
+        deleted = service.face_service.delete_face(face_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Face {face_id} not found",
+            )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    except Exception as e:
+        logger.error(f"Failed to delete face {face_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete face: {str(e)}",
+        )
+
+
+@router.get(
+    "/system/audit",
+    tags=["admin"],
+    summary="Audit Data Integrity",
+    description="""Generate a comprehensive audit report of data integrity issues.
+
+    This endpoint performs readonly checks for:
+    - Orphaned files in storage without DB entities
+    - Orphaned Face records without valid entity references
+    - Orphaned vectors in Qdrant without DB entities
+    - Orphaned MQTT retained messages (if broadcaster available)
+
+    No data is modified by this operation.
+    """,
+    operation_id="audit_system",
+    response_model=AuditReport,
+)
+async def audit_system(
+    request: Request,
+    user: UserPayload | None = Depends(require_admin),
+) -> AuditReport:
+    """Generate data integrity audit report."""
+    _ = user
+
+    # Get dependencies from app state
+    config = request.app.state.config
+    clip_store = getattr(request.app.state, "clip_store", None)
+    dino_store = getattr(request.app.state, "dino_store", None)
+    face_store = getattr(request.app.state, "face_store", None)
+    broadcaster = getattr(request.app.state, "broadcaster", None)
+
+    # Create storage service
+    from ..common.storage import StorageService
+    storage_service = StorageService(base_dir=str(config.media_storage_dir))
+
+    # Get DB session
+    from store.db_service.db_internals import get_db
+    db = next(get_db())
+
+    try:
+        # Create audit service
+        audit_service = AuditService(
+            db=db,
+            storage_service=storage_service,
+            clip_store=clip_store,
+            dino_store=dino_store,
+            face_store=face_store,
+            broadcaster=broadcaster,
+        )
+
+        # Generate report
+        report = audit_service.generate_report()
+        return report
+
+    finally:
+        db.close()
+
+
+@router.post(
+    "/system/clear-orphans",
+    tags=["admin"],
+    summary="Clear Orphaned Resources",
+    description="""Remove all orphaned resources identified by the audit system (DEL-10).
+
+    This endpoint:
+    1. Runs an audit to identify orphaned resources
+    2. Deletes orphaned files from storage
+    3. Removes orphaned Face records from database
+    4. Deletes orphaned vectors from Qdrant
+    5. Clears orphaned MQTT retained messages
+
+    Returns a summary of cleaned resources.
+    """,
+    operation_id="clear_orphans",
+    response_model=CleanupReport,
+)
+async def clear_orphans(
+    request: Request,
+    user: UserPayload | None = Depends(require_admin),
+) -> CleanupReport:
+    """Clear all orphaned resources (DEL-10)."""
+    _ = user
+
+    # Get dependencies from app state
+    config = request.app.state.config
+    clip_store = getattr(request.app.state, "clip_store", None)
+    dino_store = getattr(request.app.state, "dino_store", None)
+    face_store = getattr(request.app.state, "face_store", None)
+    broadcaster = getattr(request.app.state, "broadcaster", None)
+
+    # Create storage service
+    from ..common.storage import StorageService
+    storage_service = StorageService(base_dir=str(config.media_storage_dir))
+
+    # Get DB session
+    from store.db_service.db_internals import get_db
+    db = next(get_db())
+
+    try:
+        # Create audit service
+        audit_service = AuditService(
+            db=db,
+            storage_service=storage_service,
+            clip_store=clip_store,
+            dino_store=dino_store,
+            face_store=face_store,
+            broadcaster=broadcaster,
+        )
+
+        # Generate audit report
+        logger.info("Generating audit report before cleanup...")
+        report = audit_service.generate_report()
+
+        cleanup_report = CleanupReport()
+
+        # Delete orphaned files
+        logger.info(f"Deleting {len(report.orphaned_files)} orphaned files...")
+        for orphan in report.orphaned_files:
+            try:
+                storage_service.delete_file(orphan.file_path)
+                cleanup_report.files_deleted += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete orphaned file {orphan.file_path}: {e}")
+
+        # Delete orphaned face records
+        logger.info(f"Deleting {len(report.orphaned_faces)} orphaned face records...")
+        from store.db_service.db_internals import Face
+        for orphan in report.orphaned_faces:
+            try:
+                face = db.query(Face).filter(Face.id == orphan.face_id).first()
+                if face:
+                    db.delete(face)
+                    cleanup_report.faces_deleted += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete orphaned face {orphan.face_id}: {e}")
+
+        db.commit()
+
+        # Delete orphaned vectors
+        logger.info(f"Deleting {len(report.orphaned_vectors)} orphaned vectors...")
+        for orphan in report.orphaned_vectors:
+            try:
+                if orphan.collection_name == "clip_embeddings" and clip_store:
+                    clip_store.delete_vector(orphan.vector_id)
+                    cleanup_report.vectors_deleted += 1
+                elif orphan.collection_name == "dino_embeddings" and dino_store:
+                    dino_store.delete_vector(orphan.vector_id)
+                    cleanup_report.vectors_deleted += 1
+                elif orphan.collection_name == "face_embeddings" and face_store:
+                    face_store.delete_vector(orphan.vector_id)
+                    cleanup_report.vectors_deleted += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete orphaned vector {orphan.vector_id}: {e}")
+
+        # Clear orphaned MQTT messages
+        if broadcaster and report.orphaned_mqtt:
+            logger.info(f"Clearing {len(report.orphaned_mqtt)} orphaned MQTT messages...")
+            for orphan in report.orphaned_mqtt:
+                try:
+                    broadcaster.clear_entity_status(orphan.entity_id)
+                    cleanup_report.mqtt_cleared += 1
+                except Exception as e:
+                    logger.warning(f"Failed to clear MQTT for entity {orphan.entity_id}: {e}")
+
+        logger.info(
+            f"Cleanup complete: {cleanup_report.files_deleted} files, "
+            f"{cleanup_report.faces_deleted} faces, {cleanup_report.vectors_deleted} vectors, "
+            f"{cleanup_report.mqtt_cleared} MQTT messages"
+        )
+
+        return cleanup_report
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to clear orphans: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear orphans: {str(e)}",
+        )
+    finally:
+        db.close()

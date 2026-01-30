@@ -23,14 +23,44 @@ def get_config_service(db: DBService = Depends(get_db_service)) -> ConfigDBServi
 
 
 def get_entity_service(
+    request: Request,
     db: Session = Depends(get_db),
     config: StoreConfig = Depends(get_config),
+    db_service: DBService = Depends(get_db_service),
 ) -> EntityService:
     """Dependency to get EntityService instance.
 
     This creates a new service instance per request (because db is request-scoped).
+    Injects deletion dependencies from app state.
     """
-    return EntityService(db, config)
+    # Get deletion dependencies from app state
+    clip_store = getattr(request.app.state, "clip_store", None)
+    dino_store = getattr(request.app.state, "dino_store", None)
+    face_store = getattr(request.app.state, "face_store", None)
+    broadcaster = getattr(request.app.state, "broadcaster", None)
+
+    # Create FaceService if face_store is available
+    face_service = None
+    if face_store:
+        from .face_service import FaceService
+        from ..common.storage import StorageService
+
+        storage_service = StorageService(base_dir=str(config.media_storage_dir))
+        face_service = FaceService(
+            db=db,
+            db_service=db_service,
+            face_store=face_store,
+            storage_service=storage_service,
+        )
+
+    return EntityService(
+        db,
+        config,
+        face_service=face_service,
+        clip_store=clip_store,
+        dino_store=dino_store,
+        broadcaster=broadcaster,
+    )
 
 
 def get_broadcaster(request: Request) -> BroadcasterBase | None:
