@@ -35,6 +35,7 @@ class Entity(Base):
 
     __tablename__ = "entities"  # pyright: ignore[reportUnannotatedClassAttribute]
     __versioned__ = {}  # Enable SQLAlchemy-Continuum versioning  # pyright: ignore[reportUnannotatedClassAttribute]
+    __table_args__ = {"sqlite_autoincrement": True}
 
     # Primary key
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

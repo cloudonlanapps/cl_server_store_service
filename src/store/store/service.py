@@ -270,7 +270,14 @@ class EntityService:
         if exclude_deleted:
             query = query.filter(Entity.is_deleted == False)  # noqa: E712
 
-        # TODO: Implement filtering and search logic
+        # Apply search query filter if provided
+        if search_query:
+            search_pattern = f"%{search_query}%"
+            query = query.filter(
+                (Entity.label.ilike(search_pattern)) | (Entity.description.ilike(search_pattern))
+            )
+
+        # TODO: Implement complex filtering logic if needed
 
         # Get total count before pagination
         total_count = query.count()
@@ -795,7 +802,12 @@ class EntityService:
                 except Exception as e:
                     logger.warning(f"Failed to clear MQTT message for entity {entity_id}: {e}")
 
-            # Step 8: Delete entity from database
+            # Step 8: Clear intelligence data before deletion (as suggested)
+            # This ensures the final version tombstone has no stale intelligence metadata
+            entity.intelligence_data = None
+            self.db.flush()
+
+            # Step 9: Delete entity from database
             self.db.delete(entity)
             self.db.commit()
             logger.info(f"Successfully hard-deleted entity {entity_id}")
