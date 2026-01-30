@@ -143,7 +143,7 @@ def init_db() -> None:
     global SessionLocal, engine
     if SessionLocal is not None:
         return
-    engine = create_db_engine(get_db_url(), echo=False)
+    engine = create_db_engine(get_db_url(), echo=True)
     SessionLocal = create_session_factory(engine)
 
 
