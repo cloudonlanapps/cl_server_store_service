@@ -33,9 +33,9 @@ async def test_submit_face_detection(job_service, mock_compute):
     mock_entity.id = 1
     mock_entity.file_path = "img.jpg"
     mock_entity.md5 = "abc"
-    mock_entity.intelligence_data = None
     # Mock existing intelligence_data check
     job_service.db.entity.get.return_value = mock_entity
+    job_service.db.intelligence.get_intelligence_data.return_value = None
 
     # Mock storage resolution
     job_service.storage_service.get_absolute_path.return_value = Path("/path/to/img.jpg")
@@ -50,8 +50,8 @@ async def test_submit_face_detection(job_service, mock_compute):
     mock_compute.face_detection.detect.assert_called_once()
     
     # Verify entity update was called with active job
-    job_service.db.entity.atomic_update_intelligence_data.assert_called_once()
-    args = job_service.db.entity.atomic_update_intelligence_data.call_args
+    job_service.db.intelligence.atomic_update_intelligence_data.assert_called_once()
+    args = job_service.db.intelligence.atomic_update_intelligence_data.call_args
     assert args[0][0] == 1 # entity_id
     update_fn = args[0][1]
     
@@ -73,8 +73,8 @@ async def test_submit_clip_embedding(job_service, mock_compute):
     mock_entity.id = 1
     mock_entity.file_path = "img.jpg"
     mock_entity.md5 = "abc"
-    mock_entity.intelligence_data = None
     job_service.db.entity.get.return_value = mock_entity
+    job_service.db.intelligence.get_intelligence_data.return_value = None
 
     job_service.storage_service.get_absolute_path.return_value = Path("/path/to/img.jpg")
 
@@ -86,8 +86,8 @@ async def test_submit_clip_embedding(job_service, mock_compute):
     assert job_id == "clip-123"
     mock_compute.clip_embedding.embed_image.assert_called_once()
     
-    job_service.db.entity.atomic_update_intelligence_data.assert_called_once()
-    update_fn = job_service.db.entity.atomic_update_intelligence_data.call_args[0][1]
+    job_service.db.intelligence.atomic_update_intelligence_data.assert_called_once()
+    update_fn = job_service.db.intelligence.atomic_update_intelligence_data.call_args[0][1]
     data = EntityIntelligenceData(last_updated=0)
     update_fn(data)
     assert data.active_jobs[0].job_id == "clip-123"
@@ -103,8 +103,8 @@ async def test_submit_dino_embedding(job_service, mock_compute):
     mock_entity.id = 1
     mock_entity.file_path = "img.jpg"
     mock_entity.md5 = "abc"
-    mock_entity.intelligence_data = None
     job_service.db.entity.get.return_value = mock_entity
+    job_service.db.intelligence.get_intelligence_data.return_value = None
 
     job_service.storage_service.get_absolute_path.return_value = Path("/path/to/img.jpg")
 
@@ -116,8 +116,8 @@ async def test_submit_dino_embedding(job_service, mock_compute):
     assert job_id == "dino-123"
     mock_compute.dino_embedding.embed_image.assert_called_once()
     
-    job_service.db.entity.atomic_update_intelligence_data.assert_called_once()
-    update_fn = job_service.db.entity.atomic_update_intelligence_data.call_args[0][1]
+    job_service.db.intelligence.atomic_update_intelligence_data.assert_called_once()
+    update_fn = job_service.db.intelligence.atomic_update_intelligence_data.call_args[0][1]
     data = EntityIntelligenceData(last_updated=0)
     update_fn(data)
     assert data.active_jobs[0].job_id == "dino-123"
@@ -132,13 +132,15 @@ def test_delete_job_record(job_service):
         last_updated=0, 
         active_jobs=[JobInfo(job_id="job-123", task_type="test", started_at=0)]
     )
-    mock_entity.intelligence_data = data
     job_service.db.entity.get.return_value = mock_entity
+    # delete_job_record only needs atomic_update, doesn't check get_intelligence_data first explicitly?
+    # Actually delete_job_record implementation just calls atomic_update.
+
 
     job_service.delete_job_record(1, "job-123")
     
-    job_service.db.entity.atomic_update_intelligence_data.assert_called_once()
-    update_fn = job_service.db.entity.atomic_update_intelligence_data.call_args[0][1]
+    job_service.db.intelligence.atomic_update_intelligence_data.assert_called_once()
+    update_fn = job_service.db.intelligence.atomic_update_intelligence_data.call_args[0][1]
     update_fn(data)
     assert len(data.active_jobs) == 0
 
@@ -152,13 +154,13 @@ def test_update_job_status(job_service):
         active_jobs=[JobInfo(job_id="job-123", task_type="face_detection", started_at=0)],
         inference_status=InferenceStatus(face_detection="processing")
     )
-    mock_entity.intelligence_data = data
     job_service.db.entity.get.return_value = mock_entity
+
 
     job_service.update_job_status(1, "job-123", "completed")
     
-    job_service.db.entity.atomic_update_intelligence_data.assert_called_once()
-    update_fn = job_service.db.entity.atomic_update_intelligence_data.call_args[0][1]
+    job_service.db.intelligence.atomic_update_intelligence_data.assert_called_once()
+    update_fn = job_service.db.intelligence.atomic_update_intelligence_data.call_args[0][1]
     update_fn(data)
     
     # Should update inference status

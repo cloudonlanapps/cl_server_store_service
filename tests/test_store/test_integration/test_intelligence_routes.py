@@ -117,10 +117,17 @@ class TestIntelligenceRoutes:
         entity = models.Entity(
             is_collection=False,
             label="job_test.jpg",
-            md5="job12345",
-            intelligence_data=intel_data.model_dump()
+            md5="job12345"
         )
         test_db_session.add(entity)
+        test_db_session.flush()
+
+        # Add intelligence data
+        intel = models.EntityIntelligence(
+            entity_id=entity.id,
+            intelligence_data=intel_data.model_dump()
+        )
+        test_db_session.add(intel)
         test_db_session.commit()
 
         response = client.get(f"/intelligence/entities/{entity.id}/jobs")

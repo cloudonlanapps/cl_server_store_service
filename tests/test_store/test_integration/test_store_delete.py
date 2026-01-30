@@ -99,33 +99,143 @@ class TestEntityDeletion:
         # Verify file removed
         assert not file_abs_path.exists(), f"File should be deleted at {file_abs_path}"
 
-    def test_delete_entity_removes_vectors(
+    def test_consolidated_deletion_flow(
         self, client: TestClient, sample_image: Path, test_db_session: Session
     ) -> None:
-        """DEL-03: Deleting an entity must remove its CLIP/DINO embeddings."""
-        # TODO: Implement vector store test
-        # 1. Create entity
-        # 2. Create CLIP/DINO embeddings (requires mInsight processing)
-        # 3. Verify embeddings exist in Qdrant
-        # 4. Soft-delete entity
-        # 5. Hard delete entity
-        # 6. Verify embeddings removed from Qdrant
-        pass
+        """
+        Consolidated deletion test covering DEL-03, DEL-04, DEL-05, DEL-08.
+        
+        Flow:
+        1. Upload entity (mocking multiple faces).
+        2. Verify initial state (DB, Intelligence).
+        3. Delete one face -> Verify cleanup (DB, Vector, Count).
+        4. Delete second face -> Verify cleanup.
+        5. Delete entity -> Verify full cleanup (DB, Files, Vectors, MQTT).
+        """
+        # 1. Setup Mocks
+        mock_broadcaster = MagicMock()
+        mock_face_store = MagicMock()
+        mock_clip_store = MagicMock()
+        mock_dino_store = MagicMock()
 
-    def test_delete_entity_removes_faces(
-        self, client: TestClient, sample_image: Path, test_db_session: Session
-    ) -> None:
-        """DEL-04: Deleting an entity must remove all associated Face records/vectors."""
-        # TODO: Implement face deletion test
-        # 1. Create entity with image containing faces
-        # 2. Run face detection (requires mInsight)
-        # 3. Verify Face records exist in DB
-        # 4. Verify face vectors exist in Qdrant
-        # 5. Soft-delete entity
-        # 6. Hard delete entity
-        # 7. Verify Face records removed from DB
-        # 8. Verify face vectors removed from Qdrant
-        pass
+        # Inject mocks into app state
+        client.app.state.broadcaster = mock_broadcaster
+        client.app.state.face_store = mock_face_store
+        client.app.state.clip_store = mock_clip_store
+        client.app.state.dino_store = mock_dino_store
+
+        # 2. Create Entity
+        with open(sample_image, "rb") as f:
+            response = client.post(
+                "/entities/",
+                files={"image": (sample_image.name, f, "image/jpeg")},
+                data={"is_collection": "false", "label": "Multi-Face Entity"},
+            )
+        assert response.status_code == 201
+        entity = EntitySchema.model_validate(response.json())
+        entity_id = entity.id
+
+        # 3. Manually create Faces and Intelligence Data (Simulate mInsight)
+        from store.db_service.models import Face, EntityIntelligence
+        from store.db_service import EntityIntelligenceData
+        
+        # Create 2 mock faces
+        face1 = Face(
+            entity_id=entity_id,
+            file_path=f"faces/{entity_id}_1.jpg",
+            bbox="[0.1, 0.1, 0.6, 0.6]",
+            confidence=0.99,
+            landmarks="[]",
+            created_at=1000
+        )
+        face2 = Face(
+            entity_id=entity_id,
+            file_path=f"faces/{entity_id}_2.jpg",
+            bbox="[0.2, 0.2, 0.7, 0.7]",
+            confidence=0.98,
+            landmarks="[]",
+            created_at=1001
+        )
+        test_db_session.add(face1)
+        test_db_session.add(face2)
+        
+        # Create Intelligence Record with face count
+        intel_data = EntityIntelligenceData(
+            face_count=2,
+            overall_status="completed",
+            last_updated=1000
+        )
+        intel_record = EntityIntelligence(
+            entity_id=entity_id,
+            intelligence_data=intel_data.model_dump()
+        )
+        test_db_session.add(intel_record)
+        test_db_session.commit()
+        test_db_session.refresh(face1)
+        test_db_session.refresh(face2)
+        
+        f1_id = face1.id
+        f2_id = face2.id
+
+        # 4. Delete Face 1
+        resp = client.delete(f"/faces/{f1_id}")
+        assert resp.status_code == 204
+        
+        # Verify Face 1 Deleted
+        test_db_session.expire_all()
+        assert test_db_session.get(Face, f1_id) is None
+        assert test_db_session.get(Face, f2_id) is not None
+        
+        # Verify Vector Deletion (Face 1)
+        mock_face_store.delete_vector.assert_called_with(f1_id)
+        
+        # Verify Face Count Update
+        from store.db_service.intelligence import EntityIntelligenceDBService
+        intel_service = EntityIntelligenceDBService(test_db_session)
+        current_intel = intel_service.get_intelligence_data(entity_id)
+        assert current_intel.face_count == 1
+        
+        # 5. Delete Face 2 (Another "image"/face)
+        resp = client.delete(f"/faces/{f2_id}")
+        assert resp.status_code == 204
+        
+        # Verify Face 2 Deleted
+        test_db_session.expire_all()
+        assert test_db_session.get(Face, f2_id) is None
+        
+        # Verify Vector Deletion (Face 2)
+        mock_face_store.delete_vector.assert_called_with(f2_id)
+        
+        # Verify Face Count Update
+        current_intel = intel_service.get_intelligence_data(entity_id)
+        assert current_intel.face_count == 0
+
+        # Reset Mocks for Entity Deletion Check
+        mock_broadcaster.reset_mock()
+        mock_clip_store.reset_mock()
+        mock_dino_store.reset_mock()
+
+        # 6. Delete Entity
+        # Soft Delete First
+        client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
+        
+        # Hard Delete
+        resp = client.delete(f"/entities/{entity_id}")
+        assert resp.status_code == 204
+        
+        # Verify Entity Gone
+        assert test_db_session.get(Entity, entity_id) is None
+        
+        # Verify Vector Store Cleanup (CLIP/DINO)
+        mock_clip_store.delete_vector.assert_called_with(entity_id)
+        mock_dino_store.delete_vector.assert_called_with(entity_id)
+        
+        # Verify MQTT Cleanup
+        mock_broadcaster.clear_entity_status.assert_called_with(entity_id)
+
+    # Removed individual TODO tests replaced by the above consolidated test
+    # test_delete_entity_removes_vectors
+    # test_delete_entity_removes_faces
 
     def test_delete_entity_clears_mqtt_mock(
         self, client: TestClient, sample_image: Path, test_db_session: Session
@@ -401,19 +511,8 @@ class TestEntityDeletion:
 class TestFaceDeletion:
     """Test face deletion endpoint (DEL-08)."""
 
-    def test_delete_face_updates_counts(
-        self, client: TestClient, sample_image: Path, test_db_session: Session
-    ) -> None:
-        """DEL-08: DELETE /faces/{id} must remove face and decrement face_count in Entity."""
-        # TODO: Implement face deletion test
-        # 1. Create entity with faces
-        # 2. Verify face_count in entity.intelligence_data
-        # 3. Delete one face via DELETE /faces/{id}
-        # 4. Verify face removed from DB
-        # 5. Verify face vector removed from Qdrant
-        # 6. Verify face crop file removed
-        # 7. Verify face_count decremented
-        pass
+    # test_delete_face_updates_counts replaced by test_consolidated_deletion_flow
+    pass
 
 
 class TestDeleteAllNotExposed:

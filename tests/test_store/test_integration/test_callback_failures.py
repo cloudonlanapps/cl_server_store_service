@@ -97,12 +97,15 @@ async def test_callback_missing_detections(callback_handler):
     mock_entity = MagicMock()
     mock_entity.is_deleted = False
     mock_entity.md5 = "hash"
-    mock_entity.intelligence_data.active_processing_md5 = "hash"
-    # Ensure active_jobs check passes
+    callback_handler.db.entity.get.return_value = mock_entity
+
+    # Mock intelligence data
+    mock_data = MagicMock()
+    mock_data.active_processing_md5 = "hash"
     mock_job_record = MagicMock()
     mock_job_record.job_id = "job2"
-    mock_entity.intelligence_data.active_jobs = [mock_job_record]
-    callback_handler.db.entity.get.return_value = mock_entity
+    mock_data.active_jobs = [mock_job_record]
+    callback_handler.db.intelligence.get_intelligence_data.return_value = mock_data
 
     with patch("store.m_insight.job_callbacks.logger") as mock_logger:
         await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
@@ -163,11 +166,14 @@ async def test_callback_database_error(callback_handler):
     mock_entity = MagicMock()
     mock_entity.is_deleted = False
     mock_entity.md5 = "hash"
-    mock_entity.intelligence_data.active_processing_md5 = "hash"
+    callback_handler.db.entity.get.return_value = mock_entity
+
+    mock_data = MagicMock()
+    mock_data.active_processing_md5 = "hash"
     mock_job_record = MagicMock()
     mock_job_record.job_id = "job4"
-    mock_entity.intelligence_data.active_jobs = [mock_job_record]
-    callback_handler.db.entity.get.return_value = mock_entity
+    mock_data.active_jobs = [mock_job_record]
+    callback_handler.db.intelligence.get_intelligence_data.return_value = mock_data
 
     # Trigger exception inside the try block (get_job)
     callback_handler.compute_client.get_job.side_effect = Exception("Fetch failed")
@@ -201,11 +207,14 @@ async def test_callback_clip_malformed_output(callback_handler):
     mock_entity = MagicMock()
     mock_entity.is_deleted = False
     mock_entity.md5 = "hash"
-    mock_entity.intelligence_data.active_processing_md5 = "hash"
+    callback_handler.db.entity.get.return_value = mock_entity
+
+    mock_data = MagicMock()
+    mock_data.active_processing_md5 = "hash"
     mock_job_record = MagicMock()
     mock_job_record.job_id = "job5"
-    mock_entity.intelligence_data.active_jobs = [mock_job_record]
-    callback_handler.db.entity.get.return_value = mock_entity
+    mock_data.active_jobs = [mock_job_record]
+    callback_handler.db.intelligence.get_intelligence_data.return_value = mock_data
 
     with patch("store.m_insight.job_callbacks.logger") as mock_logger:
         await callback_handler.handle_clip_embedding_complete(entity_id=1, job=job)
@@ -222,11 +231,14 @@ async def test_callback_job_not_found(callback_handler):
     mock_entity = MagicMock()
     mock_entity.is_deleted = False
     mock_entity.md5 = "hash"
-    mock_entity.intelligence_data.active_processing_md5 = "hash"
+    callback_handler.db.entity.get.return_value = mock_entity
+
+    mock_data = MagicMock()
+    mock_data.active_processing_md5 = "hash"
     mock_job_record = MagicMock()
     mock_job_record.job_id = "job_none"
-    mock_entity.intelligence_data.active_jobs = [mock_job_record]
-    callback_handler.db.entity.get.return_value = mock_entity
+    mock_data.active_jobs = [mock_job_record]
+    callback_handler.db.intelligence.get_intelligence_data.return_value = mock_data
 
     with patch("store.m_insight.job_callbacks.logger") as mock_logger:
         await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
@@ -250,12 +262,15 @@ async def test_callback_validation_error(callback_handler):
     mock_entity = MagicMock()
     mock_entity.is_deleted = False
     mock_entity.md5 = "hash"
-    mock_entity.intelligence_data.active_processing_md5 = "hash"
-    mock_job_record = MagicMock()
-    mock_job_record.job_id = "job_val"
-    mock_entity.intelligence_data.active_jobs = [mock_job_record]
     mock_entity.create_date = 1000
     callback_handler.db.entity.get.return_value = mock_entity
+
+    mock_data = MagicMock()
+    mock_data.active_processing_md5 = "hash"
+    mock_job_record = MagicMock()
+    mock_job_record.job_id = "job_val"
+    mock_data.active_jobs = [mock_job_record]
+    callback_handler.db.intelligence.get_intelligence_data.return_value = mock_data
 
     with patch("store.m_insight.job_callbacks.logger") as mock_logger:
         await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
@@ -292,13 +307,16 @@ async def test_callback_entity_date_fallback(callback_handler):
     mock_entity.id = 1
     mock_entity.is_deleted = False
     mock_entity.md5 = "hash"
-    mock_entity.intelligence_data.active_processing_md5 = "hash"
-    mock_job_record = MagicMock()
-    mock_job_record.job_id = "job_date"
-    mock_entity.intelligence_data.active_jobs = [mock_job_record]
     mock_entity.create_date = None
     mock_entity.updated_date = 2000000000
     callback_handler.db.entity.get.return_value = mock_entity
+
+    mock_data = MagicMock()
+    mock_data.active_processing_md5 = "hash"
+    mock_job_record = MagicMock()
+    mock_job_record.job_id = "job_date"
+    mock_data.active_jobs = [mock_job_record]
+    callback_handler.db.intelligence.get_intelligence_data.return_value = mock_data
 
     # Patch the method using the actual handler instance to ensure it's captured
     # Use a subpath of /tmp/fake/media to avoid ValueError: '/tmp/face.png' is not in the subpath of '/tmp/fake/media'

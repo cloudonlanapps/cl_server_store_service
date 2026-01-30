@@ -62,8 +62,14 @@ class TestJobProcessing:
         assert job_id == "job_123"
         # Verify DB record
         test_db_session.refresh(entity)
-        assert entity.intelligence_data is not None
-        jobs = entity.intelligence_data.get("active_jobs", [])
+        # Fetch intelligence data from separate table
+        intel_record = test_db_session.query(intelligence_models.EntityIntelligence).filter_by(entity_id=entity.id).first()
+        assert intel_record is not None
+        assert intel_record.intelligence_data is not None
+        
+        # Parse intelligence data
+        intel_data = EntityIntelligenceData.model_validate(intel_record.intelligence_data)
+        jobs = intel_data.active_jobs
         # If it's parsed as model, it might be object list, if dict, list of dicts.
         # SQLAlchemy returns dict for JSON field unless we cast it? 
         # Actually in models.py it is Mapped[dict | None].
@@ -99,7 +105,13 @@ class TestJobProcessing:
             inference_status=InferenceStatus(face_detection="processing"),
             active_processing_md5="md5_cc"
         )
-        entity.intelligence_data = data.model_dump()
+        
+        # Create EntityIntelligence record
+        intel_record = intelligence_models.EntityIntelligence(
+            entity_id=entity.id,
+            intelligence_data=data.model_dump()
+        )
+        test_db_session.add(intel_record)
         test_db_session.commit()
 
         # Mock ComputeClient
@@ -208,8 +220,14 @@ class TestJobProcessing:
             active_processing_md5="md5_clip"
         )
         entity = models.Entity(label="clip.jpg", md5="md5_clip", is_collection=False)
-        entity.intelligence_data = data.model_dump()
         test_db_session.add(entity)
+        test_db_session.flush()
+
+        intel_record = intelligence_models.EntityIntelligence(
+            entity_id=entity.id,
+            intelligence_data=data.model_dump()
+        )
+        test_db_session.add(intel_record)
         test_db_session.commit()
 
         mock_compute = AsyncMock()
@@ -277,8 +295,14 @@ class TestJobProcessing:
             active_processing_md5="m1"
         )
         entity = models.Entity(label="img.jpg", md5="m1", is_collection=False)
-        entity.intelligence_data = data.model_dump()
         test_db_session.add(entity)
+        test_db_session.flush()
+
+        intel_record = intelligence_models.EntityIntelligence(
+            entity_id=entity.id,
+            intelligence_data=data.model_dump()
+        )
+        test_db_session.add(intel_record)
         test_db_session.commit()
 
         face = intelligence_models.Face(
@@ -346,8 +370,14 @@ class TestJobProcessing:
             active_processing_md5="md5_dino"
         )
         entity = models.Entity(label="dino.jpg", md5="md5_dino", is_collection=False)
-        entity.intelligence_data = data.model_dump()
         test_db_session.add(entity)
+        test_db_session.flush()
+
+        intel_record = intelligence_models.EntityIntelligence(
+            entity_id=entity.id,
+            intelligence_data=data.model_dump()
+        )
+        test_db_session.add(intel_record)
         test_db_session.commit()
 
         mock_compute = AsyncMock()

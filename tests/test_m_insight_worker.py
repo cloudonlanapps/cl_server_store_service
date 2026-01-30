@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy import select, Engine
 from sqlalchemy.orm import Session
 
-from store.db_service.db_internals import EntitySyncState, Entity, database
+from store.db_service.db_internals import EntitySyncState, Entity, EntityIntelligence, database
 from store.db_service.schemas import EntityIntelligenceData
 from store.m_insight.media_insight import MediaInsight
 
@@ -108,18 +108,19 @@ def get_sync_state(session: Session) -> int:
 
 def get_intelligence_count(session: Session) -> int:
     """Get count of entities that have intelligence_data."""
-    # We query Entity table and check if intelligence_data is not None
-    stmt = select(Entity).where(Entity.intelligence_data.is_not(None))
+    # Query EntityIntelligence table
+    stmt = select(EntityIntelligence).where(EntityIntelligence.intelligence_data.is_not(None))
     return len(session.execute(stmt).scalars().all())
 
 
 def get_intelligence_for_image(session: Session, entity_id: int) -> EntityIntelligenceData | None:
     """Get intelligence data for specific image."""
-    stmt = select(Entity).where(Entity.id == entity_id)
-    entity = session.execute(stmt).scalar_one_or_none()
-    if entity and entity.intelligence_data:
+    stmt = select(EntityIntelligence).where(EntityIntelligence.entity_id == entity_id)
+    intelligence = session.execute(stmt).scalar_one_or_none()
+    
+    if intelligence and intelligence.intelligence_data:
         try:
-            return EntityIntelligenceData.model_validate(entity.intelligence_data)
+            return EntityIntelligenceData.model_validate(intelligence.intelligence_data)
         except Exception:
             return None
     return None
