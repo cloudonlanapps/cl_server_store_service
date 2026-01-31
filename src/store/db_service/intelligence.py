@@ -13,11 +13,11 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
-class EntityIntelligenceDBService:
+class EntityIntelligenceDBService(BaseDBService[EntityIntelligence]):
     """Service for handling Entity Intelligence data (sidecar table)."""
+    model_class = EntityIntelligence
+    schema_class = EntityIntelligenceData
 
-    def __init__(self, db: Session | None = None):
-        self.db = db
 
     @timed
     @with_retry(max_retries=10)
@@ -81,7 +81,11 @@ class EntityIntelligenceDBService:
     def atomic_update_intelligence_data(
         self, id: int, update_fn: Callable[[EntityIntelligenceData], None]
     ) -> EntityIntelligenceData | None:
-        """Atomically read-modify-write intelligence_data with row-level locking."""
+        """Atomically read-modify-write intelligence_data with row-level locking.
+
+        Note: Caller must manage the database session and transaction.
+        This function will commit the changes but won't close the session.
+        """
         db = self.db if self.db else database.SessionLocal()
         should_close = self.db is None
         try:

@@ -23,15 +23,24 @@ from loguru import logger
 from pydantic import BaseModel
 
 from store.db_service.config import ConfigDBService
+from store.db_service.db_internals import get_db
+from sqlalchemy.orm import Session
 
 from store.db_service import EntitySchema
 from store.db_service import schemas as db_schemas
 from ..broadcast_service import schemas as broadcast_schemas
 from ..common.auth import UserPayload, require_admin, require_permission
-from .dependencies import get_broadcaster, get_config_service, get_entity_service, get_monitor
+from .dependencies import get_broadcaster, get_config, get_config_service, get_entity_service, get_monitor
+from store.vectorstore_services.vector_stores import (
+    QdrantVectorStore,
+    get_clip_store_dep,
+    get_dino_store_dep,
+    get_face_store_dep,
+)
 from ..broadcast_service.monitor import MInsightMonitor
 from .service import DuplicateFileError, EntityService, EntityNotSoftDeletedError
 from .audit_service import AuditReport, AuditService, CleanupReport
+from .config import StoreConfig
 
 router = APIRouter()
 
@@ -573,12 +582,6 @@ async def delete_face(
     """Delete a face and update entity face_count (DEL-08)."""
     _ = user
 
-    if not service.face_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Face service not available",
-        )
-
     try:
         deleted = service.face_service.delete_face(face_id)
         if not deleted:
@@ -614,44 +617,34 @@ async def delete_face(
     response_model=AuditReport,
 )
 async def audit_system(
-    request: Request,
+    db: Session = Depends(get_db),
+    config: StoreConfig = Depends(get_config),
+    clip_store: QdrantVectorStore = Depends(get_clip_store_dep),
+    dino_store: QdrantVectorStore = Depends(get_dino_store_dep),
+    face_store: QdrantVectorStore = Depends(get_face_store_dep),
+    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
     user: UserPayload | None = Depends(require_admin),
 ) -> AuditReport:
     """Generate data integrity audit report."""
     _ = user
 
-    # Get dependencies from app state
-    config = request.app.state.config
-    clip_store = getattr(request.app.state, "clip_store", None)
-    dino_store = getattr(request.app.state, "dino_store", None)
-    face_store = getattr(request.app.state, "face_store", None)
-    broadcaster = getattr(request.app.state, "broadcaster", None)
-
     # Create storage service
     from ..common.storage import StorageService
     storage_service = StorageService(base_dir=str(config.media_storage_dir))
 
-    # Get DB session
-    from store.db_service.db_internals import get_db
-    db = next(get_db())
+    # Create audit service
+    audit_service = AuditService(
+        db=db,
+        storage_service=storage_service,
+        clip_store=clip_store,
+        dino_store=dino_store,
+        face_store=face_store,
+        broadcaster=broadcaster,
+    )
 
-    try:
-        # Create audit service
-        audit_service = AuditService(
-            db=db,
-            storage_service=storage_service,
-            clip_store=clip_store,
-            dino_store=dino_store,
-            face_store=face_store,
-            broadcaster=broadcaster,
-        )
-
-        # Generate report
-        report = audit_service.generate_report()
-        return report
-
-    finally:
-        db.close()
+    # Generate report
+    report = audit_service.generate_report()
+    return report
 
 
 @router.post(
@@ -673,26 +666,20 @@ async def audit_system(
     response_model=CleanupReport,
 )
 async def clear_orphans(
-    request: Request,
+    db: Session = Depends(get_db),
+    config: StoreConfig = Depends(get_config),
+    clip_store: QdrantVectorStore = Depends(get_clip_store_dep),
+    dino_store: QdrantVectorStore = Depends(get_dino_store_dep),
+    face_store: QdrantVectorStore = Depends(get_face_store_dep),
+    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
     user: UserPayload | None = Depends(require_admin),
 ) -> CleanupReport:
     """Clear all orphaned resources (DEL-10)."""
     _ = user
 
-    # Get dependencies from app state
-    config = request.app.state.config
-    clip_store = getattr(request.app.state, "clip_store", None)
-    dino_store = getattr(request.app.state, "dino_store", None)
-    face_store = getattr(request.app.state, "face_store", None)
-    broadcaster = getattr(request.app.state, "broadcaster", None)
-
     # Create storage service
     from ..common.storage import StorageService
     storage_service = StorageService(base_dir=str(config.media_storage_dir))
-
-    # Get DB session
-    from store.db_service.db_internals import get_db
-    db = next(get_db())
 
     try:
         # Create audit service
@@ -738,13 +725,13 @@ async def clear_orphans(
         logger.info(f"Deleting {len(report.orphaned_vectors)} orphaned vectors...")
         for orphan in report.orphaned_vectors:
             try:
-                if orphan.collection_name == "clip_embeddings" and clip_store:
+                if orphan.collection_name == "clip_embeddings":
                     clip_store.delete_vector(orphan.vector_id)
                     cleanup_report.vectors_deleted += 1
-                elif orphan.collection_name == "dino_embeddings" and dino_store:
+                elif orphan.collection_name == "dino_embeddings":
                     dino_store.delete_vector(orphan.vector_id)
                     cleanup_report.vectors_deleted += 1
-                elif orphan.collection_name == "face_embeddings" and face_store:
+                elif orphan.collection_name == "face_embeddings":
                     face_store.delete_vector(orphan.vector_id)
                     cleanup_report.vectors_deleted += 1
             except Exception as e:
@@ -775,5 +762,3 @@ async def clear_orphans(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to clear orphans: {str(e)}",
         )
-    finally:
-        db.close()

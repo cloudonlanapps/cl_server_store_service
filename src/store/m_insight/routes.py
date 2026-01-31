@@ -6,16 +6,16 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Respon
 from store.common.auth import UserPayload, require_permission
 from store.db_service.schemas import JobInfo, EntityIntelligenceData
 from store.db_service import DBService
+from store.db_service.dependencies import get_db_service
 from store.db_service.exceptions import ResourceNotFoundError
 from store.vectorstore_services.exceptions import VectorResourceNotFound
 from . import schemas as intel_schemas
-from .dependencies import (
+from store.vectorstore_services.vector_stores import (
+    QdrantVectorStore,
     get_clip_store_dep,
-    get_db_service,
     get_dino_store_dep,
     get_face_store_dep,
 )
-from store.vectorstore_services.vector_stores import QdrantVectorStore
 from store.vectorstore_services.schemas import SearchPreferences
 
 router = APIRouter(tags=["intelligence"])
@@ -183,7 +183,7 @@ async def get_entity_jobs(
     try:
         # Verify entity exists
         _ = db.entity.get_or_raise(entity_id)
-        
+
         # Get intelligence data using service
         intel_data = db.intelligence.get_intelligence_data(entity_id)
         return intel_data.active_jobs + intel_data.job_history

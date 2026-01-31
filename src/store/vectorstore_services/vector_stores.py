@@ -390,3 +390,44 @@ def get_face_store(
     )
 
     return _face_store
+
+
+# Dependency injection functions for FastAPI
+def get_clip_store_dep() -> QdrantVectorStore:
+    """Dependency to get CLIP vector store.
+
+    Uses configuration from environment or defaults.
+    """
+    from store.store.config import get_config
+    config = get_config()
+    return get_clip_store(
+        url=config.qdrant_url,
+        collection_name=config.qdrant_collection,
+    )
+
+
+def get_dino_store_dep() -> QdrantVectorStore:
+    """Dependency to get DINO vector store.
+
+    Uses configuration from environment or defaults.
+    """
+    from store.store.config import get_config
+    config = get_config()
+    return get_dino_store(
+        url=config.qdrant_url,
+        collection_name=config.dino_collection,
+    )
+
+
+def get_face_store_dep() -> QdrantVectorStore:
+    """Dependency to get Face vector store.
+
+    Uses configuration from environment or defaults.
+    """
+    from store.store.config import get_config
+    config = get_config()
+    return get_face_store(
+        url=config.qdrant_url,
+        collection_name=config.face_collection,
+        vector_size=getattr(config, "face_vector_size", 512),
+    )
