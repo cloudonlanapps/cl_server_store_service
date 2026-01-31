@@ -30,7 +30,8 @@ from store.db_service import EntitySchema
 from store.db_service import schemas as db_schemas
 from ..broadcast_service import schemas as broadcast_schemas
 from ..common.auth import UserPayload, require_admin, require_permission
-from .dependencies import get_broadcaster, get_config, get_config_service, get_entity_service, get_monitor
+from .dependencies import get_broadcaster, get_config_service, get_entity_service, get_monitor
+from .config import get_config as arg_config
 from store.vectorstore_services.vector_stores import (
     QdrantVectorStore,
     get_clip_store_dep,
@@ -41,6 +42,7 @@ from ..broadcast_service.monitor import MInsightMonitor
 from .service import DuplicateFileError, EntityService, EntityNotSoftDeletedError
 from .audit_service import AuditReport, AuditService, CleanupReport
 from .config import StoreConfig
+from ..common.storage import StorageService
 
 router = APIRouter()
 
@@ -618,7 +620,7 @@ async def delete_face(
 )
 async def audit_system(
     db: Session = Depends(get_db),
-    config: StoreConfig = Depends(get_config),
+    config: StoreConfig = Depends(arg_config),
     clip_store: QdrantVectorStore = Depends(get_clip_store_dep),
     dino_store: QdrantVectorStore = Depends(get_dino_store_dep),
     face_store: QdrantVectorStore = Depends(get_face_store_dep),
@@ -629,7 +631,6 @@ async def audit_system(
     _ = user
 
     # Create storage service
-    from ..common.storage import StorageService
     storage_service = StorageService(base_dir=str(config.media_storage_dir))
 
     # Create audit service
@@ -667,7 +668,7 @@ async def audit_system(
 )
 async def clear_orphans(
     db: Session = Depends(get_db),
-    config: StoreConfig = Depends(get_config),
+    config: StoreConfig = Depends(arg_config),
     clip_store: QdrantVectorStore = Depends(get_clip_store_dep),
     dino_store: QdrantVectorStore = Depends(get_dino_store_dep),
     face_store: QdrantVectorStore = Depends(get_face_store_dep),
@@ -678,7 +679,6 @@ async def clear_orphans(
     _ = user
 
     # Create storage service
-    from ..common.storage import StorageService
     storage_service = StorageService(base_dir=str(config.media_storage_dir))
 
     try:
