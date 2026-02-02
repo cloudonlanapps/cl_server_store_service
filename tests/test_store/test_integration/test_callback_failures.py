@@ -9,7 +9,7 @@ from store.store.config import StoreConfig
 
 
 @pytest.fixture
-def mock_m_insight_config(mock_store_config):
+def mock_m_insight_config(mock_store_config, integration_config):
     return MInsightConfig(
         id="test-worker",
         # BaseConfig fields
@@ -24,8 +24,7 @@ def mock_m_insight_config(mock_store_config):
         compute_username="admin",
         compute_password="password",
         qdrant_url="http://qdrant",
-        mqtt_broker="localhost",
-        mqtt_port=1883
+        mqtt_url=integration_config.mqtt_url
     )
 
 @pytest.fixture

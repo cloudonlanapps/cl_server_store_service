@@ -38,8 +38,14 @@ async def test_m_insight_image_embedding_flow(
     """
     
     # 1. Setup MQTT Listener
-    mqtt_broker = integration_config.mqtt_broker
-    mqtt_port = integration_config.mqtt_port
+    # 1. Setup MQTT Listener
+    from urllib.parse import urlparse
+    parsed = urlparse(integration_config.mqtt_url)
+    mqtt_broker = parsed.hostname
+    mqtt_port = parsed.port
+    
+    if not mqtt_broker or not mqtt_port:
+        raise ValueError(f"Invalid MQTT URL: {integration_config.mqtt_url}")
     store_port = integration_config.store_port
     
     assert mqtt_port is not None, "MQTT port not configured"
@@ -115,8 +121,7 @@ async def test_m_insight_image_embedding_flow(
         id="test-worker",
         log_level="DEBUG",
         store_port=store_port,
-        mqtt_broker=mqtt_broker,
-        mqtt_port=mqtt_port,
+        mqtt_url=integration_config.mqtt_url,
         mqtt_topic=f"store/{store_port}/items",
         auth_service_url=integration_config.auth_url,
         compute_service_url=integration_config.compute_url,

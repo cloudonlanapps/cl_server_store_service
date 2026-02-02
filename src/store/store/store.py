@@ -36,13 +36,12 @@ async def lifespan(app: FastAPI):
     # Initialize MQTT Broadcaster
     config = cast(StoreConfig, getattr(app.state, "config", None))
     if config:
-        # If mqtt_port is None, get_broadcaster returns NoOpBroadcaster by default if we don't pass broker
+        # If mqtt_url is None, get_broadcaster returns NoOpBroadcaster by default if we don't pass url
         # But we want to be explicit.
-        broadcast_type = "mqtt" if config.mqtt_port else "none"
+        broadcast_type = "mqtt" if config.mqtt_url else "none"
         app.state.broadcaster = get_broadcaster(
             broadcast_type=broadcast_type,
-            broker=config.mqtt_broker,
-            port=config.mqtt_port,
+            url=config.mqtt_url,
         )
         logger.info(f"MQTT Broadcaster initialized (type={broadcast_type})")
     else:

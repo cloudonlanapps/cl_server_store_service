@@ -31,8 +31,7 @@ class BaseConfig(BaseModel):
     face_collection: str = "face_embeddings"
 
     # MQTT configuration
-    mqtt_broker: str = "localhost"
-    mqtt_port: int | None = None
+    mqtt_url: str
 
     def finalize_base(self):
         """Finalize base configuration after CLI parsing."""

@@ -75,8 +75,8 @@ def m_insight_worker(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        mqtt_broker=integration_config.mqtt_broker,
-        mqtt_port=integration_config.mqtt_port or 1883,
+        public_key_path=clean_data_dir / "keys" / "public_key.pem",
+        mqtt_url=integration_config.mqtt_url,
         mqtt_topic="test/m_insight",
     )
 

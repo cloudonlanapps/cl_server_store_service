@@ -43,12 +43,11 @@ class IntegrationConfig(BaseModel):
     # Kept for backward compat in test calls, but values might be empty strings
     username: str
     password: str
-    mqtt_broker: str = "127.0.0.1"
-    mqtt_port: int | None = None
-    auth_url: str = "http://127.0.0.1:8010"
-    store_port: int = 8011
-    compute_url: str = "http://127.0.0.1:8012"
-    qdrant_url: str = "http://127.0.0.1:6333"
+    mqtt_url: str
+    auth_url: str 
+    store_port: int
+    compute_url: str
+    qdrant_url: str
 
 
 # ============================================================================
@@ -71,17 +70,10 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="Password for integration tests"
     )
     parser.addoption(
-        "--mqtt-server",
+        "--mqtt-url",
         action="store",
-        default="localhost",
-        help="MQTT server for integration tests"
-    )
-    parser.addoption(
-        "--mqtt-port",
-        action="store",
-        type=int,
-        default=None,
-        help="MQTT port for integration tests"
+        default="mqtt://localhost:1883",
+        help="MQTT URL for integration tests"
     )
     parser.addoption(
         "--auth-url",
@@ -142,8 +134,7 @@ def integration_config(request: pytest.FixtureRequest) -> IntegrationConfig:
     """
     username = request.config.getoption("--username")
     password = request.config.getoption("--password")
-    mqtt_broker = request.config.getoption("--mqtt-server")
-    mqtt_port = request.config.getoption("--mqtt-port")
+    mqtt_url = request.config.getoption("--mqtt-url")
     auth_url = request.config.getoption("--auth-url")
     store_port = request.config.getoption("--store-port")
     compute_url = request.config.getoption("--compute-url")
@@ -152,11 +143,11 @@ def integration_config(request: pytest.FixtureRequest) -> IntegrationConfig:
     return IntegrationConfig(
         username=str(username) if username else "admin",
         password=str(password) if password else "admin",
-        mqtt_broker=str(mqtt_broker),
-        mqtt_port=mqtt_port if mqtt_port else 1883,
+        mqtt_url=str(mqtt_url),
         auth_url=str(auth_url),
         compute_url=str(compute_url),
         qdrant_url=str(qdrant_url),
+        store_port=int(store_port),
     )
 
 
@@ -379,8 +370,7 @@ def client(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=False,
         port=random.randint(20000, 30000),
-        mqtt_broker=integration_config.mqtt_broker,
-        mqtt_port=integration_config.mqtt_port,
+        mqtt_url=integration_config.mqtt_url,
     )
     app.state.config = store_config
 
@@ -457,8 +447,7 @@ def auth_client(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=False,
         port=8001,
-        mqtt_broker=integration_config.mqtt_broker,
-        mqtt_port=integration_config.mqtt_port,
+        mqtt_url=integration_config.mqtt_url,
     )
     app.state.config = store_config
 

@@ -84,23 +84,27 @@ def test_mqtt_broadcast_on_update(client: TestClient, sample_image: Path, sample
 @pytest.fixture
 def mqtt_config(request):
     return {
-        "server": request.config.getoption("--mqtt-server"),
-        "port": request.config.getoption("--mqtt-port"),
+        "url": request.config.getoption("--mqtt-url"),
     }
 
 def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt_config):
     """Integration test with a real MQTT service for POST (Create)."""
-    if not mqtt_config["port"]:
+    if not mqtt_config["url"]:
         pytest.skip("Real MQTT broker not configured")
 
     import threading
+    from urllib.parse import urlparse
 
     import paho.mqtt.client as mqtt
     from paho.mqtt.enums import CallbackAPIVersion
 
     config = client.app.state.config
-    mqtt_broker = mqtt_config["server"]
-    mqtt_port = mqtt_config["port"]
+    
+    parsed = urlparse(mqtt_config["url"])
+    mqtt_broker = parsed.hostname
+    mqtt_port = parsed.port
+    if not mqtt_broker or not mqtt_port:
+        raise ValueError(f"Invalid MQTT URL: {mqtt_config['url']}")
     topic = f"store/{config.port}/items"
 
     events_received = []
@@ -153,7 +157,7 @@ def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt
 
 def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path], mqtt_config):
     """Integration test with a real MQTT service for PUT (Update)."""
-    if not mqtt_config["port"]:
+    if not mqtt_config["url"]:
         pytest.skip("Real MQTT broker not configured")
 
     # 1. Create initial entity
@@ -167,13 +171,17 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
     entity_id = item["id"]
 
     import threading
+    from urllib.parse import urlparse
 
     import paho.mqtt.client as mqtt
     from paho.mqtt.enums import CallbackAPIVersion
 
     config = client.app.state.config
-    mqtt_broker = mqtt_config["server"]
-    mqtt_port = mqtt_config["port"]
+    parsed = urlparse(mqtt_config["url"])
+    mqtt_broker = parsed.hostname
+    mqtt_port = parsed.port
+    if not mqtt_broker or not mqtt_port:
+        raise ValueError(f"Invalid MQTT URL: {mqtt_config['url']}")
     topic = f"store/{config.port}/items"
 
     events_received = []

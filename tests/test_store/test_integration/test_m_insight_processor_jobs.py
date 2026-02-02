@@ -17,7 +17,7 @@ def mock_db_session():
     return mock
 
 @pytest.fixture
-def mock_config():
+def mock_config(integration_config):
     return MInsightConfig(
         id="test-worker",
         cl_server_dir=Path("/tmp/fake"),
@@ -29,8 +29,7 @@ def mock_config():
         compute_username="admin",
         compute_password="password",
         qdrant_url="http://qdrant",
-        mqtt_broker="localhost",
-        mqtt_port=1883
+        mqtt_url=integration_config.mqtt_url
     )
 
 @pytest.fixture

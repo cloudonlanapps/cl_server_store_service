@@ -74,15 +74,13 @@ async def mqtt_listener_task(config: MInsightConfig) -> None:
         config: MInsightConfig instance
         processor: mInsight instance
     """
-    if not config.mqtt_port:
-        logger.info("MQTT disabled, skipping listener")
-        return
+    if not config.mqtt_url:
+        raise ValueError("MQTT URL is mandatory for listener task")
 
     try:
         broadcaster = get_broadcaster(
             broadcast_type="mqtt",
-            broker=config.mqtt_broker,
-            port=config.mqtt_port,
+            url=config.mqtt_url,
         )
 
         # Subscribe to wake-up topic
@@ -124,8 +122,8 @@ async def run_loop(config: MInsightConfig) -> None:
 
     logger.info(f"mInsight process {config.id} starting...")
 
-    if not config.mqtt_port:
-        raise ValueError("MQTT port is not set")
+    if not config.mqtt_url:
+        raise ValueError("MQTT URL is not set")
 
     # Start background tasks
     mqtt_task = asyncio.create_task(mqtt_listener_task(config))
@@ -201,17 +199,10 @@ def main() -> int:
         help="Logging level (default: INFO)",
     )
     _ = parser.add_argument(
-        "--mqtt-broker",
-        "-b",
-        default="localhost",
-        help="MQTT broker address (default: localhost)",
-    )
-    _ = parser.add_argument(
-        "--mqtt-port",
-        "-p",
-        type=int,
-        default=1883,
-        help="MQTT broker port (default: 1883)",
+        "--mqtt-url",
+        "-u",
+        default="mqtt://localhost:1883",
+        help="MQTT broker URL (default: mqtt://localhost:1883)",
     )
     _ = parser.add_argument(
         "--mqtt-topic",
@@ -289,7 +280,7 @@ def main() -> int:
 
     # Print startup info
     print(f"Starting m_insight process: {config.id}")
-    print(f"MQTT broker: {config.mqtt_broker}:{config.mqtt_port}")
+    print(f"MQTT URL: {config.mqtt_url}")
     print(f"MQTT topic: {config.mqtt_topic}")
     print(f"Log level: {config.log_level}")
     print(f"Database: {config.cl_server_dir}/store.db")

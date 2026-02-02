@@ -15,13 +15,12 @@ def mock_store_config(integration_config):
         public_key_path=Path("/tmp/fake/keys/public_key.pem"),
         no_auth=True,
         port=integration_config.store_port,
-        mqtt_broker="localhost",
-        mqtt_port=1883
+        mqtt_url=integration_config.mqtt_url,
     )
 
 def test_monitor_start_disabled(mock_store_config):
     """Test start when MQTT is disabled."""
-    mock_store_config.mqtt_port = None
+    mock_store_config.mqtt_url = None
     monitor = MInsightMonitor(mock_store_config)
     monitor.start()
     assert monitor.broadcaster is None

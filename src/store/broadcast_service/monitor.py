@@ -20,15 +20,13 @@ class MInsightMonitor:
 
     def start(self) -> None:
         """Start monitoring."""
-        if not self.config.mqtt_port:
+        if not self.config.mqtt_url:
             logger.warning("MQTT disabled, MInsightMonitor not starting")
             return
 
         try:
             self.broadcaster = get_broadcaster(
-                broadcast_type="mqtt",
-                broker=self.config.mqtt_broker,
-                port=self.config.mqtt_port,
+                mqtt_url=self.config.mqtt_url,
             )
 
             # Access underlying Paho client

@@ -9,6 +9,6 @@ try:
     print("Class found")
     print(f"Fields: {IntegrationConfig.__fields__.keys()}")
     inst = IntegrationConfig(username="a", password="b")
-    print(f"Instance mqtt_broker: {inst.mqtt_broker}")
+    print(f"Instance mqtt_url: {inst.mqtt_url}")
 except Exception as e:
     print(f"Error: {e}")

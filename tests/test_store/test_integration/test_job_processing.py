@@ -164,8 +164,7 @@ class TestJobProcessing:
             media_storage_dir=clean_data_dir / "media",
             public_key_path=clean_data_dir / "keys" / "public_key.pem",
             face_embedding_threshold=0.7,
-            mqtt_broker="localhost",
-            mqtt_port=1883
+            mqtt_url=integration_config.mqtt_url,
         )
 
         # Use real DBService for DB side-effect verification
@@ -208,7 +207,7 @@ class TestJobProcessing:
 
     @pytest.mark.asyncio
     async def test_clip_embedding_callback_success(
-        self, test_db_session: Session, clean_data_dir, mock_store_config
+        self, test_db_session: Session, clean_data_dir, mock_store_config, integration_config
     ):
         """Test handling a successful CLIP embedding callback."""
         # Use Pydantic models for type safety
@@ -246,7 +245,7 @@ class TestJobProcessing:
         mock_qdrant = MagicMock()
         mock_dino = MagicMock()
         mock_config = MInsightConfig(
-            id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_broker="lh", mqtt_port=123
+            id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_url=integration_config.mqtt_url
         ) # Minimal mock
 
         db_service = DBService(db=test_db_session)
@@ -283,7 +282,7 @@ class TestJobProcessing:
 
     @pytest.mark.asyncio
     async def test_face_embedding_callback_success(
-        self, test_db_session: Session, clean_data_dir, mock_store_config
+        self, test_db_session: Session, clean_data_dir, mock_store_config, integration_config
     ):
         """Test face embedding callback success."""
         # 1. Setup Entity and Face
@@ -333,7 +332,7 @@ class TestJobProcessing:
         mock_face_store.search.return_value = [] # No matches
 
         mock_config = MInsightConfig(
-             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_broker="lh", mqtt_port=123,
+             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_url=integration_config.mqtt_url,
              face_embedding_threshold=0.7
         )
 
@@ -359,7 +358,7 @@ class TestJobProcessing:
 
     @pytest.mark.asyncio
     async def test_dino_embedding_callback_success(
-        self, test_db_session: Session, clean_data_dir, mock_store_config
+        self, test_db_session: Session, clean_data_dir, mock_store_config, integration_config
     ):
         """Test handling a successful DINO embedding callback."""
         job_info = JobInfo(job_id="job_dino_1", task_type="dino_embedding", started_at=0)
@@ -394,7 +393,7 @@ class TestJobProcessing:
         mock_qdrant = MagicMock()
         mock_dino = MagicMock()
         mock_config = MInsightConfig(
-             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_broker="lh", mqtt_port=123
+             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_url=integration_config.mqtt_url
         )
 
         db_service = DBService(db=test_db_session)
