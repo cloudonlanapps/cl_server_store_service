@@ -308,10 +308,12 @@ def sample_images(test_images_dir: Path) -> list[Path]:
 def test_images_unique() -> list[Path]:
     """Get 3 unique test images for mInsight worker tests.
     
-    These are simple colored squares stored in ~/Work/cl_server_test_media/
+    These are simple colored squares stored in TEST_VECTORS_DIR
     that are guaranteed to have different MD5 hashes.
     """
-    test_media_dir = Path.home() / "Work" / "cl_server_test_media"
+    from tests.test_config import TEST_VECTORS_DIR
+
+    test_media_dir = TEST_VECTORS_DIR
     images = [
         test_media_dir / "test_red.png",
         test_media_dir / "test_green.png",

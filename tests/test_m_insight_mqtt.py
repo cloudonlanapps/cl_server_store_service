@@ -89,6 +89,11 @@ async def test_m_insight_lifecycle_events(
     time.sleep(1.0)
     messages.clear()
 
+    # Create dummy file
+    media_dir = worker.config.media_storage_dir
+    media_dir.mkdir(parents=True, exist_ok=True)
+    (media_dir / "fake.jpg").write_bytes(b"fake image data")
+
     # Create an entity to trigger processing
     entity = Entity(
         is_collection=False,

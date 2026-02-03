@@ -1,35 +1,35 @@
 # Test files list
-# Format: relative/path/to/file.jpg (relative to media_store directory)
+# Format: relative/path/to/file.jpg (relative to TEST_VECTORS_DIR)
 # Comments start with #
 
 # Top-level images
-/Users/anandasarangaram/Work/images/20210426_155703.jpg
-/Users/anandasarangaram/Work/images/20210426_153946.jpg
-/Users/anandasarangaram/Work/images/20210422_204834.jpg
+images/20210426_155703.jpg
+images/20210426_153946.jpg
+images/20210422_204834.jpg
 
 # New Images folder (for pagination testing - 25 images)
-/Users/anandasarangaram/Work/images/new Images/IMG20240901190030.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901123952.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901141127.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901124152.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901124153.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901123953.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901132651.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901133003.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901192815.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901140947.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901192817.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901190033.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901124154_01.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901132848.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901130125.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901193739.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901123954.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901124154.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901153109.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG_20240901_131642.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901123955.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901140558.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901134756.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901140943.jpg
-/Users/anandasarangaram/Work/images/new Images/IMG20240901193528.jpg
+images/new Images/IMG20240901190030.jpg
+images/new Images/IMG20240901123952.jpg
+images/new Images/IMG20240901141127.jpg
+images/new Images/IMG20240901124152.jpg
+images/new Images/IMG20240901124153.jpg
+images/new Images/IMG20240901123953.jpg
+images/new Images/IMG20240901132651.jpg
+images/new Images/IMG20240901133003.jpg
+images/new Images/IMG20240901192815.jpg
+images/new Images/IMG20240901140947.jpg
+images/new Images/IMG20240901192817.jpg
+images/new Images/IMG20240901190033.jpg
+images/new Images/IMG20240901124154_01.jpg
+images/new Images/IMG20240901132848.jpg
+images/new Images/IMG20240901130125.jpg
+images/new Images/IMG20240901193739.jpg
+images/new Images/IMG20240901123954.jpg
+images/new Images/IMG20240901124154.jpg
+images/new Images/IMG20240901153109.jpg
+images/new Images/IMG_20240901_131642.jpg
+images/new Images/IMG20240901123955.jpg
+images/new Images/IMG20240901140558.jpg
+images/new Images/IMG20240901134756.jpg
+images/new Images/IMG20240901140943.jpg
+images/new Images/IMG20240901193528.jpg

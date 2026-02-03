@@ -140,7 +140,9 @@ async def test_m_insight_image_embedding_flow(
     proc_broadcaster.init()
 
     # Locate test image
-    TEST_VECTORS_DIR = Path(os.getenv("TEST_VECTORS_DIR", "/Users/anandasarangaram/Work/cl_server_test_media"))
+    TEST_VECTORS_DIR = Path(
+        os.getenv("TEST_VECTORS_DIR", str(Path.home() / "cl_server_test_media"))
+    )
     image_path = TEST_VECTORS_DIR / "images" / "test_face_single.jpg"
     
     if not image_path.exists():

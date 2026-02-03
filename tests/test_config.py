@@ -10,26 +10,39 @@ This module provides centralized configuration for all tests, including:
 import os
 from pathlib import Path
 
+
 # Get the absolute path to the tests directory
 TESTS_DIR = Path(__file__).parent.absolute()
 
-# Get the absolute path to the media_store directory (parent of tests)
-MEDIA_STORE_DIR = TESTS_DIR.parent
+# TEST_VECTORS_DIR: Root of test media files (images, etc)
+# Default: ~/Work/cl_server_test_media
+# Can be overridden by TEST_VECTORS_DIR env var
+TEST_VECTORS_DIR = Path(
+    os.getenv("TEST_VECTORS_DIR", str(Path.home() / "cl_server_test_media"))
+)
 
-# Get the absolute path to the images directory (sibling of media_store)
-IMAGES_DIR = MEDIA_STORE_DIR.parent / "images"
+# IMAGES_DIR: Directory containing images within test vectors
+IMAGES_DIR = TEST_VECTORS_DIR / "images"
 
 # Test files list path
 TEST_FILES_LIST = TESTS_DIR / "test_files.txt"
 
-# Test artifacts directory (outside media_store to keep project clean)
-TEST_ARTIFACTS_DIR = MEDIA_STORE_DIR.parent / "test_artifacts" / "media_store"
-TEST_DATA_DIR = Path(os.getenv("TEST_ARTIFACT_DIR", "/tmp/cl_server_test_artifacts")) / "store" / "data"
+# Test artifacts directory
+# Default: /tmp/cl_server_test_artifacts
+# Can be overridden by TEST_ARTIFACT_DIR env var
+TEST_ARTIFACT_DIR_ROOT = Path(os.getenv("TEST_ARTIFACT_DIR", "/tmp/cl_server_test_artifacts"))
+TEST_ARTIFACTS_DIR = TEST_ARTIFACT_DIR_ROOT / "store" / "data"
+
+# Legacy alias (if used elsewhere)
+TEST_DATA_DIR = TEST_ARTIFACTS_DIR
 
 
 def load_test_files() -> list[Path]:
     """
     Load test file paths from test_files.txt.
+    
+    Paths in test_files.txt should be relative to TEST_VECTORS_DIR.
+    If absolute path provided, it's used as is (compatibility).
 
     Returns:
         List of absolute Path objects for test images
@@ -45,9 +58,14 @@ def load_test_files() -> list[Path]:
             if not line or line.startswith("#"):
                 continue
 
-            # Convert relative path to absolute
-            # Paths in test_files.txt are relative to media_store directory
-            file_path = MEDIA_STORE_DIR / line
+            # Convert to Path object
+            p = Path(line)
+            
+            if p.is_absolute():
+                file_path = p
+            else:
+                # Resolve relative to TEST_VECTORS_DIR
+                file_path = TEST_VECTORS_DIR / p
 
             if file_path.exists():
                 test_files.append(file_path.absolute())
@@ -81,7 +99,7 @@ TEST_DB_URL = "sqlite:///:memory:"
 
 __all__ = [
     "TESTS_DIR",
-    "MEDIA_STORE_DIR",
+    "TEST_VECTORS_DIR",
     "IMAGES_DIR",
     "TEST_FILES_LIST",
     "TEST_ARTIFACTS_DIR",
