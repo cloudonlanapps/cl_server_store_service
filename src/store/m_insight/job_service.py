@@ -160,6 +160,11 @@ class JobSubmissionService:
                         data.inference_status.clip_embedding = status
                     elif job.task_type == "dino_embedding":
                         data.inference_status.dino_embedding = status
+                    elif job.task_type == "face_embedding":
+                        # Individual face_embeddings in data.inference_status.face_embeddings 
+                        # are updated via JobCallbackHandler.handle_face_embedding_complete.
+                        # We just need to ensure the job remains matched here so it's moved to history.
+                        pass
 
                     # Store reference if finished
                     if status in ("completed", "failed"):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import time
-from typing import cast
+from typing import Any, cast
 
 from cl_ml_tools import BroadcasterBase
 from fastapi import (
@@ -30,8 +30,8 @@ from store.db_service import EntitySchema
 from store.db_service import schemas as db_schemas
 from ..broadcast_service import schemas as broadcast_schemas
 from ..common.auth import UserPayload, require_admin, require_permission
-from .dependencies import get_broadcaster, get_config_service, get_entity_service, get_monitor
-from .config import get_config as arg_config
+from .dependencies import get_m_insight_broadcaster, get_config_service, get_entity_service, get_monitor
+from .config import StoreConfig
 from store.vectorstore_services.vector_stores import (
     QdrantVectorStore,
     get_clip_store_dep,
@@ -41,8 +41,8 @@ from store.vectorstore_services.vector_stores import (
 from ..broadcast_service.monitor import MInsightMonitor
 from .service import DuplicateFileError, EntityService, EntityNotSoftDeletedError
 from .audit_service import AuditReport, AuditService, CleanupReport
-from .config import StoreConfig
 from ..common.storage import StorageService
+from ..broadcast_service.broadcaster import MInsightBroadcaster
 
 router = APIRouter()
 
@@ -122,7 +122,7 @@ async def create_entity(
     image: UploadFile | None = File(None, title="Image"),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
-    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
+    broadcaster: MInsightBroadcaster | None = Depends(get_m_insight_broadcaster),
 ) -> EntitySchema:
     config = service.config
 
@@ -225,7 +225,7 @@ async def put_entity(
     image: UploadFile | None = File(None, title="Image"),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
-    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
+    broadcaster: MInsightBroadcaster | None = Depends(get_m_insight_broadcaster),
 ) -> EntitySchema:
     config = service.config
 
@@ -585,6 +585,12 @@ async def delete_face(
     _ = user
 
     try:
+        # Check if face_service is available
+        if service.face_service is None:
+             raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Face service not available",
+            )
         deleted = service.face_service.delete_face(face_id)
         if not deleted:
             raise HTTPException(
@@ -620,11 +626,11 @@ async def delete_face(
 )
 async def audit_system(
     db: Session = Depends(get_db),
-    config: StoreConfig = Depends(arg_config),
+    config: StoreConfig = Depends(StoreConfig.get_config),
     clip_store: QdrantVectorStore = Depends(get_clip_store_dep),
     dino_store: QdrantVectorStore = Depends(get_dino_store_dep),
     face_store: QdrantVectorStore = Depends(get_face_store_dep),
-    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
+    broadcaster: MInsightBroadcaster | None = Depends(get_m_insight_broadcaster),
     user: UserPayload | None = Depends(require_admin),
 ) -> AuditReport:
     """Generate data integrity audit report."""
@@ -668,11 +674,11 @@ async def audit_system(
 )
 async def clear_orphans(
     db: Session = Depends(get_db),
-    config: StoreConfig = Depends(arg_config),
+    config: StoreConfig = Depends(StoreConfig.get_config),
     clip_store: QdrantVectorStore = Depends(get_clip_store_dep),
     dino_store: QdrantVectorStore = Depends(get_dino_store_dep),
     face_store: QdrantVectorStore = Depends(get_face_store_dep),
-    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
+    broadcaster: MInsightBroadcaster | None = Depends(get_m_insight_broadcaster),
     user: UserPayload | None = Depends(require_admin),
 ) -> CleanupReport:
     """Clear all orphaned resources (DEL-10)."""

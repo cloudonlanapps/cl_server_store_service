@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, ClassVar, Literal, cast
+from typing import Annotated, ClassVar, Literal
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import ExpiredSignatureError, JWTError, jwt
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from store.db_service import DBService
 from store.db_service.dependencies import get_db_service
+from store.store.config import StoreConfig
 from .config import BaseConfig
 
 # ─────────────────────────────────────
@@ -106,14 +107,10 @@ async def get_public_key(config: BaseConfig) -> str:
 
 
 async def get_current_user(
-    request: Request,
     token: str | None = Depends(oauth2_scheme),
+    config: StoreConfig = Depends(StoreConfig.get_config),
 ) -> UserPayload | None:
     """Validate the JWT and return the user payload."""
-
-    # Get config from app state
-    config = cast(BaseConfig, request.app.state.config)  # pyright: ignore[reportAny]
-
     if config.no_auth:
         return None
 
@@ -162,12 +159,10 @@ def require_permission(permission: Permission):
     """Require a specific permission."""
 
     async def permission_checker(
-        request: Request,
         current_user: UserPayload | None = Depends(get_current_user),
         db: DBService = Depends(get_db_service),
+        config: StoreConfig = Depends(StoreConfig.get_config),
     ) -> UserPayload | None:
-        config = cast(BaseConfig, request.app.state.config)  # pyright: ignore[reportAny]
-
         if config.no_auth:
             return current_user
 
@@ -197,11 +192,9 @@ def require_permission(permission: Permission):
 
 
 async def require_admin(
-    request: Request,
     current_user: UserPayload | None = Depends(get_current_user),
+    config: StoreConfig = Depends(StoreConfig.get_config),
 ) -> UserPayload | None:
-    config = cast(BaseConfig, request.app.state.config)  # pyright: ignore[reportAny]
-
     if config.no_auth:
         return current_user
 

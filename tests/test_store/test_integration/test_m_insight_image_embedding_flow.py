@@ -40,7 +40,11 @@ async def test_m_insight_image_embedding_flow(
     # 1. Setup MQTT Listener
     mqtt_broker = integration_config.mqtt_broker
     mqtt_port = integration_config.mqtt_port
-    store_port = integration_config.store_port
+    
+    # CRITICAL: Use the actual port from the singleton config to avoid mismatches
+    # Integration tests use independent ports per test to avoid collisions
+    from store.store.config import StoreConfig
+    store_port = StoreConfig.get_config().port
     
     assert mqtt_port is not None, "MQTT port not configured"
     
@@ -149,15 +153,28 @@ async def test_m_insight_image_embedding_flow(
         
             # 2. Upload Image
             print(f"[DEBUG TEST] Uploading image: {image_path}")
+
+            # PORT CONSISTENCY CHECK
+            # Verify that the app and the processor are aligned on the same port
+            app_port = StoreConfig.get_config().port
+            assert app_port == store_port, f"Port mismatch! App: {app_port}, Test: {store_port}"
+
             with open(image_path, "rb") as f:
                 response = client.post(
                     "/entities", 
                     files={"image": ("test_mqtt.jpg", f, "image/jpeg")},
                     data={"label": "MQTT Test Image", "is_collection": False}
                 )
+            
             assert response.status_code == 201
             entity_id = response.json()["id"]
             print(f"[DEBUG TEST] Created entity {entity_id}")
+
+            # CLEAR RETAINED: Clear any existing status for this ID to ensure a clean slate
+            # This handles cases where ID may be reused across tests on the SAME port
+            if proc_broadcaster:
+                proc_broadcaster.clear_entity_status(entity_id)
+                print(f"[DEBUG TEST] Cleared retained status for entity {entity_id}")
 
             # 3. Trigger Processing & Wait for Events
             

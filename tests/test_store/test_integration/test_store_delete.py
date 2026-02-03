@@ -80,10 +80,11 @@ class TestEntityDeletion:
         assert db_entity is not None
         assert db_entity.file_path is not None
 
-        # Get absolute path using the config from the app
+        # Get absolute path using the config singleton
         from store.common.storage import StorageService
+        from store.store.config import StoreConfig
 
-        config = client.app.state.config
+        config = StoreConfig.get_config()
         storage = StorageService(base_dir=str(config.media_storage_dir))
         file_abs_path = storage.get_absolute_path(db_entity.file_path)
         assert file_abs_path.exists(), f"File should exist at {file_abs_path}"
@@ -118,13 +119,21 @@ class TestEntityDeletion:
         mock_clip_store = MagicMock()
         mock_dino_store = MagicMock()
 
-        # Inject mocks into app state
-        client.app.state.broadcaster = mock_broadcaster
-        client.app.state.face_store = mock_face_store
-        client.app.state.clip_store = mock_clip_store
-        client.app.state.dino_store = mock_dino_store
+        # Inject mocks into app dependency overrides
+        from store.store.dependencies import get_m_insight_broadcaster
+        from store.vectorstore_services.vector_stores import (
+            get_clip_store_dep,
+            get_dino_store_dep,
+            get_face_store_dep,
+        )
+        
+        client.app.dependency_overrides[get_m_insight_broadcaster] = lambda: mock_broadcaster
+        client.app.dependency_overrides[get_face_store_dep] = lambda: mock_face_store
+        client.app.dependency_overrides[get_clip_store_dep] = lambda: mock_clip_store
+        client.app.dependency_overrides[get_dino_store_dep] = lambda: mock_dino_store
 
         # 2. Create Entity
+        # ... (rest of the test remains the same)
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
@@ -243,7 +252,8 @@ class TestEntityDeletion:
         """DEL-05: Deleting an entity must clear any retained MQTT messages (mock test)."""
         # Setup mock broadcaster
         mock_broadcaster = MagicMock()
-        client.app.state.broadcaster = mock_broadcaster
+        from store.store.dependencies import get_m_insight_broadcaster
+        client.app.dependency_overrides[get_m_insight_broadcaster] = lambda: mock_broadcaster
 
         # Create entity
         with open(sample_image, "rb") as f:
@@ -320,7 +330,8 @@ class TestEntityDeletion:
             entity_id = entity.id
 
             # Determine the expected MQTT topic
-            config = client.app.state.config
+            from store.store.config import StoreConfig
+            config = StoreConfig.get_config()
             entity_status_topic = f"mInsight/{config.port}/entity_item_status/{entity_id}"
 
             # Subscribe to entity status topic

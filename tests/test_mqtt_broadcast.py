@@ -29,7 +29,8 @@ def test_mqtt_broadcast_on_create(client: TestClient, sample_image: Path):
     item = response.json()
 
     # Verify broadcast
-    config = client.app.state.config
+    from store.store.config import StoreConfig
+    config = StoreConfig.get_config()
     expected_topic = f"store/{config.port}/items"
 
     assert mock_broadcaster.publish_event.called
@@ -70,7 +71,8 @@ def test_mqtt_broadcast_on_update(client: TestClient, sample_image: Path, sample
     updated_item = response.json()
 
     # Verify broadcast
-    config = client.app.state.config
+    from store.store.config import StoreConfig
+    config = StoreConfig.get_config()
     expected_topic = f"store/{config.port}/items"
     assert mock_broadcaster.publish_event.called
     _, kwargs = mock_broadcaster.publish_event.call_args
@@ -98,7 +100,8 @@ def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt
     import paho.mqtt.client as mqtt
     from paho.mqtt.enums import CallbackAPIVersion
 
-    config = client.app.state.config
+    from store.store.config import StoreConfig
+    config = StoreConfig.get_config()
     mqtt_broker = mqtt_config["server"]
     mqtt_port = mqtt_config["port"]
     topic = f"store/{config.port}/items"

@@ -24,6 +24,9 @@ from qdrant_client.models import (
 
 from .exceptions import VectorResourceNotFound
 from .schemas import SearchPreferences, SearchResult, StoreItem
+from fastapi import Depends
+from store.store.config import StoreConfig
+
 
 
 class StoreInterface[StoreItemT, SearchOptionsT, SearchResultT]:
@@ -392,40 +395,24 @@ def get_face_store(
     return _face_store
 
 
-# Dependency injection functions for FastAPI
-def get_clip_store_dep() -> QdrantVectorStore:
-    """Dependency to get CLIP vector store.
-
-    Uses configuration from environment or defaults.
-    """
-    from store.store.config import get_config
-    config = get_config()
+def get_clip_store_dep(config: StoreConfig = Depends(StoreConfig.get_config)) -> QdrantVectorStore:
+    """Dependency to get CLIP vector store."""
     return get_clip_store(
         url=config.qdrant_url,
         collection_name=config.qdrant_collection,
     )
 
 
-def get_dino_store_dep() -> QdrantVectorStore:
-    """Dependency to get DINO vector store.
-
-    Uses configuration from environment or defaults.
-    """
-    from store.store.config import get_config
-    config = get_config()
+def get_dino_store_dep(config: StoreConfig = Depends(StoreConfig.get_config)) -> QdrantVectorStore:
+    """Dependency to get DINO vector store."""
     return get_dino_store(
         url=config.qdrant_url,
         collection_name=config.dino_collection,
     )
 
 
-def get_face_store_dep() -> QdrantVectorStore:
-    """Dependency to get Face vector store.
-
-    Uses configuration from environment or defaults.
-    """
-    from store.store.config import get_config
-    config = get_config()
+def get_face_store_dep(config: StoreConfig = Depends(StoreConfig.get_config)) -> QdrantVectorStore:
+    """Dependency to get Face vector store."""
     return get_face_store(
         url=config.qdrant_url,
         collection_name=config.face_collection,

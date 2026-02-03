@@ -28,13 +28,11 @@ async def lifespan(app: FastAPI):
     """
     # -------- Startup --------
 
-    from .config import get_config
-    config = get_config()
-    app.state.config = config
-    logger.info("Loaded core configuration via get_config()")
+    # -------- Startup --------
+    config = StoreConfig.get_config()
+    logger.info("Loaded core configuration via StoreConfig.get_config()")
 
     # Initialize MQTT Broadcaster
-    config = cast(StoreConfig, getattr(app.state, "config", None))
     if config:
         # If mqtt_port is None, get_broadcaster returns NoOpBroadcaster by default if we don't pass broker
         # But we want to be explicit.

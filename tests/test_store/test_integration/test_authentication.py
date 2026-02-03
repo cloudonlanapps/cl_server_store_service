@@ -47,13 +47,15 @@ class TestAuthenticationLogic:
 
         return private_pem, str(public_key_path)
 
-    def _create_mock_request(self, no_auth=False):
-        """Create a mock request with configured app state."""
-        request = MagicMock()
+    def _create_mock_config(self, no_auth: bool = False):
+        """Create a mock config and patch StoreConfig singleton."""
         config = MagicMock()
         config.no_auth = no_auth
-        request.app.state.config = config
-        return request
+        config.public_key_path = None
+        
+        from store.store.config import StoreConfig
+        StoreConfig._instance = config
+        return config
 
     def test_require_permission_allows_correct_permission(self):
         """User with the required permission should be allowed."""
@@ -66,10 +68,10 @@ class TestAuthenticationLogic:
             is_admin=False,
         )
 
-        request = self._create_mock_request(no_auth=False)
+        config = self._create_mock_config(no_auth=False)
         permission_checker = require_permission("media_store_write")
 
-        result = asyncio.run(permission_checker(request, user))
+        result = asyncio.run(permission_checker(current_user=user, config=config))
         assert result == user
 
     def test_require_permission_allows_admin(self):
@@ -78,10 +80,10 @@ class TestAuthenticationLogic:
 
         user = UserPayload(id="admin", permissions=[], is_admin=True)
 
-        request = self._create_mock_request(no_auth=False)
+        config = self._create_mock_config(no_auth=False)
         permission_checker = require_permission("media_store_write")
 
-        result = asyncio.run(permission_checker(request, user))
+        result = asyncio.run(permission_checker(current_user=user, config=config))
         assert result == user
 
     def test_require_permission_rejects_wrong_permission(self):
@@ -94,11 +96,11 @@ class TestAuthenticationLogic:
             is_admin=False,
         )
 
-        request = self._create_mock_request(no_auth=False)
+        config = self._create_mock_config(no_auth=False)
 
         with pytest.raises(HTTPException) as exc_info:
             permission_checker = require_permission("media_store_write")
-            asyncio.run(permission_checker(request, user))
+            asyncio.run(permission_checker(current_user=user, config=config))
 
         assert exc_info.value.status_code == 403
 
@@ -106,11 +108,11 @@ class TestAuthenticationLogic:
         """None user (no auth) should be rejected when auth is not disabled."""
         from store.common.auth import require_permission
 
-        request = self._create_mock_request(no_auth=False)
+        config = self._create_mock_config(no_auth=False)
 
         with pytest.raises(HTTPException) as exc_info:
             permission_checker = require_permission("media_store_write")
-            asyncio.run(permission_checker(request, None))
+            asyncio.run(permission_checker(current_user=None, config=config))
 
         assert exc_info.value.status_code == 401
 
@@ -126,10 +128,9 @@ class TestAuthenticationLogic:
             is_admin=False,
         )
 
-        request = self._create_mock_request(no_auth=False)
+        config = self._create_mock_config(no_auth=False)
 
         # Mock ConfigService to return True for read_auth_enabled
-        # This ensures the permission check proceeds normally
         with patch("store.db_service.config.ConfigDBService") as mock_config_service_class:
             mock_config_service = MagicMock()
             mock_config_service.get_read_auth_enabled.return_value = True
@@ -139,8 +140,8 @@ class TestAuthenticationLogic:
             mock_db.config.get_read_auth_enabled.return_value = True
 
             permission_checker = require_permission("media_store_read")
-            # We must pass db explicitly because Depends() is not resolved in direct calls
-            result = asyncio.run(permission_checker(request, user, db=mock_db))
+            # We must pass dependencies explicitly because Depends() is not resolved in direct calls
+            result = asyncio.run(permission_checker(current_user=user, db=mock_db, config=config))
             assert result == user
 
     def test_require_admin_allows_admin_user(self):
@@ -148,9 +149,9 @@ class TestAuthenticationLogic:
         from store.common.auth import UserPayload, require_admin
 
         user = UserPayload(id="admin", permissions=[], is_admin=True)
-        request = self._create_mock_request(no_auth=False)
+        config = self._create_mock_config(no_auth=False)
 
-        result = asyncio.run(require_admin(request, user))
+        result = asyncio.run(require_admin(current_user=user, config=config))
         assert result == user
 
     def test_require_admin_rejects_non_admin(self):
@@ -162,10 +163,10 @@ class TestAuthenticationLogic:
             permissions=["media_store_write"],
             is_admin=False,
         )
-        request = self._create_mock_request(no_auth=False)
+        config = self._create_mock_config(no_auth=False)
 
         with pytest.raises(HTTPException) as exc_info:
-            asyncio.run(require_admin(request, user))
+            asyncio.run(require_admin(current_user=user, config=config))
 
         assert exc_info.value.status_code == 403
 
@@ -177,27 +178,23 @@ class TestAuthenticationModes:
         """When no_auth=true, permission checks should be bypassed."""
         from store.common.auth import require_permission
 
-        # Mock request with no_auth=True
-        request = MagicMock()
+        # Mock config with no_auth=True
         config = MagicMock()
         config.no_auth = True
-        request.app.state.config = config
 
         permission_checker = require_permission("media_store_write")
-        result = asyncio.run(permission_checker(request, None))
+        result = asyncio.run(permission_checker(current_user=None, config=config))
         assert result is None
 
     def test_demo_mode_bypasses_admin_check(self):
         """When no_auth=true, admin checks should be bypassed."""
         from store.common.auth import require_admin
 
-        # Mock request with no_auth=True
-        request = MagicMock()
+        # Mock config with no_auth=True
         config = MagicMock()
         config.no_auth = True
-        request.app.state.config = config
 
-        result = asyncio.run(require_admin(request, None))
+        result = asyncio.run(require_admin(current_user=None, config=config))
         assert result is None
 
 

@@ -1,12 +1,12 @@
-
 import random
+import hashlib
 import shutil
 import sys
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-
+from loguru import logger
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -328,6 +328,25 @@ def test_images_unique() -> list[Path]:
 
     return images
 
+@pytest.fixture(scope="session")
+def _used_ports() -> set[int]:
+    """Internal session-scoped registry for tracked ports."""
+    return set()
+
+@pytest.fixture(scope="function")
+def test_port(request: pytest.FixtureRequest, _used_ports: set[int]) -> int:
+    """Generate a stable port from the test nodeid."""
+    nodeid = request.node.nodeid
+    seed = int(hashlib.md5(nodeid.encode()).hexdigest(), 16)
+    # Use seed directly mapped to an ephemeral port range (20000-30000)
+    port = 20000 + (seed % 10000)
+    
+    # Ensure uniqueness in the same session
+    while port in _used_ports:
+        port += 1
+    _used_ports.add(port)
+    return port
+
 
 # ============================================================================
 # CLIENT FIXTURES
@@ -339,6 +358,7 @@ def client(
     test_engine: Engine,
     clean_data_dir: Path,
     integration_config: IntegrationConfig,
+    test_port: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[TestClient, None, None]:
     """Create a test client with REAL external services for integration tests."""
@@ -378,13 +398,20 @@ def client(
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=False,
-        port=random.randint(20000, 30000),
+        port=test_port,
         mqtt_broker=integration_config.mqtt_broker,
         mqtt_port=integration_config.mqtt_port,
     )
-    app.state.config = store_config
+    
+    # CRITICAL: Synchronize the StoreConfig singleton
+    # This ensures background workers/dependencies/lifespan use the same port
+    monkeypatch.setattr(StoreConfig, "_instance", store_config)
 
     with TestClient(app) as test_client:
+        # Isolated port prefix ensures no collision with other tests' retained messages.
+        # Since each test has a stable but unique port based on its node ID,
+        # we don't need to manually clear every topic, as they are naturally partitioned.
+        logger.info(f"Test starting on isolated port {store_config.port}")
         yield test_client
 
     # Enhanced cleanup
@@ -398,8 +425,6 @@ def client(
 
     if hasattr(app.state, 'monitor'):
         delattr(app.state, 'monitor')
-    if hasattr(app.state, 'config'):
-        delattr(app.state, 'config')
 
     # Ensure the global singleton in cl_ml_tools is also reset
     try:
@@ -409,19 +434,18 @@ def client(
         pass
 
 
-
 @pytest.fixture(scope="function")
 def auth_client(
     test_engine: Engine,
     clean_data_dir: Path,
     integration_config: IntegrationConfig,
     key_pair: tuple[bytes, str],
+    test_port: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[TestClient, None, None]:
     """Create a test client WITHOUT auth override for testing authentication."""
 
     monkeypatch.setenv("CL_SERVER_DIR", str(clean_data_dir))
-
 
     # Set up JWT key pair
     _, public_key_path = key_pair
@@ -450,26 +474,28 @@ def auth_client(
     # CRITICAL: Copy SessionLocal patch from client fixture
     monkeypatch.setattr(database, "SessionLocal", TestingSessionLocal)
     
-    # Create StoreConfig and set on app.state
+    # Create StoreConfig and set on StoreConfig._instance
     store_config = StoreConfig(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=False,
-        port=8001,
+        port=test_port,
         mqtt_broker=integration_config.mqtt_broker,
         mqtt_port=integration_config.mqtt_port,
     )
-    app.state.config = store_config
+    
+    # CRITICAL: Synchronize configuration across all modules via singleton
+    monkeypatch.setattr(StoreConfig, "_instance", store_config)
 
     # Create test client - connects to REAL services
     with TestClient(app) as test_client:
+        # Isolated port prefix ensures no collision with other tests' retained messages
+        logger.info(f"Auth test starting on isolated port {store_config.port}")
         yield test_client
 
     # Enhanced cleanup
     app.dependency_overrides.clear()
-    if hasattr(app, 'state') and hasattr(app.state, 'config'):
-        delattr(app.state, 'config')
 
 
 # ============================================================================

@@ -1,6 +1,7 @@
-from cl_ml_tools import BroadcasterBase
+from __future__ import annotations
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
+from typing import cast # Added for type casting
 
 from store.db_service import DBService
 from store.db_service.dependencies import get_db_service
@@ -12,15 +13,14 @@ from store.vectorstore_services.vector_stores import (
     get_dino_store_dep,
     get_face_store_dep,
 )
+from store.common.storage import StorageService
+from ..broadcast_service.broadcaster import MInsightBroadcaster
 
 from .config import StoreConfig
 from store.broadcast_service.monitor import MInsightMonitor
 from .service import EntityService
 
 
-def get_config(request: Request) -> StoreConfig:
-    """Dependency to get StoreConfig from app state."""
-    return request.app.state.config  # pyright: ignore[reportAny]
 
 
 def get_config_service(db: DBService = Depends(get_db_service)) -> ConfigDBService:
@@ -28,9 +28,11 @@ def get_config_service(db: DBService = Depends(get_db_service)) -> ConfigDBServi
     return db.config
 
 
-def get_broadcaster(request: Request) -> BroadcasterBase | None:
-    """Dependency to get broadcaster from app state."""
-    return getattr(request.app.state, "broadcaster", None)  # pyright: ignore[reportAny]
+
+
+def get_m_insight_broadcaster(request: Request) -> MInsightBroadcaster | None:
+    """Dependency to get MInsightBroadcaster from app state."""
+    return cast(MInsightBroadcaster | None, getattr(request.app.state, "broadcaster", None))
 
 
 def get_monitor(request: Request) -> MInsightMonitor | None:
@@ -40,12 +42,12 @@ def get_monitor(request: Request) -> MInsightMonitor | None:
 
 def get_entity_service(
     db: Session = Depends(get_db),
-    config: StoreConfig = Depends(get_config),
+    config: StoreConfig = Depends(StoreConfig.get_config),
     db_service: DBService = Depends(get_db_service),
     clip_store: QdrantVectorStore = Depends(get_clip_store_dep),
     dino_store: QdrantVectorStore = Depends(get_dino_store_dep),
     face_store: QdrantVectorStore = Depends(get_face_store_dep),
-    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
+    broadcaster: MInsightBroadcaster | None = Depends(get_m_insight_broadcaster),
 ) -> EntityService:
     """Dependency to get EntityService instance.
 
@@ -56,9 +58,8 @@ def get_entity_service(
     injection will fail early with a 500 error, which is acceptable since
     intelligence features require Qdrant to function.
     """
-    # Create FaceService (face_store is now always available and required)
+    # Function-level import to avoid circular dependency
     from .face_service import FaceService
-    from ..common.storage import StorageService
 
     # Create a DBService with the request's db session to avoid transaction conflicts
     db_service_with_session = DBService(db=db)
