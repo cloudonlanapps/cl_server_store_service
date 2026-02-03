@@ -86,24 +86,27 @@ def test_mqtt_broadcast_on_update(client: TestClient, sample_image: Path, sample
 @pytest.fixture
 def mqtt_config(request):
     return {
-        "server": request.config.getoption("--mqtt-server"),
-        "port": request.config.getoption("--mqtt-port"),
+        "url": request.config.getoption("--mqtt-url"),
     }
 
 def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt_config):
     """Integration test with a real MQTT service for POST (Create)."""
-    if not mqtt_config["port"]:
+    if not mqtt_config["url"]:
         pytest.skip("Real MQTT broker not configured")
 
     import threading
+    import urllib.parse
 
     import paho.mqtt.client as mqtt
     from paho.mqtt.enums import CallbackAPIVersion
 
     from store.store.config import StoreConfig
     config = StoreConfig.get_config()
-    mqtt_broker = mqtt_config["server"]
-    mqtt_port = mqtt_config["port"]
+    
+    parsed = urllib.parse.urlparse(mqtt_config["url"])
+    mqtt_broker = parsed.hostname or "localhost"
+    mqtt_port = parsed.port or 1883
+    
     topic = f"store/{config.port}/items"
 
     events_received = []
@@ -156,7 +159,7 @@ def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt
 
 def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path], mqtt_config):
     """Integration test with a real MQTT service for PUT (Update)."""
-    if not mqtt_config["port"]:
+    if not mqtt_config["url"]:
         pytest.skip("Real MQTT broker not configured")
 
     # 1. Create initial entity
@@ -170,13 +173,18 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
     entity_id = item["id"]
 
     import threading
+    import urllib.parse
 
     import paho.mqtt.client as mqtt
     from paho.mqtt.enums import CallbackAPIVersion
 
-    config = client.app.state.config
-    mqtt_broker = mqtt_config["server"]
-    mqtt_port = mqtt_config["port"]
+    from store.store.config import StoreConfig
+    config = StoreConfig.get_config()
+    
+    parsed = urllib.parse.urlparse(mqtt_config["url"])
+    mqtt_broker = parsed.hostname or "localhost"
+    mqtt_port = parsed.port or 1883
+    
     topic = f"store/{config.port}/items"
 
     events_received = []

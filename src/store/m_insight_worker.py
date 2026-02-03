@@ -74,38 +74,26 @@ async def mqtt_listener_task(config: MInsightConfig) -> None:
         config: MInsightConfig instance
         processor: mInsight instance
     """
-    if not config.mqtt_port:
-        logger.info("MQTT disabled, skipping listener")
-        return
+    broadcaster = get_broadcaster(url=config.mqtt_url)
 
-    try:
-        broadcaster = get_broadcaster(
-            broadcast_type="mqtt",
-            broker=config.mqtt_broker,
-            port=config.mqtt_port,
-        )
+    # Subscribe to wake-up topic
+    def on_message(_client: object, _userdata: object, _message: object) -> None:
+        """MQTT message callback - trigger reconciliation."""
+        logger.debug(f"Received MQTT wake-up on {config.mqtt_topic}")
+        # Signal the main loop to run reconciliation
+        reconciliation_trigger.set()
 
-        # Subscribe to wake-up topic
-        def on_message(_client: object, _userdata: object, _message: object) -> None:
-            """MQTT message callback - trigger reconciliation."""
-            logger.debug(f"Received MQTT wake-up on {config.mqtt_topic}")
-            # Signal the main loop to run reconciliation
-            reconciliation_trigger.set()
+    # Type ignore: broadcaster.client is dynamically typed from cl_ml_tools
+    if not broadcaster or not broadcaster.client:
+        raise ValueError("Broadcaster not initialized")
+    _ = broadcaster.client.subscribe(config.mqtt_topic)
+    broadcaster.client.on_message = on_message
 
-        # Type ignore: broadcaster.client is dynamically typed from cl_ml_tools
-        if not broadcaster or not broadcaster.client:
-            raise ValueError("Broadcaster not initialized")
-        _ = broadcaster.client.subscribe(config.mqtt_topic)
-        broadcaster.client.on_message = on_message
+    logger.info(f"MQTT listener started on topic: {config.mqtt_topic}")
 
-        logger.info(f"MQTT listener started on topic: {config.mqtt_topic}")
-
-        # Keep listener alive
-        while not shutdown_event.is_set():
-            await asyncio.sleep(1.0)
-
-    except Exception as e:
-        logger.error(f"MQTT listener error: {e}", exc_info=True)
+    # Keep listener alive
+    while not shutdown_event.is_set():
+        await asyncio.sleep(1.0)
 
 
 async def run_loop(config: MInsightConfig) -> None:
@@ -124,8 +112,7 @@ async def run_loop(config: MInsightConfig) -> None:
 
     logger.info(f"mInsight process {config.id} starting...")
 
-    if not config.mqtt_port:
-        raise ValueError("MQTT port is not set")
+
 
     # Start background tasks
     mqtt_task = asyncio.create_task(mqtt_listener_task(config))
@@ -201,17 +188,10 @@ def main() -> int:
         help="Logging level (default: INFO)",
     )
     _ = parser.add_argument(
-        "--mqtt-broker",
-        "-b",
-        default="localhost",
-        help="MQTT broker address (default: localhost)",
-    )
-    _ = parser.add_argument(
-        "--mqtt-port",
-        "-p",
-        type=int,
-        default=1883,
-        help="MQTT broker port (default: 1883)",
+        "--mqtt-url",
+        "-u",
+        default="mqtt://localhost:1883",
+        help="MQTT broker URL (default: mqtt://localhost:1883)",
     )
     _ = parser.add_argument(
         "--mqtt-topic",
@@ -289,7 +269,7 @@ def main() -> int:
 
     # Print startup info
     print(f"Starting m_insight process: {config.id}")
-    print(f"MQTT broker: {config.mqtt_broker}:{config.mqtt_port}")
+    print(f"MQTT URL: {config.mqtt_url}")
     print(f"MQTT topic: {config.mqtt_topic}")
     print(f"Log level: {config.log_level}")
     print(f"Database: {config.cl_server_dir}/store.db")

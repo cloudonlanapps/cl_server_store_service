@@ -29,8 +29,7 @@ def mock_config():
         compute_username="admin",
         compute_password="password",
         qdrant_url="http://qdrant",
-        mqtt_broker="localhost",
-        mqtt_port=1883
+        mqtt_url="mqtt://localhost:1883"
     )
 
 @pytest.fixture

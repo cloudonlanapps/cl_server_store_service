@@ -38,8 +38,13 @@ async def test_m_insight_image_embedding_flow(
     """
     
     # 1. Setup MQTT Listener
-    mqtt_broker = integration_config.mqtt_broker
-    mqtt_port = integration_config.mqtt_port
+    mqtt_url = integration_config.mqtt_url
+    
+    # Parse URL for raw client
+    from urllib.parse import urlparse
+    parsed_url = urlparse(mqtt_url)
+    mqtt_broker = parsed_url.hostname or "localhost"
+    mqtt_port = parsed_url.port or 1883
     
     # CRITICAL: Use the actual port from the singleton config to avoid mismatches
     # Integration tests use independent ports per test to avoid collisions
@@ -119,8 +124,7 @@ async def test_m_insight_image_embedding_flow(
         id="test-worker",
         log_level="DEBUG",
         store_port=store_port,
-        mqtt_broker=mqtt_broker,
-        mqtt_port=mqtt_port,
+        mqtt_url=mqtt_url,
         mqtt_topic=f"store/{store_port}/items",
         auth_service_url=integration_config.auth_url,
         compute_service_url=integration_config.compute_url,

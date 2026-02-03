@@ -28,14 +28,9 @@ class MInsightBroadcaster:
 
     def init(self) -> None:
         """Initialize broadcaster."""
-        if not self.config.mqtt_port:
-            return
-
-        self.broadcaster = get_broadcaster(
-            broadcast_type="mqtt",
-            broker=self.config.mqtt_broker,
-            port=self.config.mqtt_port,
-        )
+    def init(self) -> None:
+        """Initialize broadcaster."""
+        self.broadcaster = get_broadcaster(url=self.config.mqtt_url)
 
         # Set LWT
         if self.broadcaster:

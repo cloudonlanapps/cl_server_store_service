@@ -20,32 +20,23 @@ class MInsightMonitor:
 
     def start(self) -> None:
         """Start monitoring."""
-        if not self.config.mqtt_port:
-            logger.warning("MQTT disabled, MInsightMonitor not starting")
-            return
+    def start(self) -> None:
+        """Start monitoring."""
+        self.broadcaster = get_broadcaster(url=self.config.mqtt_url)
 
-        try:
-            self.broadcaster = get_broadcaster(
-                broadcast_type="mqtt",
-                broker=self.config.mqtt_broker,
-                port=self.config.mqtt_port,
-            )
+        # Access underlying Paho client
+        client = getattr(self.broadcaster, "client", None)
+        if client:
+            client.on_message = self._on_message
 
-            # Access underlying Paho client
-            client = getattr(self.broadcaster, "client", None)
-            if client:
-                client.on_message = self._on_message
+            # Subscribe to unified status topic
+            port = self.config.port
+            _ = cast(object, client.subscribe(f"mInsight/{port}/status"))  # pyright: ignore[reportAny]
 
-                # Subscribe to unified status topic
-                port = self.config.port
-                _ = cast(object, client.subscribe(f"mInsight/{port}/status"))  # pyright: ignore[reportAny]
+            # Start background loop
+            _ = cast(object, client.loop_start())  # pyright: ignore[reportAny]
 
-                # Start background loop
-                _ = cast(object, client.loop_start())  # pyright: ignore[reportAny]
-
-                logger.info(f"MInsightMonitor started listening on MQTT for port {port}")
-        except Exception as e:
-            logger.error(f"Failed to start MInsightMonitor: {e}")
+            logger.info(f"MInsightMonitor started listening on MQTT for port {port}")
 
     def stop(self) -> None:
         """Stop monitoring."""

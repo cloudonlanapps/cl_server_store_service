@@ -32,7 +32,8 @@ class TestJobProcessing:
             media_storage_dir=clean_data_dir / "media",
             public_key_path=clean_data_dir / "keys" / "public_key.pem",
             no_auth=True,
-            port=8001
+            port=8001,
+            mqtt_url="mqtt://mock-broker:1883",
         )
 
     @pytest.mark.asyncio
@@ -164,8 +165,7 @@ class TestJobProcessing:
             media_storage_dir=clean_data_dir / "media",
             public_key_path=clean_data_dir / "keys" / "public_key.pem",
             face_embedding_threshold=0.7,
-            mqtt_broker="localhost",
-            mqtt_port=1883
+            mqtt_url="mqtt://localhost:1883",
         )
 
         # Use real DBService for DB side-effect verification
@@ -246,7 +246,11 @@ class TestJobProcessing:
         mock_qdrant = MagicMock()
         mock_dino = MagicMock()
         mock_config = MInsightConfig(
-            id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_broker="lh", mqtt_port=123
+            id="test",
+            cl_server_dir=Path("."),
+            media_storage_dir=Path("."),
+            public_key_path=Path("."),
+            mqtt_url="mqtt://lh:123",
         ) # Minimal mock
 
         db_service = DBService(db=test_db_session)
@@ -333,7 +337,11 @@ class TestJobProcessing:
         mock_face_store.search.return_value = [] # No matches
 
         mock_config = MInsightConfig(
-             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_broker="lh", mqtt_port=123,
+             id="test",
+             cl_server_dir=Path("."),
+             media_storage_dir=Path("."),
+             public_key_path=Path("."),
+             mqtt_url="mqtt://lh:123",
              face_embedding_threshold=0.7
         )
 
@@ -394,7 +402,11 @@ class TestJobProcessing:
         mock_qdrant = MagicMock()
         mock_dino = MagicMock()
         mock_config = MInsightConfig(
-             id="test", cl_server_dir=Path("."), media_storage_dir=Path("."), public_key_path=Path("."), mqtt_broker="lh", mqtt_port=123
+             id="test",
+             cl_server_dir=Path("."),
+             media_storage_dir=Path("."),
+             public_key_path=Path("."),
+             mqtt_url="mqtt://lh:123",
         )
 
         db_service = DBService(db=test_db_session)

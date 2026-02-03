@@ -14,17 +14,10 @@ def mock_config(integration_config):
         cl_server_dir=Path("/tmp/fake"),
         media_storage_dir=Path("/tmp/fake/media"),
         public_key_path=Path("/tmp/fake/keys/public_key.pem"),
-        store_port=integration_config.store_port,
-        mqtt_broker="localhost",
-        mqtt_port=1883
+        mqtt_url="mqtt://mock-broker:1883"
     )
 
-def test_broadcaster_init_disabled(mock_config):
-    """Test init when MQTT port is not set."""
-    mock_config.mqtt_port = None
-    broadcaster = MInsightBroadcaster(mock_config)
-    broadcaster.init()
-    assert broadcaster.broadcaster is None
+
 
 @patch("store.broadcast_service.broadcaster.get_broadcaster")
 def test_broadcaster_init_enabled(mock_get_broadcaster, mock_config):
@@ -37,9 +30,7 @@ def test_broadcaster_init_enabled(mock_get_broadcaster, mock_config):
 
     assert broadcaster.broadcaster == mock_mqtt_broadcaster
     mock_get_broadcaster.assert_called_once_with(
-        broadcast_type="mqtt",
-        broker="localhost",
-        port=1883
+        url="mqtt://mock-broker:1883"
     )
     mock_mqtt_broadcaster.set_will.assert_called_once()
 

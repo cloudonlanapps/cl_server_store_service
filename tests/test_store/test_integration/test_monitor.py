@@ -15,16 +15,10 @@ def mock_store_config(integration_config):
         public_key_path=Path("/tmp/fake/keys/public_key.pem"),
         no_auth=True,
         port=integration_config.store_port,
-        mqtt_broker="localhost",
-        mqtt_port=1883
+        mqtt_url="mqtt://mock-broker:1883"
     )
 
-def test_monitor_start_disabled(mock_store_config):
-    """Test start when MQTT is disabled."""
-    mock_store_config.mqtt_port = None
-    monitor = MInsightMonitor(mock_store_config)
-    monitor.start()
-    assert monitor.broadcaster is None
+
 
 @patch("store.broadcast_service.monitor.get_broadcaster")
 def test_monitor_start_enabled(mock_get_broadcaster, mock_store_config):
@@ -47,9 +41,9 @@ def test_monitor_start_failure(mock_get_broadcaster, mock_store_config):
     """Test monitor start with exception."""
     mock_get_broadcaster.side_effect = Exception("MQTT Fail")
     monitor = MInsightMonitor(mock_store_config)
-    # Should handle exception and not raise
-    monitor.start()
-    assert monitor.broadcaster is None
+    # Should raise exception now
+    with pytest.raises(Exception, match="MQTT Fail"):
+        monitor.start()
 
 def test_monitor_on_message_variants(mock_store_config):
     """Test _on_message with various payloads and topics."""

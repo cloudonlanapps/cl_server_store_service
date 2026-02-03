@@ -90,6 +90,7 @@ def test_hard_delete_collection_cascades_to_children(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=True,
         port=8001,
+        mqtt_url="mqtt://mock-broker:1883",
     )
     service = EntityService(test_db_session, config)
     service.patch_entity(collection_id, {"is_deleted": True})
@@ -157,6 +158,7 @@ def test_hard_delete_nested_collections_cascades_recursively(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=True,
         port=8001,
+        mqtt_url="mqtt://mock-broker:1883",
     )
     service = EntityService(test_db_session, config)
     service.patch_entity(parent_id, {"is_deleted": True})

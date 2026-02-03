@@ -35,12 +35,10 @@ class StoreConfig(BaseConfig):
         parser.add_argument("--no-migrate", action="store_true", help="Skip running DB migrations")
         parser.add_argument("--port", "-p", type=int, default=8001)
         parser.add_argument("--host", default="0.0.0.0")
-        parser.add_argument("--mqtt-server", default="localhost", help="MQTT broker host")
         parser.add_argument(
-            "--mqtt-port",
-            type=int,
-            default=None,
-            help="MQTT broker port. Enabling this will enable MQTT broadcasting.",
+            "--mqtt-url",
+            default="mqtt://localhost:1883",
+            help="MQTT broker URL (e.g. mqtt://localhost:1883)",
         )
         parser.add_argument("--reload", action="store_true", help="Enable uvicorn reload (dev)")
         parser.add_argument(

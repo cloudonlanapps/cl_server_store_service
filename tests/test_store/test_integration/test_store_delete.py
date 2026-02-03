@@ -286,9 +286,9 @@ class TestEntityDeletion:
         self, client: TestClient, sample_image: Path, test_db_session: Session, request
     ) -> None:
         """DEL-05: Real MQTT integration test for deletion clearing retained messages."""
-        mqtt_port = request.config.getoption("--mqtt-port")
-        if not mqtt_port:
-            pytest.skip("Real MQTT broker not configured (use --mqtt-port)")
+        mqtt_url = request.config.getoption("--mqtt-url")
+        if not mqtt_url:
+            pytest.skip("Real MQTT broker not configured (use --mqtt-url)")
 
         import threading
         import paho.mqtt.client as mqtt
@@ -314,7 +314,11 @@ class TestEntityDeletion:
 
         try:
             # Connect to broker
-            mqtt_broker = request.config.getoption("--mqtt-server") or "localhost"
+            from urllib.parse import urlparse
+            parsed_url = urlparse(mqtt_url)
+            mqtt_broker = parsed_url.hostname or "localhost"
+            mqtt_port = parsed_url.port or 1883
+            
             mqtt_client.connect(mqtt_broker, mqtt_port, 60)
             mqtt_client.loop_start()
 

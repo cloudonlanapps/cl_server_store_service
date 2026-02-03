@@ -26,8 +26,13 @@ def test_subscriber(integration_config):
         messages.append(msg)
 
     client.on_message = on_message
-    port = integration_config.mqtt_port or 1883
-    client.connect(integration_config.mqtt_broker, port, 60)
+    # Parse URL
+    from requests.compat import urlparse
+    parsed = urlparse(integration_config.mqtt_url)
+    broker = parsed.hostname or "localhost"
+    port = parsed.port or 1883
+    
+    client.connect(broker, port, 60)
     client.loop_start()
     yield client, messages
     client.loop_stop()
@@ -47,18 +52,15 @@ def test_m_insight_worker(
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         store_port=random.randint(30000, 40000),
-        mqtt_broker=integration_config.mqtt_broker,
-        mqtt_port=integration_config.mqtt_port,
+        mqtt_url=integration_config.mqtt_url,
         mqtt_topic="test/m_insight_mqtt",
     )
 
     # Use test database engine
     database.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
-    port = integration_config.mqtt_port or 1883
-
-    # Update config with valid port
-    config.mqtt_port = port
+    # Valid URL is already in config
+    pass
 
     # Initialize broadcaster
     broadcaster = MInsightBroadcaster(config)
@@ -148,7 +150,7 @@ def test_m_insight_heartbeat_status(
     """Test explicit status publishing (heartbeat logic)."""
     subscriber, messages = test_subscriber
 
-    port = integration_config.mqtt_port or 1883
+
 
     config = MInsightConfig(
         id="test-hb",
@@ -156,8 +158,7 @@ def test_m_insight_heartbeat_status(
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         store_port=random.randint(40001, 50000),
-        mqtt_broker=integration_config.mqtt_broker,
-        mqtt_port=port,
+        mqtt_url=integration_config.mqtt_url,
     )
 
     topic_base = f"mInsight/{config.store_port}"
