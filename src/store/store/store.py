@@ -28,25 +28,26 @@ async def lifespan(app: FastAPI):
     """
     # -------- Startup --------
 
-    from .config import get_config
-    config = get_config()
-    app.state.config = config
-    logger.info("Loaded core configuration via get_config()")
+    # Priority 1: Configuration from app state (set by tests)
+    # Priority 2: Configuration from global factory (standard startup)
+    if not hasattr(app.state, "config"):
+        from .config import get_config
+        app.state.config = get_config()
+    
+    config = cast(StoreConfig, app.state.config)
+    logger.info(f"Using configuration with port {config.port}")
 
     # Initialize MQTT Broadcaster
     config = cast(StoreConfig, getattr(app.state, "config", None))
     if config:
-        # If mqtt_url is None, get_broadcaster returns NoOpBroadcaster by default if we don't pass url
-        # But we want to be explicit.
-        broadcast_type = "mqtt" if config.mqtt_url else "none"
-        app.state.broadcaster = get_broadcaster(
-            broadcast_type=broadcast_type,
-            url=config.mqtt_url,
-        )
-        logger.info(f"MQTT Broadcaster initialized (type={broadcast_type})")
+        if not config.mqtt_url:
+             raise ValueError("MQTT URL is mandatory for Store service")
+             
+        from store.broadcast_service.broadcaster import get_insight_broadcaster
+        app.state.broadcaster = get_insight_broadcaster(config)
+        logger.info(f"MQTT Broadcaster initialized (url={config.mqtt_url})")
     else:
-        app.state.broadcaster = get_broadcaster(broadcast_type="none")
-        logger.warning("MQTT Broadcaster initialized as No-Op due to missing config")
+        raise ValueError("Store configuration missing")
 
     # Initialize MInsight Monitor
     monitor = MInsightMonitor(config)
@@ -63,9 +64,8 @@ async def lifespan(app: FastAPI):
         if monitor:
             monitor.stop()
 
-        broadcaster = cast(BroadcasterBase, getattr(app.state, "broadcaster", None))
-        if broadcaster and hasattr(broadcaster, "disconnect"):
-            broadcaster.disconnect()
+        from store.broadcast_service.broadcaster import reset_broadcaster
+        reset_broadcaster()
         logger.info("Store service shutdown complete")
 
 

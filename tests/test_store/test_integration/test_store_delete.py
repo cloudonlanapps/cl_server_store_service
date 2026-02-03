@@ -15,6 +15,13 @@ from sqlalchemy.orm import Session
 
 from store.db_service.db_internals import Entity, Face
 from store.db_service.schemas import EntitySchema
+from store.store.dependencies import (
+    get_broadcaster,
+    get_clip_store_dep,
+    get_dino_store_dep,
+    get_face_store_dep,
+)
+from store.store.store import app
 
 
 class TestEntityDeletion:
@@ -118,120 +125,124 @@ class TestEntityDeletion:
         mock_clip_store = MagicMock()
         mock_dino_store = MagicMock()
 
-        # Inject mocks into app state
-        client.app.state.broadcaster = mock_broadcaster
-        client.app.state.face_store = mock_face_store
-        client.app.state.clip_store = mock_clip_store
-        client.app.state.dino_store = mock_dino_store
+        # Inject mocks via dependency overrides
+        app.dependency_overrides[get_broadcaster] = lambda: mock_broadcaster
+        app.dependency_overrides[get_face_store_dep] = lambda: mock_face_store
+        app.dependency_overrides[get_clip_store_dep] = lambda: mock_clip_store
+        app.dependency_overrides[get_dino_store_dep] = lambda: mock_dino_store
 
-        # 2. Create Entity
-        with open(sample_image, "rb") as f:
-            response = client.post(
-                "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
-                data={"is_collection": "false", "label": "Multi-Face Entity"},
+        try:
+            # 2. Create Entity
+            with open(sample_image, "rb") as f:
+                response = client.post(
+                    "/entities/",
+                    files={"image": (sample_image.name, f, "image/jpeg")},
+                    data={"is_collection": "false", "label": "Multi-Face Entity"},
+                )
+            assert response.status_code == 201
+            entity = EntitySchema.model_validate(response.json())
+            entity_id = entity.id
+
+            # 3. Manually create Faces and Intelligence Data (Simulate mInsight)
+            from store.db_service.db_internals import EntityIntelligence, Face
+            from store.db_service import EntityIntelligenceData
+            
+            # Create 2 mock faces
+            face1 = Face(
+                entity_id=entity_id,
+                file_path=f"faces/{entity_id}_1.jpg",
+                bbox="[0.1, 0.1, 0.6, 0.6]",
+                confidence=0.99,
+                landmarks="[]",
+                created_at=1000
             )
-        assert response.status_code == 201
-        entity = EntitySchema.model_validate(response.json())
-        entity_id = entity.id
+            face2 = Face(
+                entity_id=entity_id,
+                file_path=f"faces/{entity_id}_2.jpg",
+                bbox="[0.2, 0.2, 0.7, 0.7]",
+                confidence=0.98,
+                landmarks="[]",
+                created_at=1001
+            )
+            test_db_session.add(face1)
+            test_db_session.add(face2)
+            
+            # Create Intelligence Record with face count
+            intel_data = EntityIntelligenceData(
+                face_count=2,
+                overall_status="completed",
+                last_updated=1000
+            )
+            intel_record = EntityIntelligence(
+                entity_id=entity_id,
+                intelligence_data=intel_data.model_dump()
+            )
+            test_db_session.add(intel_record)
+            test_db_session.commit()
+            test_db_session.refresh(face1)
+            test_db_session.refresh(face2)
+            
+            f1_id = face1.id
+            f2_id = face2.id
 
-        # 3. Manually create Faces and Intelligence Data (Simulate mInsight)
-        from store.db_service.models import Face, EntityIntelligence
-        from store.db_service import EntityIntelligenceData
-        
-        # Create 2 mock faces
-        face1 = Face(
-            entity_id=entity_id,
-            file_path=f"faces/{entity_id}_1.jpg",
-            bbox="[0.1, 0.1, 0.6, 0.6]",
-            confidence=0.99,
-            landmarks="[]",
-            created_at=1000
-        )
-        face2 = Face(
-            entity_id=entity_id,
-            file_path=f"faces/{entity_id}_2.jpg",
-            bbox="[0.2, 0.2, 0.7, 0.7]",
-            confidence=0.98,
-            landmarks="[]",
-            created_at=1001
-        )
-        test_db_session.add(face1)
-        test_db_session.add(face2)
-        
-        # Create Intelligence Record with face count
-        intel_data = EntityIntelligenceData(
-            face_count=2,
-            overall_status="completed",
-            last_updated=1000
-        )
-        intel_record = EntityIntelligence(
-            entity_id=entity_id,
-            intelligence_data=intel_data.model_dump()
-        )
-        test_db_session.add(intel_record)
-        test_db_session.commit()
-        test_db_session.refresh(face1)
-        test_db_session.refresh(face2)
-        
-        f1_id = face1.id
-        f2_id = face2.id
+            # 4. Delete Face 1
+            resp = client.delete(f"/faces/{f1_id}")
+            assert resp.status_code == 204
+            
+            # Verify Face 1 Deleted
+            test_db_session.expire_all()
+            assert test_db_session.get(Face, f1_id) is None
+            assert test_db_session.get(Face, f2_id) is not None
+            
+            # Verify Vector Deletion (Face 1)
+            mock_face_store.delete_vector.assert_called_with(f1_id)
+            
+            # Verify Face Count Update
+            from store.db_service.intelligence import EntityIntelligenceDBService
+            intel_service = EntityIntelligenceDBService(test_db_session)
+            current_intel = intel_service.get_intelligence_data(entity_id)
+            assert current_intel.face_count == 1
+            
+            # 5. Delete Face 2 (Another "image"/face)
+            resp = client.delete(f"/faces/{f2_id}")
+            assert resp.status_code == 204
+            
+            # Verify Face 2 Deleted
+            test_db_session.expire_all()
+            assert test_db_session.get(Face, f2_id) is None
+            
+            # Verify Vector Deletion (Face 2)
+            mock_face_store.delete_vector.assert_called_with(f2_id)
+            
+            # Verify Face Count Update
+            current_intel = intel_service.get_intelligence_data(entity_id)
+            assert current_intel.face_count == 0
 
-        # 4. Delete Face 1
-        resp = client.delete(f"/faces/{f1_id}")
-        assert resp.status_code == 204
-        
-        # Verify Face 1 Deleted
-        test_db_session.expire_all()
-        assert test_db_session.get(Face, f1_id) is None
-        assert test_db_session.get(Face, f2_id) is not None
-        
-        # Verify Vector Deletion (Face 1)
-        mock_face_store.delete_vector.assert_called_with(f1_id)
-        
-        # Verify Face Count Update
-        from store.db_service.intelligence import EntityIntelligenceDBService
-        intel_service = EntityIntelligenceDBService(test_db_session)
-        current_intel = intel_service.get_intelligence_data(entity_id)
-        assert current_intel.face_count == 1
-        
-        # 5. Delete Face 2 (Another "image"/face)
-        resp = client.delete(f"/faces/{f2_id}")
-        assert resp.status_code == 204
-        
-        # Verify Face 2 Deleted
-        test_db_session.expire_all()
-        assert test_db_session.get(Face, f2_id) is None
-        
-        # Verify Vector Deletion (Face 2)
-        mock_face_store.delete_vector.assert_called_with(f2_id)
-        
-        # Verify Face Count Update
-        current_intel = intel_service.get_intelligence_data(entity_id)
-        assert current_intel.face_count == 0
+            # Reset Mocks for Entity Deletion Check
+            mock_broadcaster.reset_mock()
+            mock_clip_store.reset_mock()
+            mock_dino_store.reset_mock()
 
-        # Reset Mocks for Entity Deletion Check
-        mock_broadcaster.reset_mock()
-        mock_clip_store.reset_mock()
-        mock_dino_store.reset_mock()
-
-        # 6. Delete Entity
-        # Soft Delete First
-        client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
-        
-        # Hard Delete
-        resp = client.delete(f"/entities/{entity_id}")
-        assert resp.status_code == 204
-        
-        # Verify Entity Gone
-        assert test_db_session.get(Entity, entity_id) is None
-        
-        # Verify Vector Store Cleanup (CLIP/DINO)
-        mock_clip_store.delete_vector.assert_called_with(entity_id)
-        mock_dino_store.delete_vector.assert_called_with(entity_id)
-        
-        # Verify MQTT Cleanup
-        mock_broadcaster.clear_entity_status.assert_called_with(entity_id)
+            # 6. Delete Entity
+            # Soft Delete First
+            client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
+            
+            # Hard Delete
+            resp = client.delete(f"/entities/{entity_id}")
+            assert resp.status_code == 204
+            
+            # Verify Entity Gone
+            assert test_db_session.get(Entity, entity_id) is None
+            
+            # Verify Vector Store Cleanup (CLIP/DINO)
+            mock_clip_store.delete_vector.assert_called_with(entity_id)
+            mock_dino_store.delete_vector.assert_called_with(entity_id)
+            
+            # Verify MQTT Cleanup
+            mock_broadcaster.clear_entity_status.assert_called_with(entity_id)
+        finally:
+            # Clean up overrides
+            app.dependency_overrides.clear()
 
     # Removed individual TODO tests replaced by the above consolidated test
     # test_delete_entity_removes_vectors
@@ -243,34 +254,37 @@ class TestEntityDeletion:
         """DEL-05: Deleting an entity must clear any retained MQTT messages (mock test)."""
         # Setup mock broadcaster
         mock_broadcaster = MagicMock()
-        client.app.state.broadcaster = mock_broadcaster
+        app.dependency_overrides[get_broadcaster] = lambda: mock_broadcaster
 
-        # Create entity
-        with open(sample_image, "rb") as f:
-            response = client.post(
-                "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
-                data={"is_collection": "false", "label": "Test Entity"},
-            )
-        assert response.status_code == 201
-        entity = EntitySchema.model_validate(response.json())
-        entity_id = entity.id
+        try:
+            # Create entity
+            with open(sample_image, "rb") as f:
+                response = client.post(
+                    "/entities/",
+                    files={"image": (sample_image.name, f, "image/jpeg")},
+                    data={"is_collection": "false", "label": "Test Entity"},
+                )
+            assert response.status_code == 201
+            entity = EntitySchema.model_validate(response.json())
+            entity_id = entity.id
 
-        # Reset mock to clear creation calls
-        mock_broadcaster.reset_mock()
+            # Reset mock to clear creation calls
+            mock_broadcaster.reset_mock()
 
-        # Soft-delete first
-        patch_response = client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
-        assert patch_response.status_code == 200
+            # Soft-delete first
+            patch_response = client.patch(f"/entities/{entity_id}", data={"is_deleted": "true"})
+            assert patch_response.status_code == 200
 
-        # Hard delete
-        delete_response = client.delete(f"/entities/{entity_id}")
-        assert delete_response.status_code == 204
+            # Hard delete
+            delete_response = client.delete(f"/entities/{entity_id}")
+            assert delete_response.status_code == 204
 
-        # Verify MQTT message was cleared
-        assert mock_broadcaster.clear_entity_status.called, "MQTT clear should be called"
-        call_args = mock_broadcaster.clear_entity_status.call_args
-        assert call_args[0][0] == entity_id, f"Should clear entity {entity_id}"
+            # Verify MQTT message was cleared
+            assert mock_broadcaster.clear_entity_status.called, "MQTT clear should be called"
+            call_args = mock_broadcaster.clear_entity_status.call_args
+            assert call_args[0][0] == entity_id, f"Should clear entity {entity_id}"
+        finally:
+            app.dependency_overrides.clear()
 
     def test_delete_entity_clears_mqtt_real(
         self, client: TestClient, sample_image: Path, test_db_session: Session, request

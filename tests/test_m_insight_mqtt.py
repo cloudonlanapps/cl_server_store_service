@@ -1,3 +1,4 @@
+import asyncio
 import json
 import random
 import time
@@ -16,16 +17,26 @@ from store.m_insight.media_insight import MediaInsight
 
 
 @pytest.fixture
-def test_subscriber(integration_config):
+async def test_subscriber(integration_config):
     """Create an MQTT subscriber for verification."""
-    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv5)
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv5)
     messages = []
+    loop = asyncio.get_running_loop()
+    connected_event = asyncio.Event()
+    subscribed_event = asyncio.Event()
 
+    def on_connect(client, userdata, flags, rc, properties):
+        loop.call_soon_threadsafe(connected_event.set)
+
+    def on_subscribe(client, userdata, mid, reason_code_list, properties):
+        loop.call_soon_threadsafe(subscribed_event.set)
 
     def on_message(client, userdata, msg):
         messages.append(msg)
 
     from urllib.parse import urlparse
+    client.on_connect = on_connect
+    client.on_subscribe = on_subscribe
     client.on_message = on_message
     
     parsed = urlparse(integration_config.mqtt_url)
@@ -36,7 +47,13 @@ def test_subscriber(integration_config):
     
     client.connect(broker, port, 60)
     client.loop_start()
+    
+    # Attach events for test access
+    client._connected_event = connected_event
+    client._subscribed_event = subscribed_event
+    
     yield client, messages
+    
     client.loop_stop()
     client.disconnect()
 
@@ -53,10 +70,10 @@ def test_m_insight_worker(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        store_port=random.randint(30000, 40000),
-        store_port=random.randint(30000, 40000),
+        store_port=integration_config.store_port,
         mqtt_url=integration_config.mqtt_url,
         mqtt_topic="test/m_insight_mqtt",
+        qdrant_url=integration_config.qdrant_url,
     )
 
     # Use test database engine
@@ -68,9 +85,20 @@ def test_m_insight_worker(
     broadcaster = MInsightBroadcaster(config)
     broadcaster.init()
 
+    # Reset vector stores singletons to avoid conflicts
+    import store.vectorstore_services.vector_stores as vs
+    vs._clip_store = None
+    vs._dino_store = None
+    vs._face_store = None
+
     # Create worker with broadcaster
     worker = MediaInsight(config=config, broadcaster=broadcaster)
     yield worker
+
+    # Cleanup singletons
+    vs._clip_store = None
+    vs._dino_store = None
+    vs._face_store = None
 
 
 async def test_m_insight_lifecycle_events(
@@ -84,11 +112,16 @@ async def test_m_insight_lifecycle_events(
     worker = test_m_insight_worker
 
     topic_base = f"mInsight/{worker.config.store_port}"
+    
+    # Wait for connection
+    await asyncio.wait_for(subscriber._connected_event.wait(), timeout=5.0)
+    
     # All events now go to /status topic
     subscriber.subscribe(f"{topic_base}/status")
-
-    # Wait for subscription and clear any retained messages
-    time.sleep(1.0)
+    await asyncio.wait_for(subscriber._subscribed_event.wait(), timeout=5.0)
+    
+    # Small buffer for subscription to settle
+    await asyncio.sleep(0.1)
     messages.clear()
 
     # Create an entity to trigger processing
@@ -144,7 +177,8 @@ async def test_m_insight_lifecycle_events(
     assert running_with_info[0].version_end is not None
 
 
-def test_m_insight_heartbeat_status(
+@pytest.mark.asyncio
+async def test_m_insight_heartbeat_status(
     integration_config,
     test_subscriber,
     clean_data_dir,
@@ -163,14 +197,18 @@ def test_m_insight_heartbeat_status(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        store_port=random.randint(40001, 50000),
-        store_port=random.randint(40001, 50000),
+        store_port=integration_config.store_port,
         mqtt_url=integration_config.mqtt_url,
     )
 
     topic_base = f"mInsight/{config.store_port}"
+    
+    # Wait for connection
+    await asyncio.wait_for(subscriber._connected_event.wait(), timeout=5.0)
+    
     subscriber.subscribe(f"{topic_base}/status")
-    time.sleep(0.5)
+    await asyncio.wait_for(subscriber._subscribed_event.wait(), timeout=5.0)
+    
     messages.clear()
 
     broadcaster = MInsightBroadcaster(config)

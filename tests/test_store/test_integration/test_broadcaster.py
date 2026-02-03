@@ -18,12 +18,6 @@ def mock_config(integration_config):
         mqtt_url=integration_config.mqtt_url
     )
 
-def test_broadcaster_init_disabled(mock_config):
-    """Test init when MQTT URL is not set."""
-    mock_config.mqtt_url = None
-    broadcaster = MInsightBroadcaster(mock_config)
-    broadcaster.init()
-    assert broadcaster.broadcaster is None
 
 @patch("store.broadcast_service.broadcaster.get_broadcaster")
 def test_broadcaster_init_enabled(mock_get_broadcaster, mock_config):
@@ -36,8 +30,7 @@ def test_broadcaster_init_enabled(mock_get_broadcaster, mock_config):
 
     assert broadcaster.broadcaster == mock_mqtt_broadcaster
     mock_get_broadcaster.assert_called_once_with(
-        broadcast_type="mqtt",
-        url=integration_config.mqtt_url,
+        mqtt_url=mock_config.mqtt_url,
     )
     mock_mqtt_broadcaster.set_will.assert_called_once()
 

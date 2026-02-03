@@ -19,8 +19,8 @@ def mock_store_config(integration_config):
     )
 
 def test_monitor_start_disabled(mock_store_config):
-    """Test start when MQTT is disabled."""
-    mock_store_config.mqtt_url = None
+    """Test start when MQTT is 'disabled' (empty string)."""
+    mock_store_config.mqtt_url = ""
     monitor = MInsightMonitor(mock_store_config)
     monitor.start()
     assert monitor.broadcaster is None
@@ -74,18 +74,18 @@ def test_monitor_on_message_variants(mock_store_config):
     assert monitor.process_status is None
 
     # 4. Valid 'started' message
-    monitor._on_message(None, None, create_msg("mInsight/8011/started", '{"version_start":1, "status": "running", "timestamp": 1234567890}'))
+    monitor._on_message(None, None, create_msg(f"mInsight/{mock_store_config.port}/started", '{"version_start":1, "status": "running", "timestamp": 1234567890}'))
     assert monitor.process_status is not None
     assert monitor.process_status.status == "running"
     assert monitor.process_status.version_start == 1
 
     # 5. Valid 'ended' message
-    monitor._on_message(None, None, create_msg("mInsight/8011/ended", '{"processed_count":5, "status": "idle", "timestamp": 1234567895}'))
+    monitor._on_message(None, None, create_msg(f"mInsight/{mock_store_config.port}/ended", '{"processed_count":5, "status": "idle", "timestamp": 1234567895}'))
     assert monitor.process_status.status == "idle"
     assert monitor.process_status.processed_count == 5
 
     # 6. Valid 'status' message
-    monitor._on_message(None, None, create_msg("mInsight/8011/status", '{"status":"custom", "timestamp": 1234567900}'))
+    monitor._on_message(None, None, create_msg(f"mInsight/{mock_store_config.port}/status", '{"status":"custom", "timestamp": 1234567900}'))
     assert monitor.process_status.status == "custom"
 
 def test_monitor_get_status(mock_store_config):

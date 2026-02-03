@@ -79,8 +79,7 @@ async def mqtt_listener_task(config: MInsightConfig) -> None:
 
     try:
         broadcaster = get_broadcaster(
-            broadcast_type="mqtt",
-            url=config.mqtt_url,
+            mqtt_url=config.mqtt_url,
         )
 
         # Subscribe to wake-up topic

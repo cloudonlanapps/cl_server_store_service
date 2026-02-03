@@ -75,9 +75,9 @@ def m_insight_worker(
         cl_server_dir=clean_data_dir,
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
-        public_key_path=clean_data_dir / "keys" / "public_key.pem",
         mqtt_url=integration_config.mqtt_url,
         mqtt_topic="test/m_insight",
+        qdrant_url=integration_config.qdrant_url,
     )
 
     # Use test database engine instead of initializing a new database
@@ -88,10 +88,21 @@ def m_insight_worker(
     broadcaster = MInsightBroadcaster(config)
     broadcaster.init()
 
+    # Reset vector stores singletons to avoid conflicts
+    import store.vectorstore_services.vector_stores as vs
+    vs._clip_store = None
+    vs._dino_store = None
+    vs._face_store = None
+
     # Create worker
     worker = MediaInsight(config=config, broadcaster=broadcaster)
 
     yield worker
+    
+    # Cleanup singletons
+    vs._clip_store = None
+    vs._dino_store = None
+    vs._face_store = None
 
 
 # ============================================================================

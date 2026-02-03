@@ -1,4 +1,3 @@
-from cl_ml_tools import BroadcasterBase
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
@@ -14,6 +13,7 @@ from store.vectorstore_services.vector_stores import (
 )
 
 from .config import StoreConfig
+from store.broadcast_service.broadcaster import MInsightBroadcaster, get_insight_broadcaster
 from store.broadcast_service.monitor import MInsightMonitor
 from .service import EntityService
 
@@ -28,9 +28,23 @@ def get_config_service(db: DBService = Depends(get_db_service)) -> ConfigDBServi
     return db.config
 
 
-def get_broadcaster(request: Request) -> BroadcasterBase | None:
-    """Dependency to get broadcaster from app state."""
-    return getattr(request.app.state, "broadcaster", None)  # pyright: ignore[reportAny]
+def get_broadcaster(request: Request) -> MInsightBroadcaster | None:
+    """Dependency to get broadcaster.
+    
+    Preference 1: Existing broadcaster in app state (set by lifespan).
+    Preference 2: Lazy initialize from config if not yet set (for tests or alternate entry points).
+    """
+    if hasattr(request.app.state, "broadcaster"):
+        return request.app.state.broadcaster
+
+    config = get_config(request)
+    if not config.mqtt_url:
+        return None
+
+    bc = get_insight_broadcaster(config)
+    # Sync back to app state to maintain lifecycle consistency
+    request.app.state.broadcaster = bc
+    return bc
 
 
 def get_monitor(request: Request) -> MInsightMonitor | None:
@@ -38,14 +52,44 @@ def get_monitor(request: Request) -> MInsightMonitor | None:
     return getattr(request.app.state, "monitor", None)  # pyright: ignore[reportAny]
 
 
+def get_clip_store_dep(request: Request) -> QdrantVectorStore:
+    """Dependency to get CLIP vector store, using app state config."""
+    config = get_config(request)
+    from store.vectorstore_services.vector_stores import get_clip_store
+    return get_clip_store(
+        url=config.qdrant_url,
+        collection_name=config.qdrant_collection,
+    )
+
+
+def get_dino_store_dep(request: Request) -> QdrantVectorStore:
+    """Dependency to get DINO vector store, using app state config."""
+    config = get_config(request)
+    from store.vectorstore_services.vector_stores import get_dino_store
+    return get_dino_store(
+        url=config.qdrant_url,
+        collection_name=config.dino_collection,
+    )
+
+
+def get_face_store_dep(request: Request) -> QdrantVectorStore:
+    """Dependency to get Face vector store, using app state config."""
+    config = get_config(request)
+    from store.vectorstore_services.vector_stores import get_face_store
+    return get_face_store(
+        url=config.qdrant_url,
+        collection_name=config.face_collection,
+        vector_size=getattr(config, "face_vector_size", 512),
+    )
+
+
 def get_entity_service(
     db: Session = Depends(get_db),
     config: StoreConfig = Depends(get_config),
-    db_service: DBService = Depends(get_db_service),
     clip_store: QdrantVectorStore = Depends(get_clip_store_dep),
     dino_store: QdrantVectorStore = Depends(get_dino_store_dep),
     face_store: QdrantVectorStore = Depends(get_face_store_dep),
-    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
+    broadcaster: MInsightBroadcaster | None = Depends(get_broadcaster),
 ) -> EntityService:
     """Dependency to get EntityService instance.
 
@@ -59,6 +103,7 @@ def get_entity_service(
     # Create FaceService (face_store is now always available and required)
     from .face_service import FaceService
     from ..common.storage import StorageService
+    from store.db_service import DBService
 
     # Create a DBService with the request's db session to avoid transaction conflicts
     db_service_with_session = DBService(db=db)

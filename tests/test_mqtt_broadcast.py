@@ -109,26 +109,36 @@ def test_mqtt_real_broadcast_create(client: TestClient, sample_image: Path, mqtt
 
     events_received = []
     connect_event = threading.Event()
-
+    subscribe_event = threading.Event()
+    
     def on_connect(client, userdata, flags, rc, properties=None):
         if rc == 0:
             client.subscribe(topic)
             connect_event.set()
+    
+    def on_subscribe(client, userdata, mid, reason_code_list, properties=None):
+        subscribe_event.set()
 
     def on_message(client, userdata, msg):
         events_received.append(msg.payload.decode())
-
-    subscriber = mqtt.Client(CallbackAPIVersion.VERSION2, client_id=f"test_sub_create_{int(time.time_ns())}")
+    
+    subscriber = mqtt.Client(CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv5, client_id=f"test_sub_create_{int(time.time_ns())}")
     subscriber.on_connect = on_connect
+    subscriber.on_subscribe = on_subscribe
     subscriber.on_message = on_message
-
+    
     subscriber.connect(mqtt_broker, mqtt_port)
     subscriber.loop_start()
-
+    
     try:
         # Wait for connection and subscription
         if not connect_event.wait(timeout=5):
             pytest.fail("Failed to connect to MQTT broker")
+        if not subscribe_event.wait(timeout=5):
+            pytest.fail("Failed to subscribe to MQTT topic")
+        
+        # Small extra buffer
+        time.sleep(0.5)
 
         # Perform POST
         with open(sample_image, "rb") as f:
@@ -186,26 +196,36 @@ def test_mqtt_real_broadcast_update(client: TestClient, sample_images: list[Path
 
     events_received = []
     connect_event = threading.Event()
-
+    subscribe_event = threading.Event()
+    
     def on_connect(client, userdata, flags, rc, properties=None):
         if rc == 0:
             client.subscribe(topic)
             connect_event.set()
+    
+    def on_subscribe(client, userdata, mid, reason_code_list, properties=None):
+        subscribe_event.set()
 
     def on_message(client, userdata, msg):
         events_received.append(msg.payload.decode())
-
-    subscriber = mqtt.Client(CallbackAPIVersion.VERSION2, client_id=f"test_sub_update_{int(time.time_ns())}")
+    
+    subscriber = mqtt.Client(CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv5, client_id=f"test_sub_update_{int(time.time_ns())}")
     subscriber.on_connect = on_connect
+    subscriber.on_subscribe = on_subscribe
     subscriber.on_message = on_message
-
+    
     subscriber.connect(mqtt_broker, mqtt_port)
     subscriber.loop_start()
-
+    
     try:
         # Wait for connection and subscription
         if not connect_event.wait(timeout=5):
             pytest.fail("Failed to connect to MQTT broker")
+        if not subscribe_event.wait(timeout=5):
+            pytest.fail("Failed to subscribe to MQTT topic")
+        
+        # Small extra buffer
+        time.sleep(0.5)
 
         # 2. Perform PUT with DIFFERENT image
         with open(sample_images[1], "rb") as f:

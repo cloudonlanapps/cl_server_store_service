@@ -6,10 +6,35 @@ from loguru import logger
 
 from cl_ml_tools import BroadcasterBase, get_broadcaster
 from .schemas import MInsightStatus
+from typing import Any
 
 if TYPE_CHECKING:
     from ..m_insight.config import MInsightConfig
     from .schemas import EntityStatusPayload
+
+_broadcaster: MInsightBroadcaster | None = None
+
+
+def get_insight_broadcaster(config: MInsightConfig) -> MInsightBroadcaster:
+    """Get or create global MInsightBroadcaster singleton."""
+    global _broadcaster
+    if _broadcaster is not None:
+        return _broadcaster
+
+    _broadcaster = MInsightBroadcaster(config)
+    _broadcaster.init()
+    return _broadcaster
+
+
+def reset_broadcaster() -> None:
+    """Reset the broadcaster singleton (for testing)."""
+    global _broadcaster
+    if _broadcaster and _broadcaster.broadcaster:
+        try:
+            _broadcaster.broadcaster.disconnect()
+        except Exception:
+            pass
+    _broadcaster = None
 
 
 class MInsightBroadcaster:
@@ -18,7 +43,14 @@ class MInsightBroadcaster:
     def __init__(self, config: MInsightConfig):
         self.config: MInsightConfig = config
         self.broadcaster: BroadcasterBase | None = None
-        self.port: int = config.store_port
+        # Resolve port from config (StoreConfig uses 'port', MInsightConfig uses 'store_port')
+        port_val = getattr(config, "port", getattr(config, "store_port", 8001))
+        try:
+            # Handle cases where port might be a Mock or string in tests
+            self.port = int(port_val)
+        except (ValueError, TypeError):
+            self.port = 8001
+            
         self.topic_base: str = f"mInsight/{self.port}"
         
         self.current_status: MInsightStatus = MInsightStatus(
@@ -32,8 +64,7 @@ class MInsightBroadcaster:
             return
 
         self.broadcaster = get_broadcaster(
-            broadcast_type="mqtt",
-            url=self.config.mqtt_url,
+            mqtt_url=self.config.mqtt_url,
         )
 
         # Set LWT
@@ -132,3 +163,15 @@ class MInsightBroadcaster:
             payload="",
             qos=1
         )
+
+    def publish_event(self, topic: str, payload: str, qos: int = 1) -> Any:
+        """Wrapper for internal broadcaster publish_event."""
+        if self.broadcaster:
+            return self.broadcaster.publish_event(topic=topic, payload=payload, qos=qos)
+        return None
+
+    def publish_retained(self, topic: str, payload: str, qos: int = 1) -> Any:
+        """Wrapper for internal broadcaster publish_retained."""
+        if self.broadcaster:
+            return self.broadcaster.publish_retained(topic=topic, payload=payload, qos=qos)
+        return None

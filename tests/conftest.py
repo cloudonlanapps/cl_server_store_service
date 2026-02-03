@@ -336,6 +336,10 @@ def client(
 
     monkeypatch.setenv("CL_SERVER_DIR", str(clean_data_dir))
 
+    # CRITICAL: Reset the broadcaster singleton before starting the app to ensure clean state
+    from store.broadcast_service.broadcaster import reset_broadcaster
+    reset_broadcaster()
+
     # Create session maker
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
@@ -369,7 +373,7 @@ def client(
         media_storage_dir=clean_data_dir / "media",
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=False,
-        port=random.randint(20000, 30000),
+        port=integration_config.store_port,
         mqtt_url=integration_config.mqtt_url,
     )
     app.state.config = store_config
@@ -380,23 +384,17 @@ def client(
     # Enhanced cleanup
     app.dependency_overrides.clear()
 
-    # Clean up app state
-    if hasattr(app.state, 'broadcaster'):
-        if hasattr(app.state.broadcaster, 'disconnect'):
-            app.state.broadcaster.disconnect()
-        delattr(app.state, 'broadcaster')
+    # Clean up app state and global singletons
+    from store.broadcast_service.broadcaster import reset_broadcaster
+    reset_broadcaster()
 
+    if hasattr(app.state, 'broadcaster'):
+        delattr(app.state, 'broadcaster')
     if hasattr(app.state, 'monitor'):
+        # Monitor is stopped in lifespan shutdown, but we ensure it's removed
         delattr(app.state, 'monitor')
     if hasattr(app.state, 'config'):
         delattr(app.state, 'config')
-
-    # Ensure the global singleton in cl_ml_tools is also reset
-    try:
-        from cl_ml_tools.utils.mqtt import shutdown_broadcaster
-        shutdown_broadcaster()
-    except ImportError:
-        pass
 
 
 

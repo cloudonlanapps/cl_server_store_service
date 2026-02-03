@@ -34,7 +34,8 @@ def mock_store_config(integration_config):
         media_storage_dir=Path("/tmp/fake/media"),
         public_key_path=Path("/tmp/fake/keys/public_key.pem"),
         no_auth=True,
-        port=integration_config.store_port
+        port=integration_config.store_port,
+        mqtt_url=integration_config.mqtt_url,
     )
 
 @pytest.fixture

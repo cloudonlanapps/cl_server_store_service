@@ -154,9 +154,9 @@ async def create_entity(
 
         # CRITICAL: Clear retained MQTT status to prevent "ghost" statuses from ID reuse
         if broadcaster:
-            status_topic = f"mInsight/{config.port}/entity_item_status/{item.id}"
-            _ = broadcaster.clear_retained(status_topic)
-            logger.debug(f"Cleared retained status for entity {item.id} on {status_topic}")
+            # broadcaster is MInsightBroadcaster, so use its method
+            broadcaster.clear_entity_status(item.id)
+            logger.debug(f"Cleared retained status for entity {item.id}")
 
         # Broadcast MQTT event only if this was a new entity (not a duplicate)
         if broadcaster and item.md5 and not is_duplicate:
@@ -225,7 +225,7 @@ async def put_entity(
     image: UploadFile | None = File(None, title="Image"),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
-    broadcaster: BroadcasterBase | None = Depends(get_broadcaster),
+    broadcaster: MInsightBroadcaster | None = Depends(get_broadcaster),
 ) -> EntitySchema:
     config = service.config
 
@@ -258,12 +258,11 @@ async def put_entity(
 
         # CRITICAL: Clear retained MQTT status if we are updating with a new file (re-processing)
         if broadcaster and image:
-            status_topic = f"mInsight/{config.port}/entity_item_status/{item.id}"
-            _ = broadcaster.clear_retained(status_topic)
-            logger.debug(f"Cleared retained status for entity {item.id} on {status_topic}")
+            # Use MInsightBroadcaster specific method
+            broadcaster.clear_entity_status(item.id)
+            logger.debug(f"Cleared retained status for entity {item.id}")
 
         # Broadcast MQTT event only if file was actually updated
-        # Note: Broadcaster only emits if file was updated (item.md5 not None for media)
         if broadcaster and item.md5 and image:
             topic = f"store/{config.port}/items"
             payload = {"id": item.id, "md5": item.md5, "timestamp": int(time.time() * 1000)}

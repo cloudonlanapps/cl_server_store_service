@@ -56,6 +56,7 @@ def test_hard_delete_collection_cascades_to_children(
     sample_image: Path,
     test_db_session: Session,
     clean_data_dir: Path,
+    integration_config,
 ) -> None:
     """Test that hard-deleting a soft-deleted collection cascades to children."""
     # Create a collection
@@ -90,6 +91,7 @@ def test_hard_delete_collection_cascades_to_children(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=True,
         port=8001,
+        mqtt_url=integration_config.mqtt_url,
     )
     service = EntityService(test_db_session, config)
     service.patch_entity(collection_id, {"is_deleted": True})
@@ -111,6 +113,7 @@ def test_hard_delete_nested_collections_cascades_recursively(
     sample_image: Path,
     test_db_session: Session,
     clean_data_dir: Path,
+    integration_config,
 ) -> None:
     """Test that hard-deleting a collection recursively cascades through nested children."""
     # Create parent collection
@@ -157,6 +160,7 @@ def test_hard_delete_nested_collections_cascades_recursively(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=True,
         port=8001,
+        mqtt_url=integration_config.mqtt_url,
     )
     service = EntityService(test_db_session, config)
     service.patch_entity(parent_id, {"is_deleted": True})
