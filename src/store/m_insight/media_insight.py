@@ -65,14 +65,14 @@ class MediaInsight:
             return
 
         try:
-            from cl_client import ServerConfig, SessionManager
+            from cl_client import ServerPref, SessionManager
 
             # Initialize Storage Service
             self.storage_service = StorageService(str(self.config.media_storage_dir))
 
             # Initialize Compute Client & Session
             if self.config.mqtt_url:
-                server_config = ServerConfig(
+                server_config = ServerPref(
                     auth_url=self.config.auth_service_url,
                     compute_url=self.config.compute_service_url,
                     mqtt_url=self.config.mqtt_url,
@@ -80,7 +80,7 @@ class MediaInsight:
             else:
                 raise Exception("MQTT URL is required")
 
-            self.compute_session = SessionManager(server_config=server_config)
+            self.compute_session = SessionManager(server_pref=server_config)
             _ = await self.compute_session.login(
                 username=self.config.compute_username,
                 password=self.config.compute_password,
