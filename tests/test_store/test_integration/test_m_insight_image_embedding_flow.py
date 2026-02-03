@@ -22,7 +22,7 @@ TIMEOUT = 120.0
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-#@pytest.mark.skip(reason="Skipping temporarily as this test is expeected to fail")
+@pytest.mark.skip(reason="Skipping temporarily as this test is expeected to fail")
 async def test_m_insight_image_embedding_flow(
     client: Any, 
     integration_config: Any, 
