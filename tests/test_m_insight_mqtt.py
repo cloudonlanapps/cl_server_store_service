@@ -71,6 +71,7 @@ def test_m_insight_worker(
     yield worker
 
 
+@pytest.mark.asyncio
 async def test_m_insight_lifecycle_events(
     integration_config,
     test_subscriber,

@@ -5,6 +5,7 @@ Loads test image/video file paths from test_files.txt.
 """
 
 from pathlib import Path
+from .test_config import TEST_VECTORS_DIR
 
 
 def get_test_media_files():
@@ -29,13 +30,14 @@ def get_test_media_files():
             if not line:
                 continue
 
-            # Handle paths relative to project root
-            # If the path in text file is relative (e.g. "images/foo.jpg"),
-            # we assume it's relative to the project root (where pytest is run).
+            # Handle paths relative to TEST_VECTORS_DIR
             path = Path(line)
+            if not path.is_absolute():
+                path = TEST_VECTORS_DIR / path
+                
             if path.exists():
                 media_files.append(path)
             else:
-                print(f"Warning: Test file not found: {line}")
+                raise FileNotFoundError(f"Test file not found: {line} (looked in {path})")
 
     return media_files

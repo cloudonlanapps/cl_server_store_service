@@ -2,6 +2,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 from cl_client.models import JobResponse
 
 from store.common import StorageService
@@ -32,7 +33,7 @@ def mock_config():
         mqtt_url="mqtt://localhost:1883"
     )
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def processor(mock_config):
     with patch("store.m_insight.media_insight.version_class"), \
          patch("store.m_insight.media_insight.database.SessionLocal"), \
