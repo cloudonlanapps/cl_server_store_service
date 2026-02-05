@@ -47,7 +47,7 @@ class TestConfigDBService:
         assert value == "test_value"
 
         # Verify metadata
-        metadata = config_service.get_config_metadata("test_key")
+        metadata = config_service.get_pref_metadata("test_key")
         assert metadata is not None
         assert metadata["value"] == "test_value"
         assert metadata["updated_by"] == "user123"
