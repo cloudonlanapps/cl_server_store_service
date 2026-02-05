@@ -1,14 +1,13 @@
 """
-
-
 Tests for file upload functionality with metadata extraction.
 """
 
-
-
+import pytest
 
 
 pytestmark = pytest.mark.integration
+
+
 class TestFileUpload:
     """Test file upload with metadata extraction."""
 

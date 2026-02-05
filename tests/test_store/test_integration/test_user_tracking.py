@@ -1,5 +1,6 @@
 """User tracking field tests (added_by, updated_by)."""
 
+import pytest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -7,13 +8,12 @@ from fastapi.testclient import TestClient
 from store.db_service.schemas import EntitySchema as Item
 
 
+pytestmark = pytest.mark.integration
 
 
 class TestUserTracking:
     """Test that added_by and updated_by fields are properly tracked."""
 
-
-pytestmark = pytest.mark.integration
     def test_create_entity_sets_added_by(
         self, client: TestClient, sample_image: Path
     ) -> None:

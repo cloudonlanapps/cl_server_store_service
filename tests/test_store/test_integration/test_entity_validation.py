@@ -4,10 +4,12 @@
 Tests for entity validation rules.
 """
 
-
+import pytest
 
 
 pytestmark = pytest.mark.integration
+
+
 class TestEntityValidation:
     """Test validation rules for entity creation and updates."""
 

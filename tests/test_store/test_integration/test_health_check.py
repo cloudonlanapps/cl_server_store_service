@@ -1,5 +1,6 @@
 """Health check endpoint tests."""
 
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
@@ -16,6 +17,8 @@ class HealthCheckResponse(BaseModel):
 
 
 pytestmark = pytest.mark.integration
+
+
 class TestHealthCheck:
     """Test the health check endpoint."""
 
