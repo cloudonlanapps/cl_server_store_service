@@ -213,7 +213,7 @@ class PaginatedResponse(BaseModel):
     pagination: PaginationMetadata = Field(..., description="Pagination metadata")
 
 
-class ConfigResponse(BaseModel):
+class PrefResponse(BaseModel):
     """Response schema for configuration."""
 
     guest_mode: bool = Field(

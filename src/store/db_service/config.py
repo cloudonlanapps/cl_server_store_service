@@ -102,7 +102,7 @@ class ConfigDBService(BaseDBService[ServiceConfigSchema]):
 
     @timed
     @with_retry(max_retries=10)
-    def get_config_metadata(self, key: str) -> dict[str, str | int | None] | None:
+    def get_pref_metadata(self, key: str) -> dict[str, str | int | None] | None:
         """Get configuration with metadata."""
         db = self.db if self.db else database.SessionLocal()
         should_close = self.db is None

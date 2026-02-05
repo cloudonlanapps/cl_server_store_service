@@ -1,7 +1,7 @@
 from .database import init_db
 from .db_service import DBService
 from .schemas import (
-    ConfigResponse,
+    PrefResponse,
     EntityIntelligenceData,
     EntitySchema,
     EntitySyncStateSchema,
@@ -29,7 +29,7 @@ __all__ = [
     "JobInfo",
     "PaginationMetadata",
     "PaginatedResponse",
-    "ConfigResponse",
+    "PrefResponse",
     "UpdateReadAuthConfig",
     "VersionInfo",
 ]

@@ -383,17 +383,17 @@ async def get_entity_versions(
 
 # Admin configuration endpoints
 @router.get(
-    "/admin/config",
+    "/admin/pref",
     tags=["admin"],
-    summary="Get Configuration",
+    summary="Get Preferences",
     description="Get current service configuration. Requires admin access.",
-    operation_id="get_config_admin_config_get",
-    responses={200: {"model": db_schemas.ConfigResponse, "description": "Successful Response"}},
+    operation_id="get_pref_admin_pref_get",
+    responses={200: {"model": db_schemas.PrefResponse, "description": "Successful Response"}},
 )
-async def get_config(
+async def get_pref(
     user: UserPayload | None = Depends(require_admin),
     config_service: ConfigDBService = Depends(get_config_service),
-) -> db_schemas.ConfigResponse:
+) -> db_schemas.PrefResponse:
     """Get current service configuration.
 
     Requires admin access.
@@ -401,7 +401,7 @@ async def get_config(
     _ = user
 
     # Get config metadata
-    metadata = config_service.get_config_metadata("read_auth_enabled")
+    metadata = config_service.get_pref_metadata("read_auth_enabled")
 
     if metadata:
         value_str = str(metadata["value"]) if metadata["value"] is not None else "false"
@@ -409,7 +409,7 @@ async def get_config(
         updated_by = metadata["updated_by"]
         # Invert logic: read_auth_enabled=false means guest_mode=true
         read_auth_enabled = value_str.lower() == "true"
-        return db_schemas.ConfigResponse(
+        return db_schemas.PrefResponse(
             guest_mode=not read_auth_enabled,
             updated_at=int(updated_at)
             if updated_at is not None and not isinstance(updated_at, str)
@@ -420,15 +420,15 @@ async def get_config(
         )
 
     # Default if not found: read_auth_enabled=false means guest_mode=true
-    return db_schemas.ConfigResponse(guest_mode=True, updated_at=None, updated_by=None)
+    return db_schemas.PrefResponse(guest_mode=True, updated_at=None, updated_by=None)
 
 
 @router.put(
-    "/admin/config/guest-mode",
+    "/admin/pref/guest-mode",
     tags=["admin"],
-    summary="Update Guest Mode Configuration",
+    summary="Update Guest Mode Preference",
     description="Toggle guest mode (authentication requirement). Requires admin access.",
-    operation_id="update_guest_mode_admin_config_guest_mode_put",
+    operation_id="update_guest_mode_admin_pref_guest_mode_put",
     responses={200: {"description": "Successful Response"}},
 )
 async def update_guest_mode(
