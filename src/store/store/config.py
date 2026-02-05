@@ -13,12 +13,12 @@ class StoreConfig(BaseConfig):
     _instance: ClassVar[StoreConfig | None] = None
 
     # CLI Fields (mapped from argparse)
-    host: str = "0.0.0.0"
-    port: int = 8001
-    debug: bool = False
-    reload: bool = False
-    log_level: str = "info"
-    no_migrate: bool = False
+    host: str
+    port: int
+    debug: bool
+    reload: bool
+    log_level: str
+    no_migrate: bool
 
     @classmethod
     def get_config(cls) -> StoreConfig:
@@ -69,10 +69,14 @@ class StoreConfig(BaseConfig):
             raise
 
         # Convert args to dict and add required path keys
-        config_dict = {k: v for k, v in vars(args).items() if v is not None}
+        config_dict = vars(args).copy()
         config_dict["cl_server_dir"] = cl_dir
         config_dict["media_storage_dir"] = cl_dir / "media"
         config_dict["public_key_path"] = cl_dir / "keys" / "public_key.pem"
+        
+        # Ensure no_auth is present even if not in args (though it should be from store_true)
+        if "no_auth" not in config_dict:
+            config_dict["no_auth"] = False
 
         config = cls.model_validate(config_dict)
         return config

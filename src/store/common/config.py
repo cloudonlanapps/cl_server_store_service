@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict
-from .utils import ensure_cl_server_dir
 
 
 class BaseConfig(BaseModel):
@@ -14,31 +13,23 @@ class BaseConfig(BaseModel):
         arbitrary_types_allowed=True, validate_assignment=True
     )
 
-    # Paths (populated after CLI parsing by finalize_base)
+    # Paths (populated after CLI parsing)
     cl_server_dir: Path
     media_storage_dir: Path
     public_key_path: Path
 
     # Auth
-    no_auth: bool = False
+    no_auth: bool
 
     # Qdrant configuration
-    qdrant_url: str = "http://localhost:6333"
+    qdrant_url: str
 
     # Vector Store Collections
-    qdrant_collection: str = "clip_embeddings"  # For CLIP
-    dino_collection: str = "dino_embeddings"
-    face_collection: str = "face_embeddings"
+    qdrant_collection: str
+    dino_collection: str
+    face_collection: str
 
     # MQTT configuration
     mqtt_url: str
 
 
-    def finalize_base(self):
-        """Finalize base configuration after CLI parsing."""
-
-        # Initialize Paths
-        cl_dir = ensure_cl_server_dir(create_if_missing=True)
-        self.cl_server_dir = cl_dir
-        self.media_storage_dir = cl_dir / "media"
-        self.public_key_path = cl_dir / "keys" / "public_key.pem"

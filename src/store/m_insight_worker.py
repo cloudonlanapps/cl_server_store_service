@@ -20,13 +20,11 @@ from types import FrameType
 
 from loguru import logger
 
-from store.m_insight import MediaInsight, MInsightConfig
+from .m_insight import MediaInsight, MInsightConfig
 
 from .broadcast_service.broadcaster import MInsightBroadcaster
 from cl_ml_tools import get_broadcaster, shutdown_broadcaster
 from .common import utils
-from .db_service.db_internals import database
-from .m_insight.config import MInsightConfig
 
 # Global shutdown event and signal counter
 shutdown_event = asyncio.Event()
@@ -251,6 +249,19 @@ def main() -> int:
         action="store_true",
         help="Disable authentication for compute service",
     )
+    # Processing settings
+    _ = parser.add_argument(
+        "--face-vector-size",
+        type=int,
+        default=512,
+        help="Face vector size (default: 512)",
+    )
+    _ = parser.add_argument(
+        "--face-embedding-threshold",
+        type=float,
+        default=0.7,
+        help="Face embedding threshold (default: 0.7)",
+    )
     args = parser.parse_args()
 
     # Initialize Database (Worker needs access to DB)
@@ -260,12 +271,16 @@ def main() -> int:
 
     # Convert args to dict and add required path keys
     config_dict = {k: v for k, v in vars(args).items() if v is not None}
+    
+    # Handle MQTT topic logic
+    if not args.mqtt_topic:
+        config_dict["mqtt_topic"] = f"store/{args.store_port}/items"
+    
     config_dict["cl_server_dir"] = cl_dir
     config_dict["media_storage_dir"] = cl_dir / "media"
     config_dict["public_key_path"] = cl_dir / "keys" / "public_key.pem"
 
     config = MInsightConfig.model_validate(config_dict)
-    config.finalize()
 
     # Print startup info
     print(f"Starting m_insight process: {config.id}")
