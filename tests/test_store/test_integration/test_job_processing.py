@@ -39,6 +39,14 @@ class TestJobProcessing:
             port=8001,
             mqtt_url=integration_config.mqtt_url,
             qdrant_url=integration_config.qdrant_url,
+            qdrant_collection="clip_embeddings",
+            dino_collection="dino_embeddings",
+            face_collection="face_embeddings",
+            host="0.0.0.0",
+            debug=False,
+            reload=False,
+            log_level="INFO",
+            no_migrate=False,
         )
 
     @pytest.mark.asyncio
@@ -178,6 +186,18 @@ class TestJobProcessing:
             media_storage_dir=clean_data_dir / "media",
             public_key_path=clean_data_dir / "keys" / "public_key.pem",
             mqtt_url="mqtt://localhost:1883",
+            mqtt_topic="test/job_processing",
+            log_level="INFO",
+            store_port=8001,
+            auth_url=integration_config.auth_url,
+            compute_url=integration_config.compute_url,
+            compute_username=integration_config.username,
+            compute_password=integration_config.password,
+            qdrant_url=integration_config.qdrant_url,
+            qdrant_collection="clip_embeddings",
+            dino_collection="dino_embeddings",
+            face_collection="face_embeddings",
+            no_auth=False,
         )
 
         # Use real DBService for DB side-effect verification
@@ -265,6 +285,18 @@ class TestJobProcessing:
             media_storage_dir=Path("."),
             public_key_path=Path("."),
             mqtt_url="mqtt://lh:123",
+            mqtt_topic="test/job_processing",
+            log_level="INFO",
+            store_port=8001,
+            auth_url="http://auth",
+            compute_url="http://compute",
+            compute_username="admin",
+            compute_password="admin",
+            qdrant_url="http://qdrant",
+            qdrant_collection="clip_embeddings",
+            dino_collection="dino_embeddings",
+            face_collection="face_embeddings",
+            no_auth=False,
         )  # Minimal mock
 
         db_service = DBService(db=test_db_session)
@@ -357,6 +389,18 @@ class TestJobProcessing:
             media_storage_dir=Path("."),
             public_key_path=Path("."),
             mqtt_url="mqtt://lh:123",
+            mqtt_topic="test/job_processing",
+            log_level="INFO",
+            store_port=8001,
+            auth_url="http://auth",
+            compute_url="http://compute",
+            compute_username="admin",
+            compute_password="admin",
+            qdrant_url="http://qdrant",
+            qdrant_collection="clip_embeddings",
+            dino_collection="dino_embeddings",
+            face_collection="face_embeddings",
+            no_auth=False,
         )
 
         db_service = DBService(db=test_db_session)
@@ -422,6 +466,18 @@ class TestJobProcessing:
             media_storage_dir=Path("."),
             public_key_path=Path("."),
             mqtt_url="mqtt://lh:123",
+            mqtt_topic="test/job_processing",
+            log_level="INFO",
+            store_port=8001,
+            auth_url="http://auth",
+            compute_url="http://compute",
+            compute_username="admin",
+            compute_password="admin",
+            qdrant_url="http://qdrant",
+            qdrant_collection="clip_embeddings",
+            dino_collection="dino_embeddings",
+            face_collection="face_embeddings",
+            no_auth=False,
         )
 
         db_service = DBService(db=test_db_session)

@@ -10,16 +10,13 @@ This module provides centralized configuration for all tests, including:
 import os
 from pathlib import Path
 
-
 # Get the absolute path to the tests directory
 TESTS_DIR = Path(__file__).parent.absolute()
 
 # TEST_VECTORS_DIR: Root of test media files (images, etc)
 # Default: ~/Work/cl_server_test_media
 # Can be overridden by TEST_VECTORS_DIR env var
-TEST_VECTORS_DIR = Path(
-    os.getenv("TEST_VECTORS_DIR", str(Path.home() / "cl_server_test_media"))
-)
+TEST_VECTORS_DIR = Path(os.getenv("TEST_VECTORS_DIR", str(Path.home() / "cl_server_test_media")))
 
 # IMAGES_DIR: Directory containing images within test vectors
 IMAGES_DIR = TEST_VECTORS_DIR / "images"
@@ -40,12 +37,15 @@ TEST_DATA_DIR = TEST_ARTIFACTS_DIR
 def load_test_files() -> list[Path]:
     """
     Load test file paths from test_files.txt.
-    
+
     Paths in test_files.txt should be relative to TEST_VECTORS_DIR.
     If absolute path provided, it's used as is (compatibility).
 
     Returns:
-        List of absolute Path objects for test images
+        List of absolute Path objects for test images (existence not validated)
+
+    Note: File existence is NOT validated here to avoid slow I/O during import.
+    Individual tests will fail if files are missing when they try to use them.
     """
     if not TEST_FILES_LIST.exists():
         return []
@@ -60,15 +60,15 @@ def load_test_files() -> list[Path]:
 
             # Convert to Path object
             p = Path(line)
-            
+
             if p.is_absolute():
                 file_path = p
             else:
                 # Resolve relative to TEST_VECTORS_DIR
                 file_path = TEST_VECTORS_DIR / p
 
-            if file_path.exists():
-                test_files.append(file_path.absolute())
+            # Add path without checking existence - tests will fail if missing
+            test_files.append(file_path.absolute())
 
     return test_files
 
@@ -80,13 +80,17 @@ def get_all_test_images() -> list[Path]:
     Loads test file paths from test_files.txt.
 
     Returns:
-        List of absolute Path objects for test images
+        List of absolute Path objects for test images (existence not validated)
+
+    Note: File existence is NOT validated here to avoid slow I/O during import.
+    Individual tests will fail if files are missing when they try to use them.
     """
     # Strictly load from test_files.txt
     return load_test_files()
 
 
 # Pre-load test images for convenience
+# Note: This is fast now since we don't validate file existence
 TEST_IMAGES = get_all_test_images()
 
 # Specific test images (if available)
