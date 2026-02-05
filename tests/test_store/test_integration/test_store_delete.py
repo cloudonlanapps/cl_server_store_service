@@ -17,6 +17,8 @@ from store.db_service.db_internals import Entity, Face
 from store.db_service.schemas import EntitySchema
 
 
+
+pytestmark = pytest.mark.integration
 class TestEntityDeletion:
     """Test entity deletion with complete resource cleanup (DEL-01 to DEL-06, DEL-09)."""
 
@@ -335,6 +337,8 @@ class TestEntityDeletion:
 
             # Determine the expected MQTT topic
             from store.store.config import StoreConfig
+
+
             config = StoreConfig.get_config()
             entity_status_topic = f"mInsight/{config.port}/entity_item_status/{entity_id}"
 

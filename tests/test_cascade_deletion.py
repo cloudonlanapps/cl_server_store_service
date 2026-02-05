@@ -3,12 +3,14 @@
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from store.db_service.db_internals import Entity
 
 
+@pytest.mark.integration
 def test_soft_delete_collection_with_children(
     client: TestClient,
     sample_image: Path,
@@ -52,6 +54,7 @@ def test_soft_delete_collection_with_children(
     assert child.is_deleted is False
 
 
+@pytest.mark.integration
 def test_hard_delete_collection_cascades_to_children(
     client: TestClient,
     sample_image: Path,
@@ -118,6 +121,7 @@ def test_hard_delete_collection_cascades_to_children(
     assert child is None
 
 
+@pytest.mark.integration
 def test_hard_delete_nested_collections_cascades_recursively(
     client: TestClient,
     sample_image: Path,

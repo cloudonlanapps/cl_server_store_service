@@ -9,6 +9,10 @@ from fastapi.testclient import TestClient
 from store.db_service.schemas import EntitySchema as Item, PaginatedResponse
 
 
+
+
+
+pytestmark = pytest.mark.integration
 class TestPagination:
     """Test pagination for GET /entities/ endpoint."""
 

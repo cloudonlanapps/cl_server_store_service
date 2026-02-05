@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from store.db_service.db_internals import models
 from store.db_service import EntityIntelligenceData, JobInfo
 
+
+
 @pytest.mark.usefixtures("qdrant_service", "compute_service", "auth_service")
+
+pytestmark = pytest.mark.integration
 class TestIntelligenceRoutes:
     def test_get_entity_faces_not_found(self, client: TestClient):
         """Test getting faces for a non-existent entity returns 404."""

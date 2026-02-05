@@ -141,6 +141,7 @@ def get_intelligence_for_image(session: Session, entity_id: int) -> EntityIntell
 # ============================================================================
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_empty_sync_state_queues_all_images(
     client: TestClient,
@@ -199,6 +200,7 @@ async def test_empty_sync_state_queues_all_images(
     assert final_version > initial_version
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_existing_sync_state_only_newer_versions(
     client: TestClient,
@@ -255,6 +257,7 @@ async def test_existing_sync_state_only_newer_versions(
 # ============================================================================
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_multiple_md5_changes_single_queue(
     client: TestClient,
@@ -314,6 +317,7 @@ async def test_multiple_md5_changes_single_queue(
     # assert intelligence.active_processing_md5 == final_md5 # might not be set until queued?
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_process_called_once_per_image(
     client: TestClient,
@@ -359,6 +363,7 @@ async def test_process_called_once_per_image(
 # ============================================================================
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_no_duplicate_processing(
     client: TestClient,
@@ -400,6 +405,7 @@ async def test_no_duplicate_processing(
 # ============================================================================
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_delete_image_removes_intelligence(
     client: TestClient,
@@ -439,6 +445,7 @@ async def test_delete_image_removes_intelligence(
     assert get_intelligence_for_image(test_db_session, entity_id) is None
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_restart_does_not_reinsert_deleted(
     client: TestClient,
@@ -488,6 +495,7 @@ async def test_restart_does_not_reinsert_deleted(
 # ============================================================================
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_non_image_entities_ignored(
     client: TestClient,

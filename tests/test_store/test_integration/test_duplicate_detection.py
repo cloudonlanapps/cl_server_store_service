@@ -10,6 +10,10 @@ from fastapi.testclient import TestClient
 from store.db_service.schemas import EntitySchema as Item
 
 
+
+
+
+pytestmark = pytest.mark.integration
 class TestDuplicateDetection:
     """Test MD5-based duplicate detection. Returns existing data, and rejects new upload"""
 

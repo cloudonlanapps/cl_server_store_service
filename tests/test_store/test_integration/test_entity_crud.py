@@ -12,6 +12,8 @@ from store.db_service.schemas import EntitySchema, PaginatedResponse
 import pytest
 
 
+
+pytestmark = pytest.mark.integration
 class TestEntityCRUD:
     """Test Create, Read, Update, Delete operations."""
 
@@ -107,6 +109,8 @@ class TestEntityCRUD:
         
         # Verify via DB that intelligence data was persisted
         from store.db_service.intelligence import EntityIntelligenceDBService
+
+
         service = EntityIntelligenceDBService(test_db_session)
         stored_data = service.get_intelligence_data(entity_id)
         assert stored_data is not None

@@ -8,6 +8,8 @@ from store.db_service.db_internals import ServiceConfig
 from store.db_service.config import ConfigDBService
 
 
+
+pytestmark = pytest.mark.integration
 @pytest.fixture(scope="function")
 def db_session(test_db_session):
     """Create a fresh database for each test.
@@ -173,6 +175,8 @@ class TestJWTUserID:
 
         # Verify directly in database that added_by was set correctly
         from store.db_service.db_internals import Entity
+
+
 
         entity = db_session.query(Entity).filter(Entity.id == entity_id).first()
 

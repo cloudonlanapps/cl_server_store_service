@@ -73,6 +73,8 @@ async def test_m_insight_image_embedding_flow(
 
     mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
+
+pytestmark = pytest.mark.integration
     def on_message(client, userdata, msg):
         try:
             # Topic: mInsight/8011/entity_item_status/123/

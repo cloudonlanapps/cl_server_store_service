@@ -18,6 +18,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import HTTPException
 
 
+
+pytestmark = pytest.mark.integration
 class TestAuthenticationLogic:
     """Test authentication logic functions directly."""
 
@@ -189,6 +191,8 @@ class TestAuthenticationModes:
     def test_demo_mode_bypasses_admin_check(self):
         """When no_auth=true, admin checks should be bypassed."""
         from store.common.auth import require_admin
+
+
 
         # Mock config with no_auth=True
         config = MagicMock()

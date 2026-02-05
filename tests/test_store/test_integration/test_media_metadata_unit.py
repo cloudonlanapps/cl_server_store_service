@@ -9,9 +9,13 @@ from cl_ml_tools.algorithms import MediaType
 from store.store.media_metadata import MediaMetadataExtractor, validate_tools
 
 
+
+
 class TestToolValidation:
     """Test validation of external tools (ExifTool, ffprobe)."""
 
+
+pytestmark = pytest.mark.integration
     def test_exiftool_missing(self):
         """Test validation fails when ExifTool is missing."""
         with patch("store.store.media_metadata.MetadataExtractor") as MockExtractor:

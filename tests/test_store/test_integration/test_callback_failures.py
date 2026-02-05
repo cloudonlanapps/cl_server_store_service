@@ -8,6 +8,10 @@ from store.m_insight import JobCallbackHandler, MInsightConfig
 from store.store.config import StoreConfig
 
 
+
+
+
+pytestmark = pytest.mark.integration
 @pytest.fixture
 def mock_m_insight_config(mock_store_config, integration_config):
     return MInsightConfig(

@@ -7,6 +7,10 @@ from store.broadcast_service.broadcaster import MInsightBroadcaster
 from store.m_insight.config import MInsightConfig
 
 
+
+
+
+pytestmark = pytest.mark.integration
 @pytest.fixture
 def mock_config(integration_config):
     return MInsightConfig(

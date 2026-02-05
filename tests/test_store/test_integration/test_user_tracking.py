@@ -7,9 +7,13 @@ from fastapi.testclient import TestClient
 from store.db_service.schemas import EntitySchema as Item
 
 
+
+
 class TestUserTracking:
     """Test that added_by and updated_by fields are properly tracked."""
 
+
+pytestmark = pytest.mark.integration
     def test_create_entity_sets_added_by(
         self, client: TestClient, sample_image: Path
     ) -> None:

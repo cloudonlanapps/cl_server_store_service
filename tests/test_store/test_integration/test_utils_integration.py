@@ -3,6 +3,10 @@ import pytest
 from store.common.utils import ensure_cl_server_dir, get_db_url
 
 
+
+
+
+pytestmark = pytest.mark.integration
 def test_ensure_cl_server_dir_existing(tmp_path, monkeypatch):
     """Test ensure_cl_server_dir when the directory exists."""
     monkeypatch.setenv("CL_SERVER_DIR", str(tmp_path))

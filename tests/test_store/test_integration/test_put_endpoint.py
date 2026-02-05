@@ -5,6 +5,10 @@ Tests for PUT endpoint with file replacement and metadata extraction.
 import pytest
 
 
+
+
+
+pytestmark = pytest.mark.integration
 class TestPutEndpoint:
     """Test PUT endpoint file replacement and metadata extraction."""
 

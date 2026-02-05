@@ -82,6 +82,7 @@ def test_m_insight_worker(
     yield worker
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_m_insight_lifecycle_events(
     integration_config,
@@ -161,6 +162,7 @@ async def test_m_insight_lifecycle_events(
     assert running_with_info[0].version_end is not None
 
 
+@pytest.mark.integration
 def test_m_insight_heartbeat_status(
     integration_config,
     test_subscriber,

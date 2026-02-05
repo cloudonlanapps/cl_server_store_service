@@ -8,9 +8,13 @@ They verify that the dependency injection works correctly with real services.
 from store.db_service.schemas import EntitySchema
 import pytest
 
+
+
 # Use the standard client fixture from conftest.py which already tests real dependency injection
 
 
+
+pytestmark = pytest.mark.integration
 class TestDependencyInjection:
     """Tests that verify get_db() properly yields a database session."""
 

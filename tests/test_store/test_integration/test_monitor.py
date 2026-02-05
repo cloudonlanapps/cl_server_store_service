@@ -7,6 +7,8 @@ from store.broadcast_service.monitor import MInsightMonitor
 from store.store.config import StoreConfig
 
 
+
+pytestmark = pytest.mark.integration
 @pytest.fixture
 def mock_store_config(integration_config):
     return StoreConfig(
@@ -116,6 +118,8 @@ def test_monitor_get_status(mock_store_config):
     """Test get_status logic."""
     monitor = MInsightMonitor(mock_store_config)
     from store.broadcast_service.schemas import MInsightStatus
+
+
 
     monitor.process_status = MInsightStatus(status="ok", timestamp=0)
 

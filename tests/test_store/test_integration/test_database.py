@@ -7,6 +7,8 @@ from sqlalchemy.pool import StaticPool
 class TestWALMode:
     """Test WAL mode and SQLite pragma configuration."""
 
+
+pytestmark = pytest.mark.integration
     def test_enable_wal_mode_sets_pragmas(self):
         """Test that enable_wal_mode sets all required SQLite pragmas."""
         # Create a mock connection and cursor
@@ -132,6 +134,8 @@ class TestWALMode:
         """Test that WAL mode allows concurrent reads."""
         from store.db_service.db_internals import create_db_engine, create_session_factory
         from store.db_service.db_internals import Base
+
+
 
         # Create a temporary database
         db_path = tmp_path / "test_concurrent.db"

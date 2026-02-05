@@ -5,6 +5,8 @@
 class TestAdminConfigGetEndpoint:
     """Test GET /admin/config endpoint."""
 
+
+pytestmark = pytest.mark.integration
     def test_get_config_with_admin_token_returns_200(self, auth_client, admin_token):
         """GET /admin/config with admin token should return 200 OK."""
         headers = {"Authorization": f"Bearer {admin_token}"}
@@ -92,6 +94,8 @@ class TestAdminConfigPutEndpoint:
     ):
         """Config changes via PUT should be persisted in database."""
         from store.db_service.config import ConfigDBService
+
+
 
         # Clear cache before test
         ConfigDBService._cache.clear()

@@ -11,6 +11,8 @@ from store.db_service.schemas import EntitySchema as Item
 from tests.test_media_files import get_test_media_files
 
 
+
+pytestmark = pytest.mark.integration
 class TestAllImagesMetadata:
     """Test metadata extraction for all images in the test media list."""
 
@@ -134,6 +136,8 @@ class TestTimestampFields:
 
         # Small delay to ensure timestamp difference
         import time
+
+
 
         time.sleep(0.1)
 

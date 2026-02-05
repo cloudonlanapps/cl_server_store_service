@@ -6,6 +6,10 @@ import pytest
 from store.m_insight import JobSubmissionService
 from store.db_service import EntityIntelligenceData, JobInfo, InferenceStatus
 
+
+
+
+pytestmark = pytest.mark.integration
 @pytest.fixture
 def mock_compute():
     client = MagicMock()

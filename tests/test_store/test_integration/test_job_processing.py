@@ -13,6 +13,8 @@ from store.db_service.schemas import EntitySchema
 from store.m_insight import JobCallbackHandler, JobSubmissionService, MInsightConfig
 
 
+
+pytestmark = pytest.mark.integration
 @pytest.fixture(autouse=True)
 def override_session_local(test_engine):
     """Override database.SessionLocal to use the test engine."""
@@ -30,6 +32,8 @@ class TestJobProcessing:
     @pytest.fixture
     def mock_store_config(self, clean_data_dir, integration_config):
         from store.store.config import StoreConfig
+
+
 
         return StoreConfig(
             cl_server_dir=clean_data_dir,

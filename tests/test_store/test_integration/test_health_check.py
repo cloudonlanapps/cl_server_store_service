@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 
+
+
 class HealthCheckResponse(BaseModel):
     """Health check response model."""
 
@@ -12,6 +14,8 @@ class HealthCheckResponse(BaseModel):
     version: str
 
 
+
+pytestmark = pytest.mark.integration
 class TestHealthCheck:
     """Test the health check endpoint."""
 

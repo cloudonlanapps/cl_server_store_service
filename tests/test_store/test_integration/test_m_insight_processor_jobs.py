@@ -10,6 +10,8 @@ from store.m_insight import MediaInsight, MInsightConfig
 from store.m_insight.schemas import EntityVersionSchema
 
 
+
+pytestmark = pytest.mark.integration
 @pytest.fixture
 def mock_db_session():
     mock = MagicMock()
@@ -69,6 +71,8 @@ async def processor(mock_config):
         # Mock db.entity.get to return a valid schema object (or object that can be converted)
         # We need this because JobSubmissionService converts the result to EntitySchema/EntityVersionSchema
         from store.db_service import EntitySchema
+
+
 
         def get_entity_side_effect(id):
             e = MagicMock()
