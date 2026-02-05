@@ -1,6 +1,7 @@
 """Tests for recursive cascade deletion of collections with children."""
 
 from pathlib import Path
+from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -56,6 +57,7 @@ def test_hard_delete_collection_cascades_to_children(
     sample_image: Path,
     test_db_session: Session,
     clean_data_dir: Path,
+    integration_config: Any,
 ) -> None:
     """Test that hard-deleting a soft-deleted collection cascades to children."""
     # Create a collection
@@ -90,7 +92,8 @@ def test_hard_delete_collection_cascades_to_children(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=True,
         port=8001,
-        mqtt_url="mqtt://mock-broker:1883",
+        mqtt_url=integration_config.mqtt_url,
+        qdrant_url=integration_config.qdrant_url,
     )
     service = EntityService(test_db_session, config)
     service.patch_entity(collection_id, {"is_deleted": True})
@@ -112,6 +115,7 @@ def test_hard_delete_nested_collections_cascades_recursively(
     sample_image: Path,
     test_db_session: Session,
     clean_data_dir: Path,
+    integration_config: Any,
 ) -> None:
     """Test that hard-deleting a collection recursively cascades through nested children."""
     # Create parent collection
@@ -158,7 +162,8 @@ def test_hard_delete_nested_collections_cascades_recursively(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         no_auth=True,
         port=8001,
-        mqtt_url="mqtt://mock-broker:1883",
+        mqtt_url=integration_config.mqtt_url,
+        qdrant_url=integration_config.qdrant_url,
     )
     service = EntityService(test_db_session, config)
     service.patch_entity(parent_id, {"is_deleted": True})

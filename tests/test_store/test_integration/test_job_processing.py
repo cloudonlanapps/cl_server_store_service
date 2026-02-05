@@ -25,7 +25,7 @@ def override_session_local(test_engine):
 
 class TestJobProcessing:
     @pytest.fixture
-    def mock_store_config(self, clean_data_dir):
+    def mock_store_config(self, clean_data_dir, integration_config):
         from store.store.config import StoreConfig
         return StoreConfig(
             cl_server_dir=clean_data_dir,
@@ -33,7 +33,8 @@ class TestJobProcessing:
             public_key_path=clean_data_dir / "keys" / "public_key.pem",
             no_auth=True,
             port=8001,
-            mqtt_url="mqtt://mock-broker:1883",
+            mqtt_url=integration_config.mqtt_url,
+            qdrant_url=integration_config.qdrant_url,
         )
 
     @pytest.mark.asyncio

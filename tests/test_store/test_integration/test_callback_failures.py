@@ -9,7 +9,7 @@ from store.store.config import StoreConfig
 
 
 @pytest.fixture
-def mock_m_insight_config(mock_store_config):
+def mock_m_insight_config(mock_store_config, integration_config):
     return MInsightConfig(
         id="test-worker",
         # BaseConfig fields
@@ -19,12 +19,12 @@ def mock_m_insight_config(mock_store_config):
         no_auth=mock_store_config.no_auth,
 
         # MInsightConfig fields
-        auth_service_url="http://auth",
-        compute_service_url="http://compute",
-        compute_username="admin",
-        compute_password="password",
-        qdrant_url="http://qdrant",
-        mqtt_url="mqtt://localhost:1883"
+        auth_url=integration_config.auth_url,
+        compute_url=integration_config.compute_url,
+        compute_username=integration_config.username,
+        compute_password=integration_config.password,
+        qdrant_url=integration_config.qdrant_url,
+        mqtt_url=integration_config.mqtt_url
     )
 
 @pytest.fixture
@@ -35,7 +35,8 @@ def mock_store_config(integration_config):
         public_key_path=Path("/tmp/fake/keys/public_key.pem"),
         no_auth=True,
         port=integration_config.store_port,
-        mqtt_url=integration_config.mqtt_url
+        mqtt_url=integration_config.mqtt_url,
+        qdrant_url=integration_config.qdrant_url,
     )
 
 @pytest.fixture

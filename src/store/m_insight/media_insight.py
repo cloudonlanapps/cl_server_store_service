@@ -73,8 +73,8 @@ class MediaInsight:
             # Initialize Compute Client & Session
             if self.config.mqtt_url:
                 server_config = ServerPref(
-                    auth_url=self.config.auth_service_url,
-                    compute_url=self.config.compute_service_url,
+                    auth_url=self.config.auth_url,
+                    compute_url=self.config.compute_url,
                     mqtt_url=self.config.mqtt_url,
                 )
             else:

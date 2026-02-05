@@ -398,6 +398,7 @@ def client(
         no_auth=False,
         port=test_port,
         mqtt_url=integration_config.mqtt_url,
+        qdrant_url=integration_config.qdrant_url,
     )
     
     # CRITICAL: Synchronize the StoreConfig singleton
@@ -479,6 +480,7 @@ def auth_client(
         no_auth=False,
         port=test_port,
         mqtt_url=integration_config.mqtt_url,
+        qdrant_url=integration_config.qdrant_url,
     )
     
     # CRITICAL: Synchronize configuration across all modules via singleton

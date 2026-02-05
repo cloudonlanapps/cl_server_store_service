@@ -77,6 +77,9 @@ def m_insight_worker(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         mqtt_url=integration_config.mqtt_url,
         mqtt_topic="test/m_insight",
+        qdrant_url=integration_config.qdrant_url,
+        auth_url=integration_config.auth_url,
+        compute_url=integration_config.compute_url,
     )
 
     # Use test database engine instead of initializing a new database

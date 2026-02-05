@@ -54,6 +54,9 @@ def test_m_insight_worker(
         store_port=random.randint(30000, 40000),
         mqtt_url=integration_config.mqtt_url,
         mqtt_topic="test/m_insight_mqtt",
+        auth_url=integration_config.auth_url,
+        compute_url=integration_config.compute_url,
+        qdrant_url=integration_config.qdrant_url,
     )
 
     # Use test database engine
