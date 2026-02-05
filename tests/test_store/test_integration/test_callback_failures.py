@@ -17,15 +17,21 @@ def mock_m_insight_config(mock_store_config, integration_config):
         media_storage_dir=mock_store_config.media_storage_dir,
         public_key_path=mock_store_config.public_key_path,
         no_auth=mock_store_config.no_auth,
-
+        qdrant_url=integration_config.qdrant_url,
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
+        mqtt_url=integration_config.mqtt_url,
         # MInsightConfig fields
+        log_level="INFO",
+        store_port=integration_config.store_port,
         auth_url=integration_config.auth_url,
         compute_url=integration_config.compute_url,
         compute_username=integration_config.username,
         compute_password=integration_config.password,
-        qdrant_url=integration_config.qdrant_url,
-        mqtt_url=integration_config.mqtt_url
+        mqtt_topic="test/callback_failures",
     )
+
 
 @pytest.fixture
 def mock_store_config(integration_config):
@@ -37,7 +43,16 @@ def mock_store_config(integration_config):
         port=integration_config.store_port,
         mqtt_url=integration_config.mqtt_url,
         qdrant_url=integration_config.qdrant_url,
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
+        host="0.0.0.0",
+        debug=False,
+        reload=False,
+        log_level="INFO",
+        no_migrate=False,
     )
+
 
 @pytest.fixture
 def callback_handler(mock_m_insight_config):
@@ -55,6 +70,7 @@ def callback_handler(mock_m_insight_config):
         db=MagicMock(),
     )
 
+
 @pytest.mark.asyncio
 async def test_callback_failed_job_status(callback_handler):
     """Test callback when job status is failed."""
@@ -64,9 +80,8 @@ async def test_callback_failed_job_status(callback_handler):
         task_type="face_detection",
         error_message="Some failure",
         params={"entity_id": 1},
-        created_at=1000
+        created_at=1000,
     )
-
 
     # No DB needed for failed status check as it happens before verification
     with patch("store.m_insight.job_callbacks.logger") as mock_logger:
@@ -74,14 +89,12 @@ async def test_callback_failed_job_status(callback_handler):
         assert mock_logger.error.called
         assert "failed for image 1" in mock_logger.error.call_args[0][0]
 
+
 @pytest.mark.asyncio
 async def test_callback_missing_detections(callback_handler):
     """Test callback when detections missing in full job output."""
     job = JobResponse(
-        job_id="job2",
-        status="completed",
-        task_type="face_detection",
-        created_at=1000
+        job_id="job2", status="completed", task_type="face_detection", created_at=1000
     )
 
     # Mock compute_client.get_job to return a job without faces
@@ -89,8 +102,8 @@ async def test_callback_missing_detections(callback_handler):
         job_id="job2",
         status="completed",
         task_type="face_detection",
-        task_output={}, # Missing faces/detections
-        created_at=1000
+        task_output={},  # Missing faces/detections
+        created_at=1000,
     )
     callback_handler.compute_client.get_job.return_value = full_job
 
@@ -113,14 +126,12 @@ async def test_callback_missing_detections(callback_handler):
         assert mock_logger.warning.called
         assert "No faces found" in mock_logger.warning.call_args[0][0]
 
+
 @pytest.mark.asyncio
 async def test_callback_entity_not_found(callback_handler):
     """Test callback when entity is not found in database."""
     job = JobResponse(
-        job_id="job3",
-        status="completed",
-        task_type="face_detection",
-        created_at=1000
+        job_id="job3", status="completed", task_type="face_detection", created_at=1000
     )
 
     # Needs full_job for logic to proceed to entity query
@@ -129,19 +140,25 @@ async def test_callback_entity_not_found(callback_handler):
         status="completed",
         task_type="face_detection",
         task_output={
-            "faces": [{
-                "bbox": {"x1":0,"y1":0,"x2":1,"y2":1}, 
-                "file_path":"f.png",
-                "confidence": 0.99,
-                "landmarks": {
-                    "right_eye": [0,0], "left_eye": [0,0], "nose_tip": [0,0], "mouth_right": [0,0], "mouth_left": [0,0]
+            "faces": [
+                {
+                    "bbox": {"x1": 0, "y1": 0, "x2": 1, "y2": 1},
+                    "file_path": "f.png",
+                    "confidence": 0.99,
+                    "landmarks": {
+                        "right_eye": [0, 0],
+                        "left_eye": [0, 0],
+                        "nose_tip": [0, 0],
+                        "mouth_right": [0, 0],
+                        "mouth_left": [0, 0],
+                    },
                 }
-            }],
+            ],
             "num_faces": 1,
             "image_width": 100,
-            "image_height": 100
-        }, # Need some face to trigger query
-        created_at=1000
+            "image_height": 100,
+        },  # Need some face to trigger query
+        created_at=1000,
     )
     callback_handler.compute_client.get_job.return_value = full_job
 
@@ -153,14 +170,12 @@ async def test_callback_entity_not_found(callback_handler):
         assert mock_logger.info.called
         assert "no longer exists" in mock_logger.info.call_args[0][0].lower()
 
+
 @pytest.mark.asyncio
 async def test_callback_database_error(callback_handler):
     """Test callback behavior on database exception."""
     job = JobResponse(
-        job_id="job4",
-        status="completed",
-        task_type="face_detection",
-        created_at=1000
+        job_id="job4", status="completed", task_type="face_detection", created_at=1000
     )
 
     # Setup DB for verification passing (must happen before exception in logic)
@@ -185,22 +200,20 @@ async def test_callback_database_error(callback_handler):
         # The actual log message depends on the exception message
         assert "Fetch failed" in mock_logger.error.call_args[0][0]
 
+
 @pytest.mark.asyncio
 async def test_callback_clip_malformed_output(callback_handler):
     """Test CLIP callback with invalid output format."""
     job = JobResponse(
-        job_id="job5",
-        status="completed",
-        task_type="clip_embedding",
-        created_at=1000
+        job_id="job5", status="completed", task_type="clip_embedding", created_at=1000
     )
 
     full_job = JobResponse(
         job_id="job5",
         status="completed",
         task_type="clip_embedding",
-        task_output={"embedding": "not a list"}, # Malformed
-        created_at=1000
+        task_output={"embedding": "not a list"},  # Malformed
+        created_at=1000,
     )
     callback_handler.compute_client.get_job.return_value = full_job
 
@@ -221,10 +234,13 @@ async def test_callback_clip_malformed_output(callback_handler):
         await callback_handler.handle_clip_embedding_complete(entity_id=1, job=job)
         assert mock_logger.error.called
 
+
 @pytest.mark.asyncio
 async def test_callback_job_not_found(callback_handler):
     """Test callback when full job fetch returns None."""
-    job = JobResponse(job_id="job_none", status="completed", task_type="face_detection", created_at=0)
+    job = JobResponse(
+        job_id="job_none", status="completed", task_type="face_detection", created_at=0
+    )
     # Correctly reset and set return_value on the AsyncMock
     callback_handler.compute_client.get_job = AsyncMock(return_value=None)
 
@@ -246,16 +262,19 @@ async def test_callback_job_not_found(callback_handler):
         assert mock_logger.warning.called
         assert "not completed when fetching" in mock_logger.warning.call_args[0][0]
 
+
 @pytest.mark.asyncio
 async def test_callback_validation_error(callback_handler):
     """Test callback when task_output fails pydantic validation."""
-    job = JobResponse(job_id="job_val", status="completed", task_type="face_detection", created_at=0)
+    job = JobResponse(
+        job_id="job_val", status="completed", task_type="face_detection", created_at=0
+    )
     full_job = JobResponse(
         job_id="job_val",
         status="completed",
         task_type="face_detection",
-        task_output={"faces": "invalid_type"}, # Should be list
-        created_at=0
+        task_output={"faces": "invalid_type"},  # Should be list
+        created_at=0,
     )
     callback_handler.compute_client.get_job = AsyncMock(return_value=full_job)
 
@@ -278,28 +297,37 @@ async def test_callback_validation_error(callback_handler):
         assert mock_logger.error.called
         assert "Invalid task_output format" in mock_logger.error.call_args[0][0]
 
+
 @pytest.mark.asyncio
 async def test_callback_entity_date_fallback(callback_handler):
     """Test callback date fallback when entity has no create_date."""
-    job = JobResponse(job_id="job_date", status="completed", task_type="face_detection", created_at=0)
+    job = JobResponse(
+        job_id="job_date", status="completed", task_type="face_detection", created_at=0
+    )
     full_job = JobResponse(
         job_id="job_date",
         status="completed",
         task_type="face_detection",
         task_output={
-            "faces": [{
-                "bbox": {"x1":0, "y1":0, "x2":1, "y2":1},
-                "file_path": "f.png",
-                "landmarks": {
-                    "right_eye": [0,0], "left_eye": [0,0], "nose_tip": [0,0], "mouth_right": [0,0], "mouth_left": [0,0]
-                },
-                "confidence": 0.99
-            }],
+            "faces": [
+                {
+                    "bbox": {"x1": 0, "y1": 0, "x2": 1, "y2": 1},
+                    "file_path": "f.png",
+                    "landmarks": {
+                        "right_eye": [0, 0],
+                        "left_eye": [0, 0],
+                        "nose_tip": [0, 0],
+                        "mouth_right": [0, 0],
+                        "mouth_left": [0, 0],
+                    },
+                    "confidence": 0.99,
+                }
+            ],
             "num_faces": 1,
             "image_width": 100,
-            "image_height": 100
+            "image_height": 100,
         },
-        created_at=0
+        created_at=0,
     )
     callback_handler.compute_client.get_job = AsyncMock(return_value=full_job)
 
@@ -321,7 +349,9 @@ async def test_callback_entity_date_fallback(callback_handler):
 
     # Patch the method using the actual handler instance to ensure it's captured
     # Use a subpath of /tmp/fake/media to avoid ValueError: '/tmp/face.png' is not in the subpath of '/tmp/fake/media'
-    with patch.object(callback_handler, "_get_face_storage_path", return_value=Path("/tmp/fake/media/face.png")) as mock_get_path:
+    with patch.object(
+        callback_handler, "_get_face_storage_path", return_value=Path("/tmp/fake/media/face.png")
+    ) as mock_get_path:
         await callback_handler.handle_face_detection_complete(entity_id=1, job=job)
         assert mock_get_path.called
         # args[2] is entity_create_date (wait, get_face_storage_path signature? (entity_id, index))
@@ -338,7 +368,7 @@ async def test_callback_entity_date_fallback(callback_handler):
         # args, _ = mock_get_path.call_args
         # assert args[2] == 2000000000
         # If method has only 2 args, this defaults failure.
-        # Maybe I should check if method signature changed? 
+        # Maybe I should check if method signature changed?
         # Viewed job_callbacks.py: def _get_face_storage_path(self, entity_id: int, face_index: int) -> Path:
         # It takes 2 args. The test is assuming 3 args (or test code I saw was outdated/wrong?).
         # Wait, previous test code (lines 258-262) asserted args[2].

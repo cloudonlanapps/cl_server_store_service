@@ -94,6 +94,14 @@ def test_hard_delete_collection_cascades_to_children(
         port=8001,
         mqtt_url=integration_config.mqtt_url,
         qdrant_url=integration_config.qdrant_url,
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
+        host="0.0.0.0",
+        debug=False,
+        reload=False,
+        log_level="INFO",
+        no_migrate=False,
     )
     service = EntityService(test_db_session, config)
     service.patch_entity(collection_id, {"is_deleted": True})
@@ -164,6 +172,14 @@ def test_hard_delete_nested_collections_cascades_recursively(
         port=8001,
         mqtt_url=integration_config.mqtt_url,
         qdrant_url=integration_config.qdrant_url,
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
+        host="0.0.0.0",
+        debug=False,
+        reload=False,
+        log_level="INFO",
+        no_migrate=False,
     )
     service = EntityService(test_db_session, config)
     service.patch_entity(parent_id, {"is_deleted": True})
@@ -176,7 +192,9 @@ def test_hard_delete_nested_collections_cascades_recursively(
     parent = test_db_session.query(Entity).filter(Entity.id == parent_id).first()
     assert parent is None
 
-    child_collection = test_db_session.query(Entity).filter(Entity.id == child_collection_id).first()
+    child_collection = (
+        test_db_session.query(Entity).filter(Entity.id == child_collection_id).first()
+    )
     assert child_collection is None
 
     grandchild = test_db_session.query(Entity).filter(Entity.id == grandchild_id).first()

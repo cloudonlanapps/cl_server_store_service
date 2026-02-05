@@ -1,27 +1,28 @@
-import random
 import hashlib
+import random
 import shutil
 import sys
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from loguru import logger
+
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 from jose import jwt
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from store.store.config import StoreConfig
 from store.common.auth import UserPayload, get_current_user
 from store.db_service import database
 from store.db_service.db_internals import get_db
+from store.store.config import StoreConfig
 from store.store.store import app
 
 # Import test config and media files
@@ -58,47 +59,41 @@ class IntegrationConfig(BaseModel):
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Add CLI options for integration tests."""
     parser.addoption(
-        "--username",
-        action="store",
-        default=None,
-        help="Username for integration tests"
+        "--username", action="store", default=None, help="Username for integration tests"
     )
     parser.addoption(
-        "--password",
-        action="store",
-        default=None,
-        help="Password for integration tests"
+        "--password", action="store", default=None, help="Password for integration tests"
     )
     parser.addoption(
         "--mqtt-url",
         action="store",
         default="mqtt://localhost:1883",
-        help="MQTT broker URL for integration tests"
+        help="MQTT broker URL for integration tests",
     )
     parser.addoption(
         "--auth-url",
         action="store",
         default="http://localhost:8010",
-        help="Auth service URL for integration tests"
+        help="Auth service URL for integration tests",
     )
     parser.addoption(
         "--compute-url",
         action="store",
         default="http://localhost:8012",
-        help="Compute service URL for integration tests"
+        help="Compute service URL for integration tests",
     )
     parser.addoption(
         "--store-port",
         action="store",
         type=int,
         default=8011,
-        help="Store service port for integration tests"
+        help="Store service port for integration tests",
     )
     parser.addoption(
         "--qdrant-url",
         action="store",
         default="http://localhost:6333",
-        help="Qdrant service URL for integration tests"
+        help="Qdrant service URL for integration tests",
     )
 
 
@@ -107,17 +102,17 @@ def cleanup_auth_cache():
     """Clean auth module cache before and after each test."""
     if "store.common.auth" in sys.modules:
         auth_module = sys.modules["store.common.auth"]
-        if hasattr(auth_module, '_public_key_cache'):
+        if hasattr(auth_module, "_public_key_cache"):
             auth_module._public_key_cache = None
-        if hasattr(auth_module, '_public_key_load_attempts'):
+        if hasattr(auth_module, "_public_key_load_attempts"):
             auth_module._public_key_load_attempts = 0
     yield
     # Cleanup after test
     if "store.common.auth" in sys.modules:
         auth_module = sys.modules["store.common.auth"]
-        if hasattr(auth_module, '_public_key_cache'):
+        if hasattr(auth_module, "_public_key_cache"):
             auth_module._public_key_cache = None
-        if hasattr(auth_module, '_public_key_load_attempts'):
+        if hasattr(auth_module, "_public_key_load_attempts"):
             auth_module._public_key_load_attempts = 0
 
 
@@ -160,6 +155,7 @@ def mqtt_url(integration_config: IntegrationConfig) -> str:
 def qdrant_service(integration_config: IntegrationConfig) -> Any:
     """Verify Qdrant is running and accessible."""
     from qdrant_client import QdrantClient
+
     client = QdrantClient(url=integration_config.qdrant_url)
     try:
         # Check connectivity
@@ -173,6 +169,7 @@ def qdrant_service(integration_config: IntegrationConfig) -> Any:
 def compute_service(integration_config: IntegrationConfig) -> str:
     """Verify Compute service is running."""
     import httpx
+
     # Using /capabilities as health check for compute
     url = f"{integration_config.compute_url}/capabilities"
     try:
@@ -188,6 +185,7 @@ def compute_service(integration_config: IntegrationConfig) -> str:
 def auth_service(integration_config: IntegrationConfig) -> str:
     """Verify Auth service is running."""
     import httpx
+
     # Using / as health check for auth
     url = f"{integration_config.auth_url}/"
     try:
@@ -199,9 +197,6 @@ def auth_service(integration_config: IntegrationConfig) -> str:
     return integration_config.auth_url
 
 
-
-
-
 # ============================================================================
 # DATABASE FIXTURES
 # ============================================================================
@@ -210,12 +205,12 @@ def auth_service(integration_config: IntegrationConfig) -> str:
 @pytest.fixture(scope="function")
 def test_engine() -> Generator[Engine, None, None]:
     """Create a test database engine with versioning support.
-    
+
     Note: We manually create the engine here instead of using create_db_engine() because:
     1. In-memory SQLite databases require StaticPool to share the same database across connections
     2. create_db_engine() doesn't use StaticPool
     3. Without StaticPool, each connection would get its own isolated in-memory database
-    
+
     We still use the same enable_wal_mode event listener which detects in-memory databases
     and skips WAL mode while enabling foreign keys.
     """
@@ -287,9 +282,7 @@ def sample_image(test_images_dir: Path) -> Path:
     """Get a sample image file for testing (absolute path)."""
     images = get_all_test_images()
     if not images:
-        pytest.skip(
-            f"No test images found. Please add images to {test_images_dir}"
-        )
+        pytest.skip(f"No test images found. Please add images to {test_images_dir}")
     return images[0]
 
 
@@ -307,7 +300,7 @@ def sample_images(test_images_dir: Path) -> list[Path]:
 @pytest.fixture
 def test_images_unique() -> list[Path]:
     """Get 3 unique test images for mInsight worker tests.
-    
+
     These are simple colored squares stored in TEST_VECTORS_DIR
     that are guaranteed to have different MD5 hashes.
     """
@@ -326,10 +319,12 @@ def test_images_unique() -> list[Path]:
 
     return images
 
+
 @pytest.fixture(scope="session")
 def _used_ports() -> set[int]:
     """Internal session-scoped registry for tracked ports."""
     return set()
+
 
 @pytest.fixture(scope="function")
 def test_port(request: pytest.FixtureRequest, _used_ports: set[int]) -> int:
@@ -338,7 +333,7 @@ def test_port(request: pytest.FixtureRequest, _used_ports: set[int]) -> int:
     seed = int(hashlib.md5(nodeid.encode()).hexdigest(), 16)
     # Use seed directly mapped to an ephemeral port range (20000-30000)
     port = 20000 + (seed % 10000)
-    
+
     # Ensure uniqueness in the same session
     while port in _used_ports:
         port += 1
@@ -399,8 +394,16 @@ def client(
         port=test_port,
         mqtt_url=integration_config.mqtt_url,
         qdrant_url=integration_config.qdrant_url,
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
+        host="0.0.0.0",
+        debug=False,
+        reload=False,
+        log_level="INFO",
+        no_migrate=False,
     )
-    
+
     # CRITICAL: Synchronize the StoreConfig singleton
     # This ensures background workers/dependencies/lifespan use the same port
     monkeypatch.setattr(StoreConfig, "_instance", store_config)
@@ -416,17 +419,18 @@ def client(
     app.dependency_overrides.clear()
 
     # Clean up app state
-    if hasattr(app.state, 'broadcaster'):
-        if hasattr(app.state.broadcaster, 'disconnect'):
+    if hasattr(app.state, "broadcaster"):
+        if hasattr(app.state.broadcaster, "disconnect"):
             app.state.broadcaster.disconnect()
-        delattr(app.state, 'broadcaster')
+        delattr(app.state, "broadcaster")
 
-    if hasattr(app.state, 'monitor'):
-        delattr(app.state, 'monitor')
+    if hasattr(app.state, "monitor"):
+        delattr(app.state, "monitor")
 
     # Ensure the global singleton in cl_ml_tools is also reset
     try:
         from cl_ml_tools.utils.mqtt import shutdown_broadcaster
+
         shutdown_broadcaster()
     except ImportError:
         pass
@@ -468,10 +472,10 @@ def auth_client(
         del app.dependency_overrides[get_current_user]
 
     app.dependency_overrides[get_db] = override_get_db
-    
+
     # CRITICAL: Copy SessionLocal patch from client fixture
     monkeypatch.setattr(database, "SessionLocal", TestingSessionLocal)
-    
+
     # Create StoreConfig and set on StoreConfig._instance
     store_config = StoreConfig(
         cl_server_dir=clean_data_dir,
@@ -481,8 +485,16 @@ def auth_client(
         port=test_port,
         mqtt_url=integration_config.mqtt_url,
         qdrant_url=integration_config.qdrant_url,
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
+        host="0.0.0.0",
+        debug=False,
+        reload=False,
+        log_level="INFO",
+        no_migrate=False,
     )
-    
+
     # CRITICAL: Synchronize configuration across all modules via singleton
     monkeypatch.setattr(StoreConfig, "_instance", store_config)
 
@@ -625,6 +637,7 @@ def read_token(jwt_token_generator: Any) -> str:
     return jwt_token_generator.generate_token(
         sub="read_user", permissions=["media_store_read"], is_admin=False
     )
+
 
 # ============================================================================
 # JOB AND STORAGE FIXTURES

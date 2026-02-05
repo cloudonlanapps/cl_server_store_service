@@ -17,12 +17,12 @@ from numpy.typing import NDArray
 from pydantic import ValidationError
 
 from store.db_service import DBService
-from store.db_service.schemas import FaceSchema, EntityIntelligenceData, JobInfo
-
-from .config import MInsightConfig
-from .job_service import JobSubmissionService
+from store.db_service.schemas import EntityIntelligenceData, FaceSchema, JobInfo
 from store.vectorstore_services.schemas import StoreItem
 from store.vectorstore_services.vector_stores import QdrantVectorStore
+
+from .config import FACE_VECTOR_SIZE, MInsightConfig
+from .job_service import JobSubmissionService
 
 
 def with_entity_lock(func):
@@ -31,14 +31,15 @@ def with_entity_lock(func):
     This ensures only one callback runs at a time for a given entity,
     preventing all race conditions in intelligence_data updates.
     """
+
     @functools.wraps(func)
     async def wrapper(self, *args, **kwargs):
         # Extract entity_id from kwargs or positional args
         # Check both handle_face_embedding_complete(face_id, entity_id, ...)
         # and other callbacks(entity_id, ...)
-        if 'entity_id' in kwargs:
-            entity_id = kwargs['entity_id']
-        elif len(args) >= 2 and func.__name__ == 'handle_face_embedding_complete':
+        if "entity_id" in kwargs:
+            entity_id = kwargs["entity_id"]
+        elif len(args) >= 2 and func.__name__ == "handle_face_embedding_complete":
             # For handle_face_embedding_complete: (face_id, entity_id, job, face_index)
             entity_id = args[1]
         elif len(args) >= 1:
@@ -55,6 +56,7 @@ def with_entity_lock(func):
                 return result
             finally:
                 logger.debug(f"[{func.__name__}] Released lock for entity {entity_id}")
+
     return wrapper
 
 
@@ -93,9 +95,7 @@ class JobCallbackHandler:
         self.face_store = face_store
         self.config = config
         self.db = db
-        self.job_submission_service: JobSubmissionService | None = (
-            job_submission_service
-        )
+        self.job_submission_service: JobSubmissionService | None = job_submission_service
         # Per-entity locks to serialize callbacks for the same entity
         self._entity_locks: dict[int, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()  # Lock for accessing the locks dict
@@ -123,9 +123,7 @@ class JobCallbackHandler:
         """
         return int(datetime.now(UTC).timestamp() * 1000)
 
-    async def _download_face_image(
-        self, job_id: str, file_path: str, dest: Path
-    ) -> None:
+    async def _download_face_image(self, job_id: str, file_path: str, dest: Path) -> None:
         """Download face image from job output.
 
         Args:
@@ -160,12 +158,16 @@ class JobCallbackHandler:
         active_job_ids = [j.job_id for j in data.active_jobs]
         logger.debug(f"[_verify_job_safety] Entity {entity_id} active_jobs: {active_job_ids}")
         if not any(j.job_id == job_id for j in data.active_jobs):
-            logger.warning(f"Job {job_id} is no longer active for entity {entity_id}, discarding stale results. Active jobs: {active_job_ids}")
+            logger.warning(
+                f"Job {job_id} is no longer active for entity {entity_id}, discarding stale results. Active jobs: {active_job_ids}"
+            )
             return False
 
         # Safety Check: MD5 must match
         if data.active_processing_md5 != entity.md5:
-            logger.warning(f"Entity {entity_id} MD5 changed (was {data.active_processing_md5}, now {entity.md5}), discarding stale results")
+            logger.warning(
+                f"Entity {entity_id} MD5 changed (was {data.active_processing_md5}, now {entity.md5}), discarding stale results"
+            )
             # Cleanup job record
             # if self.job_submission_service:
             #    self.job_submission_service.delete_job_record(entity_id, job_id)
@@ -173,9 +175,7 @@ class JobCallbackHandler:
 
         return True
 
-    def _get_face_storage_path(
-        self, entity_id: int, face_index: int
-    ) -> Path:
+    def _get_face_storage_path(self, entity_id: int, face_index: int) -> Path:
         """Get storage path for face image using entity ID.
 
         Args:
@@ -196,9 +196,7 @@ class JobCallbackHandler:
 
     @timed
     @with_entity_lock
-    async def handle_face_detection_complete(
-        self, entity_id: int, job: JobResponse
-    ) -> None:
+    async def handle_face_detection_complete(self, entity_id: int, job: JobResponse) -> None:
         """Handle face detection job completion.
 
         Downloads cropped faces, saves to files, and creates Face records in database.
@@ -224,16 +222,12 @@ class JobCallbackHandler:
             # MQTT callbacks don't include task_output - fetch full job via HTTP
             full_job = await self.compute_client.get_job(job.job_id)
             if not full_job or full_job.status != "completed":
-                logger.warning(
-                    f"Job {job.job_id} not completed when fetching full details"
-                )
+                logger.warning(f"Job {job.job_id} not completed when fetching full details")
                 return
 
             # Extract faces from task_output
             if not full_job.task_output or "faces" not in full_job.task_output:
-                logger.warning(
-                    f"No faces found in job {job.job_id} output for image {entity_id}"
-                )
+                logger.warning(f"No faces found in job {job.job_id} output for image {entity_id}")
                 return
 
             try:
@@ -252,13 +246,17 @@ class JobCallbackHandler:
                     )
                 return
 
-            entity = self.db.entity.get(entity_id) # Already checked in verify_job_safety but need for schema
-            if not entity: return
-            
-            data = self.db.intelligence.get_intelligence_data(entity_id)
-            if not data: return
+            entity = self.db.entity.get(
+                entity_id
+            )  # Already checked in verify_job_safety but need for schema
+            if not entity:
+                return
 
-            # 2. Downloads 
+            data = self.db.intelligence.get_intelligence_data(entity_id)
+            if not data:
+                return
+
+            # 2. Downloads
             face_schemas: list[FaceSchema] = []
             for index, face_data in enumerate(faces_data):
                 face_path = self._get_face_storage_path(entity_id, index)
@@ -270,16 +268,18 @@ class JobCallbackHandler:
 
                 face_id = entity_id * 10000 + index
                 relative_path = face_path.relative_to(self.config.media_storage_dir)
-                
-                face_schemas.append(FaceSchema(
-                    id=face_id,
-                    entity_id=entity_id,
-                    bbox=face_data.bbox,
-                    confidence=face_data.confidence,
-                    landmarks=face_data.landmarks,
-                    file_path=str(relative_path),
-                    created_at=self._now_timestamp(),
-                ))
+
+                face_schemas.append(
+                    FaceSchema(
+                        id=face_id,
+                        entity_id=entity_id,
+                        bbox=face_data.bbox,
+                        confidence=face_data.confidence,
+                        landmarks=face_data.landmarks,
+                        file_path=str(relative_path),
+                        created_at=self._now_timestamp(),
+                    )
+                )
 
             # 3. Batch DB Transaction
             self.db.face.create_many(face_schemas, ignore_exception=True)
@@ -287,6 +287,7 @@ class JobCallbackHandler:
 
             # Update intelligence_data before submitting next jobs (atomically)
             face_count = len(face_schemas)
+
             def update_face_data(data):
                 """Update function for atomic update."""
                 data.face_count = face_count
@@ -298,18 +299,20 @@ class JobCallbackHandler:
             if self.job_submission_service:
                 for index, f_schema in enumerate(face_schemas):
                     try:
+
                         async def face_embedding_callback(
                             job_resp: JobResponse, fid: int = f_schema.id, idx: int = index
                         ) -> None:
                             await self.handle_face_embedding_complete(
-                                face_id=fid,
-                                entity_id=entity_id,
-                                job=job_resp,
-                                face_index=idx
+                                face_id=fid, entity_id=entity_id, job=job_resp, face_index=idx
                             )
                             if self.job_submission_service:
                                 self.job_submission_service.update_job_status(
-                                    entity_id, job_resp.job_id, job_resp.status, job_resp.error_message, job_resp.completed_at
+                                    entity_id,
+                                    job_resp.job_id,
+                                    job_resp.status,
+                                    job_resp.error_message,
+                                    job_resp.completed_at,
                                 )
 
                         await self.job_submission_service.submit_face_embedding(
@@ -336,9 +339,7 @@ class JobCallbackHandler:
 
     @timed
     @with_entity_lock
-    async def handle_clip_embedding_complete(
-        self, entity_id: int, job: JobResponse
-    ) -> None:
+    async def handle_clip_embedding_complete(self, entity_id: int, job: JobResponse) -> None:
         """Handle CLIP embedding job completion.
 
         Extracts embedding and stores in Qdrant with entity_id as point_id.
@@ -354,9 +355,7 @@ class JobCallbackHandler:
             # MQTT callbacks don't include task_output - fetch full job via HTTP
             full_job = await self.compute_client.get_job(job.job_id)
             if not full_job or full_job.status != "completed":
-                logger.warning(
-                    f"Job {job.job_id} not completed when fetching full details"
-                )
+                logger.warning(f"Job {job.job_id} not completed when fetching full details")
                 return
 
             # Download embedding file from job output
@@ -390,7 +389,7 @@ class JobCallbackHandler:
                 if tmp_path.exists():
                     tmp_path.unlink()
 
-            # Store in Qdrant 
+            # Store in Qdrant
             _ = self.clip_store.add_vector(
                 StoreItem(id=entity_id, embedding=embedding, payload={"entity_id": entity_id})
             )
@@ -403,15 +402,11 @@ class JobCallbackHandler:
                 )
 
         except Exception as e:
-            logger.error(
-                f"Failed to handle CLIP embedding completion for image {entity_id}: {e}"
-            )
+            logger.error(f"Failed to handle CLIP embedding completion for image {entity_id}: {e}")
 
     @timed
     @with_entity_lock
-    async def handle_dino_embedding_complete(
-        self, entity_id: int, job: JobResponse
-    ) -> None:
+    async def handle_dino_embedding_complete(self, entity_id: int, job: JobResponse) -> None:
         """Handle DINOv2 embedding job completion.
 
         Extracts embedding and stores in Qdrant (DINO collection) with entity_id as point_id.
@@ -427,9 +422,7 @@ class JobCallbackHandler:
             # MQTT callbacks don't include task_output - fetch full job via HTTP
             full_job = await self.compute_client.get_job(job.job_id)
             if not full_job or full_job.status != "completed":
-                logger.warning(
-                    f"Job {job.job_id} not completed when fetching full details"
-                )
+                logger.warning(f"Job {job.job_id} not completed when fetching full details")
                 return
 
             # Download embedding file from job output
@@ -462,7 +455,7 @@ class JobCallbackHandler:
                 if tmp_path.exists():
                     tmp_path.unlink()
 
-            # Store in Qdrant 
+            # Store in Qdrant
             _ = self.dino_store.add_vector(
                 StoreItem(id=entity_id, embedding=embedding, payload={"entity_id": entity_id})
             )
@@ -475,9 +468,7 @@ class JobCallbackHandler:
                 )
 
         except Exception as e:
-            logger.error(
-                f"Failed to handle DINO embedding completion for image {entity_id}: {e}"
-            )
+            logger.error(f"Failed to handle DINO embedding completion for image {entity_id}: {e}")
 
     @timed
     @with_entity_lock
@@ -486,19 +477,29 @@ class JobCallbackHandler:
     ) -> None:
         """Handle face embedding job completion."""
 
-        logger.info(f"[handle_face_embedding_complete] ENTERED: face_id={face_id}, entity_id={entity_id}, job_id={job.job_id}, face_index={face_index}, status={job.status}")
+        logger.info(
+            f"[handle_face_embedding_complete] ENTERED: face_id={face_id}, entity_id={entity_id}, job_id={job.job_id}, face_index={face_index}, status={job.status}"
+        )
 
         try:
             # Check if job failed
             if job.status == "failed":
-                logger.error(f"Face embedding job {job.job_id} failed for face {face_id}: {job.error_message}")
+                logger.error(
+                    f"Face embedding job {job.job_id} failed for face {face_id}: {job.error_message}"
+                )
                 return
 
-            logger.info(f"[handle_face_embedding_complete] About to verify job safety for entity {entity_id}, job {job.job_id}")
+            logger.info(
+                f"[handle_face_embedding_complete] About to verify job safety for entity {entity_id}, job {job.job_id}"
+            )
             if not await self._verify_job_safety(entity_id, job.job_id):
-                logger.warning(f"[handle_face_embedding_complete] Job safety check FAILED for entity {entity_id}, job {job.job_id}")
+                logger.warning(
+                    f"[handle_face_embedding_complete] Job safety check FAILED for entity {entity_id}, job {job.job_id}"
+                )
                 return
-            logger.info(f"[handle_face_embedding_complete] Job safety check PASSED for entity {entity_id}, job {job.job_id}")
+            logger.info(
+                f"[handle_face_embedding_complete] Job safety check PASSED for entity {entity_id}, job {job.job_id}"
+            )
 
             # MQTT callbacks don't include task_output - fetch full job via HTTP
             full_job = await self.compute_client.get_job(job.job_id)
@@ -522,14 +523,16 @@ class JobCallbackHandler:
                     dest=tmp_path,
                 )
                 embedding = cast(NDArray[np.float32], np.load(tmp_path))
-                if embedding.shape[0] != self.config.face_vector_size:
-                    logger.error(f"Invalid dimension for face {face_id}: expected {self.config.face_vector_size}, got {embedding.shape[0]}")
+                if embedding.shape[0] != FACE_VECTOR_SIZE:
+                    logger.error(
+                        f"Invalid dimension for face {face_id}: expected {FACE_VECTOR_SIZE}, got {embedding.shape[0]}"
+                    )
                     return
             finally:
                 if tmp_path.exists():
                     tmp_path.unlink()
 
-            # Store in Qdrant 
+            # Store in Qdrant
             _ = self.face_store.add_vector(
                 StoreItem(
                     id=face_id,
@@ -541,7 +544,9 @@ class JobCallbackHandler:
             # Update intelligence_data face status atomically
             def update_face_status(data):
                 """Update function for atomic update."""
-                if data.inference_status.face_embeddings is not None and face_index < len(data.inference_status.face_embeddings):
+                if data.inference_status.face_embeddings is not None and face_index < len(
+                    data.inference_status.face_embeddings
+                ):
                     old_status = data.inference_status.face_embeddings.copy()
                     data.inference_status.face_embeddings[face_index] = "completed"
                     logger.debug(

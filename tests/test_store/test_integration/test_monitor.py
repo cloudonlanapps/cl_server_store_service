@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from store.store.config import StoreConfig
 from store.broadcast_service.monitor import MInsightMonitor
+from store.store.config import StoreConfig
 
 
 @pytest.fixture
@@ -17,8 +17,15 @@ def mock_store_config(integration_config):
         port=integration_config.store_port,
         mqtt_url=integration_config.mqtt_url,
         qdrant_url=integration_config.qdrant_url,
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
+        host="0.0.0.0",
+        debug=False,
+        reload=False,
+        log_level="INFO",
+        no_migrate=False,
     )
-
 
 
 @patch("store.broadcast_service.monitor.get_broadcaster")
@@ -37,6 +44,7 @@ def test_monitor_start_enabled(mock_get_broadcaster, mock_store_config):
     mock_client.subscribe.assert_called()
     mock_client.loop_start.assert_called_once()
 
+
 @patch("store.broadcast_service.monitor.get_broadcaster")
 def test_monitor_start_failure(mock_get_broadcaster, mock_store_config):
     """Test monitor start with exception."""
@@ -45,6 +53,7 @@ def test_monitor_start_failure(mock_get_broadcaster, mock_store_config):
     # Should raise exception now
     with pytest.raises(Exception, match="MQTT Fail"):
         monitor.start()
+
 
 def test_monitor_on_message_variants(mock_store_config):
     """Test _on_message with various payloads and topics."""
@@ -70,28 +79,49 @@ def test_monitor_on_message_variants(mock_store_config):
     assert monitor.process_status is None
 
     # 4. Valid 'started' message
-    monitor._on_message(None, None, create_msg("mInsight/8011/started", '{"version_start":1, "status": "running", "timestamp": 1234567890}'))
+    monitor._on_message(
+        None,
+        None,
+        create_msg(
+            "mInsight/8011/started",
+            '{"version_start":1, "status": "running", "timestamp": 1234567890}',
+        ),
+    )
     assert monitor.process_status is not None
     assert monitor.process_status.status == "running"
     assert monitor.process_status.version_start == 1
 
     # 5. Valid 'ended' message
-    monitor._on_message(None, None, create_msg("mInsight/8011/ended", '{"processed_count":5, "status": "idle", "timestamp": 1234567895}'))
+    monitor._on_message(
+        None,
+        None,
+        create_msg(
+            "mInsight/8011/ended",
+            '{"processed_count":5, "status": "idle", "timestamp": 1234567895}',
+        ),
+    )
     assert monitor.process_status.status == "idle"
     assert monitor.process_status.processed_count == 5
 
     # 6. Valid 'status' message
-    monitor._on_message(None, None, create_msg("mInsight/8011/status", '{"status":"custom", "timestamp": 1234567900}'))
+    monitor._on_message(
+        None,
+        None,
+        create_msg("mInsight/8011/status", '{"status":"custom", "timestamp": 1234567900}'),
+    )
     assert monitor.process_status.status == "custom"
+
 
 def test_monitor_get_status(mock_store_config):
     """Test get_status logic."""
     monitor = MInsightMonitor(mock_store_config)
     from store.broadcast_service.schemas import MInsightStatus
+
     monitor.process_status = MInsightStatus(status="ok", timestamp=0)
 
     # Get status
     assert monitor.get_status().status == "ok"
+
 
 def test_monitor_stop(mock_store_config):
     """Test stop logic."""
@@ -104,6 +134,7 @@ def test_monitor_stop(mock_store_config):
     monitor.stop()
     mock_client.loop_stop.assert_called_once()
     mock_client.disconnect.assert_called_once()
+
 
 @patch("cl_ml_tools.get_broadcaster")
 def test_monitor_stop_exception(mock_get_broadcaster, mock_store_config):

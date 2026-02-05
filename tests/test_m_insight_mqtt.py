@@ -7,10 +7,9 @@ import paho.mqtt.client as mqtt
 import pytest
 from sqlalchemy.orm import sessionmaker
 
-from store.db_service.db_internals import database
-from store.db_service.db_internals import Entity
-from store.broadcast_service.schemas import MInsightStatus
 from store.broadcast_service.broadcaster import MInsightBroadcaster
+from store.broadcast_service.schemas import MInsightStatus
+from store.db_service.db_internals import Entity, database
 from store.m_insight.config import MInsightConfig
 from store.m_insight.media_insight import MediaInsight
 
@@ -18,9 +17,10 @@ from store.m_insight.media_insight import MediaInsight
 @pytest.fixture
 def test_subscriber(integration_config):
     """Create an MQTT subscriber for verification."""
-    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv5)
+    client = mqtt.Client(
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv5
+    )
     messages = []
-
 
     def on_message(client, userdata, msg):
         messages.append(msg)
@@ -28,10 +28,11 @@ def test_subscriber(integration_config):
     client.on_message = on_message
     # Parse URL
     from requests.compat import urlparse
+
     parsed = urlparse(integration_config.mqtt_url)
     broker = parsed.hostname or "localhost"
     port = parsed.port or 1883
-    
+
     client.connect(broker, port, 60)
     client.loop_start()
     yield client, messages
@@ -56,7 +57,14 @@ def test_m_insight_worker(
         mqtt_topic="test/m_insight_mqtt",
         auth_url=integration_config.auth_url,
         compute_url=integration_config.compute_url,
+        compute_username=integration_config.username,
+        compute_password=integration_config.password,
         qdrant_url=integration_config.qdrant_url,
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
+        no_auth=False,
+        log_level="INFO",
     )
 
     # Use test database engine
@@ -109,7 +117,7 @@ async def test_m_insight_lifecycle_events(
         added_date=1,
         updated_date=1,
         create_date=1,
-        is_deleted=False
+        is_deleted=False,
     )
     test_db_session.add(entity)
     test_db_session.commit()
@@ -129,12 +137,14 @@ async def test_m_insight_lifecycle_events(
         if len(status_msg_payloads) >= 2:
             break
         time.sleep(0.1)
-    
-    assert len(status_msg_payloads) >= 2, f"Expected at least 2 status messages, got {len(status_msg_payloads)}"
+
+    assert len(status_msg_payloads) >= 2, (
+        f"Expected at least 2 status messages, got {len(status_msg_payloads)}"
+    )
 
     # Sort by timestamp to ensure correct order
     status_msg_payloads.sort(key=lambda s: s.timestamp)
-    
+
     # Last messages should contain 'idle' and 'running'
     statuses = [s.status for s in status_msg_payloads]
     assert "idle" in statuses
@@ -159,8 +169,6 @@ def test_m_insight_heartbeat_status(
     """Test explicit status publishing (heartbeat logic)."""
     subscriber, messages = test_subscriber
 
-
-
     config = MInsightConfig(
         id="test-hb",
         cl_server_dir=clean_data_dir,
@@ -168,6 +176,17 @@ def test_m_insight_heartbeat_status(
         public_key_path=clean_data_dir / "keys" / "public_key.pem",
         store_port=random.randint(40001, 50000),
         mqtt_url=integration_config.mqtt_url,
+        mqtt_topic="test/m_insight_mqtt",
+        auth_url=integration_config.auth_url,
+        compute_url=integration_config.compute_url,
+        compute_username=integration_config.username,
+        compute_password=integration_config.password,
+        qdrant_url=integration_config.qdrant_url,
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
+        no_auth=False,
+        log_level="INFO",
     )
 
     topic_base = f"mInsight/{config.store_port}"

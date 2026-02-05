@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 try:
     from cl_ml_tools.utils.profiling import timed
 except ImportError:
-    from functools import wraps
     import time
+    from functools import wraps
 
     def timed(func):
         @wraps(func)
@@ -22,7 +22,9 @@ except ImportError:
                 return func(*args, **kwargs)
             finally:
                 pass
+
         return wrapper
+
 
 from . import database
 from .database import with_retry
@@ -70,7 +72,9 @@ class BaseDBService(Generic[SchemaT]):
 
     @timed
     @with_retry(max_retries=10)
-    def get_all(self, page: int | None = 1, page_size: int = 20) -> list[SchemaT] | tuple[list[SchemaT], int]:
+    def get_all(
+        self, page: int | None = 1, page_size: int = 20
+    ) -> list[SchemaT] | tuple[list[SchemaT], int]:
         """Get all records with optional pagination.
 
         Session: Creates and closes own session.
@@ -104,7 +108,9 @@ class BaseDBService(Generic[SchemaT]):
         """
         db = database.SessionLocal()
         try:
-            logger.debug(f"Creating {self.model_class.__name__}: {data.model_dump(exclude_unset=True)}")
+            logger.debug(
+                f"Creating {self.model_class.__name__}: {data.model_dump(exclude_unset=True)}"
+            )
             # We exclude unset to allow defaults in DB or Model to take over if not provided
             # But normally creating a record should have all required fields.
             # Using exclude_unset=True matches plan.
@@ -113,7 +119,7 @@ class BaseDBService(Generic[SchemaT]):
             db.commit()
             db.refresh(obj)
             # Safe access to id (some models might have different PK, but all ours have id)
-            pk = getattr(obj, 'id', 'N/A')
+            pk = getattr(obj, "id", "N/A")
             logger.debug(f"Created {self.model_class.__name__} with id={pk}")
             return self._to_schema(obj)
         except Exception as e:
@@ -140,7 +146,9 @@ class BaseDBService(Generic[SchemaT]):
         """
         db = database.SessionLocal()
         try:
-            logger.debug(f"Updating {self.model_class.__name__} id={id}: {data.model_dump(exclude_unset=True)}")
+            logger.debug(
+                f"Updating {self.model_class.__name__} id={id}: {data.model_dump(exclude_unset=True)}"
+            )
             obj = db.query(self.model_class).filter_by(id=id).first()
             if not obj:
                 logger.debug(f"{self.model_class.__name__} id={id} not found for update")
@@ -156,14 +164,14 @@ class BaseDBService(Generic[SchemaT]):
         except Exception as e:
             db.rollback()
             if ignore_exception:
-                logger.debug(f"Ignoring exception during update {self.model_class.__name__} id={id}: {e}")
+                logger.debug(
+                    f"Ignoring exception during update {self.model_class.__name__} id={id}: {e}"
+                )
                 return None
             logger.error(f"Failed to update {self.model_class.__name__} id={id}: {e}")
             raise
         finally:
             db.close()
-
-
 
     @timed
     @with_retry(max_retries=10)
@@ -173,7 +181,7 @@ class BaseDBService(Generic[SchemaT]):
         ascending: bool = True,
         limit: int | None = None,
         offset: int | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> list[SchemaT]:
         """Flexible query with operators.
 
@@ -183,22 +191,22 @@ class BaseDBService(Generic[SchemaT]):
         try:
             filters = []
             for key, value in kwargs.items():
-                if '__' in key:
-                    field_name, operator = key.rsplit('__', 1)
+                if "__" in key:
+                    field_name, operator = key.rsplit("__", 1)
                     if not hasattr(self.model_class, field_name):
-                         # Could raise error or ignore. 
-                         # Plan code assumes attributes exist.
-                         pass
+                        # Could raise error or ignore.
+                        # Plan code assumes attributes exist.
+                        pass
                     column = getattr(self.model_class, field_name)
-                    if operator == 'gt':
+                    if operator == "gt":
                         filters.append(column > value)
-                    elif operator == 'gte':
+                    elif operator == "gte":
                         filters.append(column >= value)
-                    elif operator == 'lt':
+                    elif operator == "lt":
                         filters.append(column < value)
-                    elif operator == 'lte':
+                    elif operator == "lte":
                         filters.append(column <= value)
-                    elif operator == 'ne':
+                    elif operator == "ne":
                         filters.append(column != value)
                 else:
                     if hasattr(self.model_class, key):
@@ -233,18 +241,18 @@ class BaseDBService(Generic[SchemaT]):
         try:
             filters = []
             for key, value in kwargs.items():
-                if '__' in key:
-                    field_name, operator = key.rsplit('__', 1)
+                if "__" in key:
+                    field_name, operator = key.rsplit("__", 1)
                     column = getattr(self.model_class, field_name)
-                    if operator == 'gt':
+                    if operator == "gt":
                         filters.append(column > value)
-                    elif operator == 'gte':
+                    elif operator == "gte":
                         filters.append(column >= value)
-                    elif operator == 'lt':
+                    elif operator == "lt":
                         filters.append(column < value)
-                    elif operator == 'lte':
+                    elif operator == "lte":
                         filters.append(column <= value)
-                    elif operator == 'ne':
+                    elif operator == "ne":
                         filters.append(column != value)
                 else:
                     filters.append(getattr(self.model_class, key) == value)
@@ -257,5 +265,3 @@ class BaseDBService(Generic[SchemaT]):
     def _to_schema(self, orm_obj: Any) -> SchemaT:
         """Convert ORM to Pydantic."""
         return self.schema_class.model_validate(orm_obj)
-
-

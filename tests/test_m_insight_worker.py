@@ -13,10 +13,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from sqlalchemy import select, Engine
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
-from store.db_service.db_internals import EntitySyncState, Entity, EntityIntelligence, database
+from store.db_service.db_internals import Entity, EntityIntelligence, EntitySyncState, database
 from store.db_service.schemas import EntityIntelligenceData
 from store.m_insight.media_insight import MediaInsight
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 @pytest.fixture
 def m_insight_processor_mock(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, str]]:
     """Mock MInsightProcessor.process() to track calls instead of printing.
-    
+
     Returns:
         List of (entity_id, md5) tuples for each process() call
     """
@@ -60,14 +60,14 @@ def m_insight_worker(
     test_engine: Engine,
 ) -> MediaInsight:
     """Create MInsightProcessor worker instance for testing.
-    
+
     Note: Does not start the worker - tests control when to run reconciliation.
     Uses the test database engine instead of creating its own.
     """
     from sqlalchemy.orm import sessionmaker
 
-    from store.m_insight.config import MInsightConfig
     from store.broadcast_service.broadcaster import MInsightBroadcaster
+    from store.m_insight.config import MInsightConfig
 
     # Create config
     config = MInsightConfig(
@@ -78,8 +78,16 @@ def m_insight_worker(
         mqtt_url=integration_config.mqtt_url,
         mqtt_topic="test/m_insight",
         qdrant_url=integration_config.qdrant_url,
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
         auth_url=integration_config.auth_url,
         compute_url=integration_config.compute_url,
+        compute_username=integration_config.username,
+        compute_password=integration_config.password,
+        no_auth=False,
+        log_level="INFO",
+        store_port=integration_config.store_port,
     )
 
     # Use test database engine instead of initializing a new database
@@ -119,7 +127,7 @@ def get_intelligence_for_image(session: Session, entity_id: int) -> EntityIntell
     """Get intelligence data for specific image."""
     stmt = select(EntityIntelligence).where(EntityIntelligence.entity_id == entity_id)
     intelligence = session.execute(stmt).scalar_one_or_none()
-    
+
     if intelligence and intelligence.intelligence_data:
         try:
             return EntityIntelligenceData.model_validate(intelligence.intelligence_data)
@@ -131,7 +139,6 @@ def get_intelligence_for_image(session: Session, entity_id: int) -> EntityIntell
 # ============================================================================
 # A. STARTUP TESTS
 # ============================================================================
-
 
 
 @pytest.mark.asyncio
@@ -159,7 +166,8 @@ async def test_empty_sync_state_queues_all_images(
         entity_ids.append(response.json()["id"])
 
     # Verify versions exist
-    from store.db_service.db_internals import version_class, Entity
+    from store.db_service.db_internals import Entity, version_class
+
     EntityVersion = version_class(Entity)
     stmt = select(EntityVersion)
     versions = test_db_session.execute(stmt).scalars().all()
@@ -299,7 +307,7 @@ async def test_multiple_md5_changes_single_queue(
     # Let's check logic: if it calls `process`, it means it qualified.
     # The MInsight logic likely updates intelligence.
     # We check if overall_status is 'queued' or 'processing'.
-    
+
     # In old tests: `assert intelligence.md5 == final_md5`
     # In new schema: `active_processing_md5` tracks what is being processed.
     assert intelligence.overall_status == "processing"
@@ -328,7 +336,13 @@ async def test_process_called_once_per_image(
     for i in range(1, 6):
         client.put(
             f"/entities/{entity_id}",
-            files={"image": (f"test{i}.jpg", sample_images[i % len(sample_images)].open("rb"), "image/jpeg")},
+            files={
+                "image": (
+                    f"test{i}.jpg",
+                    sample_images[i % len(sample_images)].open("rb"),
+                    "image/jpeg",
+                )
+            },
             data={"label": "Test Image", "is_collection": "false"},
         )
 
@@ -456,6 +470,7 @@ async def test_restart_does_not_reinsert_deleted(
 
     # Simulate restart: create new worker and reconcile
     from store.broadcast_service.broadcaster import MInsightBroadcaster
+
     broadcaster = MInsightBroadcaster(m_insight_worker.config)
     broadcaster.init()
     new_worker = MediaInsight(config=m_insight_worker.config, broadcaster=broadcaster)

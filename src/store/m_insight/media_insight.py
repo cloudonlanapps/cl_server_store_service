@@ -2,24 +2,26 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
+from cl_ml_tools.utils.profiling import timed
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.orm import configure_mappers
-from store.db_service import DBService, EntityIntelligenceData
 from sqlalchemy_continuum import version_class  # pyright: ignore[reportAttributeAccessIssue]
+
+from store.common.storage import StorageService
+from store.db_service import DBService, EntityIntelligenceData
 from store.db_service.db_internals import (
     Entity,
     EntityIntelligence,
     EntitySyncState,
     database,
 )
-from store.common.storage import StorageService
-from .config import MInsightConfig
+from store.vectorstore_services.vector_stores import get_clip_store, get_dino_store, get_face_store
+
+from .config import FACE_VECTOR_SIZE, MInsightConfig
 from .job_callbacks import JobCallbackHandler
 from .job_service import JobSubmissionService
 from .schemas import EntityVersionSchema
-from store.vectorstore_services.vector_stores import get_clip_store, get_dino_store, get_face_store
-from cl_ml_tools.utils.profiling import timed
 
 if TYPE_CHECKING:
     from cl_client import ComputeClient, SessionManager
@@ -101,15 +103,12 @@ class MediaInsight:
             face_store = get_face_store(
                 url=self.config.qdrant_url,
                 collection_name=self.config.face_collection,
-                vector_size=self.config.face_vector_size,
+                vector_size=FACE_VECTOR_SIZE,
             )
 
             # Initialize Services
             self.job_service = JobSubmissionService(
-                self.compute_client, 
-                self.storage_service,
-                broadcaster=self.broadcaster,
-                db=self.db
+                self.compute_client, self.storage_service, broadcaster=self.broadcaster, db=self.db
             )
 
             self.callback_handler = JobCallbackHandler(
@@ -190,8 +189,12 @@ class MediaInsight:
         session = database.SessionLocal()
         try:
             # Direct query to intelligence table
-            intel = session.query(EntityIntelligence).filter(EntityIntelligence.entity_id == entity_version.id).first()
-            
+            intel = (
+                session.query(EntityIntelligence)
+                .filter(EntityIntelligence.entity_id == entity_version.id)
+                .first()
+            )
+
             if not intel or not intel.intelligence_data:
                 # New image or no intelligence data yet
                 return True
@@ -211,7 +214,7 @@ class MediaInsight:
     @timed
     async def _enqueue_image(self, entity_version: EntityVersionSchema) -> None:
         """Enqueue a qualified image for processing and trigger async jobs.
-        
+
         Args:
             entity_version: Entity version data from Pydantic model
         """
@@ -224,8 +227,7 @@ class MediaInsight:
 
     @timed
     async def _trigger_async_jobs(self, entity_version: EntityVersionSchema) -> None:
-        """Trigger face detection, CLIP, and DINO embedding jobs.
-        """
+        """Trigger face detection, CLIP, and DINO embedding jobs."""
         if not self._initialized or not self.job_service or not self.callback_handler:
             await self.initialize()
             if not self.job_service or not self.callback_handler:
@@ -242,19 +244,25 @@ class MediaInsight:
             if job.status == "completed" and self.callback_handler:
                 await self.callback_handler.handle_face_detection_complete(entity.id, job)
             if self.job_service:
-                self.job_service.update_job_status(entity.id, job.job_id, job.status, job.error_message)
+                self.job_service.update_job_status(
+                    entity.id, job.job_id, job.status, job.error_message
+                )
 
         async def clip_embedding_callback(job: JobResponse) -> None:
             if job.status == "completed" and self.callback_handler:
                 await self.callback_handler.handle_clip_embedding_complete(entity.id, job)
             if self.job_service:
-                self.job_service.update_job_status(entity.id, job.job_id, job.status, job.error_message)
+                self.job_service.update_job_status(
+                    entity.id, job.job_id, job.status, job.error_message
+                )
 
         async def dino_embedding_callback(job: JobResponse) -> None:
             if job.status == "completed" and self.callback_handler:
                 await self.callback_handler.handle_dino_embedding_complete(entity.id, job)
             if self.job_service:
-                self.job_service.update_job_status(entity.id, job.job_id, job.status, job.error_message)
+                self.job_service.update_job_status(
+                    entity.id, job.job_id, job.status, job.error_message
+                )
 
         # Submit jobs
         face_job_id = await self.job_service.submit_face_detection(

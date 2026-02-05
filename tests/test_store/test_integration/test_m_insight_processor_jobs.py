@@ -17,6 +17,7 @@ def mock_db_session():
     mock.query.return_value.filter.return_value.first.return_value = MagicMock()
     return mock
 
+
 @pytest.fixture
 def mock_config():
     return MInsightConfig(
@@ -25,20 +26,28 @@ def mock_config():
         media_storage_dir=Path("/tmp/fake/media"),
         public_key_path=Path("/tmp/fake/keys/public_key.pem"),
         no_auth=True,
-        auth_service_url="http://auth",
-        compute_service_url="http://compute",
+        auth_url="http://auth",
+        compute_url="http://compute",
         compute_username="admin",
         compute_password="password",
         qdrant_url="http://qdrant",
-        mqtt_url="mqtt://localhost:1883"
+        qdrant_collection="clip_embeddings",
+        dino_collection="dino_embeddings",
+        face_collection="face_embeddings",
+        mqtt_url="mqtt://localhost:1883",
+        mqtt_topic="test/processor_jobs",
+        log_level="INFO",
+        store_port=8001,
     )
+
 
 @pytest_asyncio.fixture
 async def processor(mock_config):
-    with patch("store.m_insight.media_insight.version_class"), \
-         patch("store.m_insight.media_insight.database.SessionLocal"), \
-         patch("store.m_insight.media_insight.configure_mappers"):
-
+    with (
+        patch("store.m_insight.media_insight.version_class"),
+        patch("store.m_insight.media_insight.database.SessionLocal"),
+        patch("store.m_insight.media_insight.configure_mappers"),
+    ):
         mock_broadcaster = MagicMock()
         p = MediaInsight(mock_config, broadcaster=mock_broadcaster)
 
@@ -57,45 +66,40 @@ async def processor(mock_config):
         p.callback_handler.handle_clip_embedding_complete = AsyncMock()
         p.callback_handler.handle_dino_embedding_complete = AsyncMock()
 
-
         # Mock db.entity.get to return a valid schema object (or object that can be converted)
         # We need this because JobSubmissionService converts the result to EntitySchema/EntityVersionSchema
         from store.db_service import EntitySchema
-        
+
         def get_entity_side_effect(id):
-             e = MagicMock()
-             e.id = id
-             e.intelligence_data = None
-             e.md5 = "abc"
-             
-             # Match behavior to test cases based on ID
-             if id == 1:
-                 e.file_path = None # Missing file path
-             else:
-                 e.file_path = "test.jpg" # Valid path for others
-                 
-             return e
+            e = MagicMock()
+            e.id = id
+            e.intelligence_data = None
+            e.md5 = "abc"
+
+            # Match behavior to test cases based on ID
+            if id == 1:
+                e.file_path = None  # Missing file path
+            else:
+                e.file_path = "test.jpg"  # Valid path for others
+
+            return e
 
         p.db = MagicMock()
         p.db.entity.get.side_effect = get_entity_side_effect
-        
+
         # Also need to make sure p.job_service.db is the same mock if it uses it
         p.job_service.db = p.db
 
-        p._initialized = True # Skip real init
+        p._initialized = True  # Skip real init
 
         yield p
+
 
 @pytest.mark.asyncio
 async def test_trigger_async_jobs_missing_file_path(processor):
     """Test job triggering when file_path is missing."""
     entity = EntityVersionSchema(
-        id=1,
-        transaction_id=1,
-        file_path=None,
-        type="image",
-        md5="abc",
-        is_deleted=False
+        id=1, transaction_id=1, file_path=None, type="image", md5="abc", is_deleted=False
     )
 
     # We are testing private method _trigger_async_jobs directly for unit testing
@@ -114,12 +118,12 @@ async def test_trigger_async_jobs_file_not_found(processor):
         file_path="nonexistent.jpg",
         type="image",
         md5="abc",
-        is_deleted=False
+        is_deleted=False,
     )
 
     # Mock path existence failure
     with patch("pathlib.Path.exists", return_value=False):
-         await processor._trigger_async_jobs(entity)
+        await processor._trigger_async_jobs(entity)
 
     # JobService handles validation, so it SHOULD be called
     processor.job_service.submit_face_detection.assert_called_once()
@@ -129,12 +133,7 @@ async def test_trigger_async_jobs_file_not_found(processor):
 async def test_trigger_async_jobs_success(processor):
     """Test successful job triggering."""
     entity = EntityVersionSchema(
-        id=3,
-        transaction_id=1,
-        file_path="test.jpg",
-        type="image",
-        md5="abc",
-        is_deleted=False
+        id=3, transaction_id=1, file_path="test.jpg", type="image", md5="abc", is_deleted=False
     )
 
     # Mock path existence success
@@ -146,16 +145,12 @@ async def test_trigger_async_jobs_success(processor):
     processor.job_service.submit_clip_embedding.assert_called_once()
     processor.job_service.submit_dino_embedding.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_processing_callbacks(processor):
     """Test internal callbacks of trigger_async_jobs."""
     entity = EntityVersionSchema(
-        id=4,
-        transaction_id=1,
-        file_path="callback.jpg",
-        type="image",
-        md5="abc",
-        is_deleted=False
+        id=4, transaction_id=1, file_path="callback.jpg", type="image", md5="abc", is_deleted=False
     )
 
     with patch("pathlib.Path.exists", return_value=True):
@@ -167,9 +162,15 @@ async def test_processing_callbacks(processor):
     dino_cb = processor.job_service.submit_dino_embedding.call_args[1]["on_complete_callback"]
 
     # Mock jobs
-    job_face = JobResponse(job_id="f1", status="completed", task_type="face_detection", created_at=0)
-    job_clip = JobResponse(job_id="c1", status="completed", task_type="clip_embedding", created_at=0)
-    job_dino = JobResponse(job_id="d1", status="completed", task_type="dino_embedding", created_at=0)
+    job_face = JobResponse(
+        job_id="f1", status="completed", task_type="face_detection", created_at=0
+    )
+    job_clip = JobResponse(
+        job_id="c1", status="completed", task_type="clip_embedding", created_at=0
+    )
+    job_dino = JobResponse(
+        job_id="d1", status="completed", task_type="dino_embedding", created_at=0
+    )
 
     # Invoke callbacks
     await face_cb(job_face)
