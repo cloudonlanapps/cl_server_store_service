@@ -93,20 +93,20 @@ class TestConfigDBService:
         assert value3 == "value3"
 
 
-class TestAdminConfigAPI:
-    """Test admin configuration API endpoints."""
+class TestAdminPrefAPI:
+    """Test admin preference API endpoints."""
 
-    def test_get_config_requires_admin(self, auth_client, db_session):
-        """Test that getting config requires admin access."""
+    def test_get_pref_requires_admin(self, auth_client, db_session):
+        """Test that getting preference requires admin access."""
         # No auth headers provided, should fail
-        response = auth_client.get("/admin/config")
+        response = auth_client.get("/admin/pref")
         # Should return 401 (no auth)
         assert response.status_code == 401
 
     def test_update_read_auth_requires_admin(self, auth_client, db_session):
         """Test that updating guest mode requires admin access."""
         # No auth headers provided, should fail
-        response = auth_client.put("/admin/config/guest-mode", data={"guest_mode": "false"})
+        response = auth_client.put("/admin/pref/guest-mode", data={"guest_mode": "false"})
         # Should return 401 (no auth)
         assert response.status_code == 401
 

@@ -787,12 +787,12 @@ curl http://localhost:8001/compute/capabilities
 
 ### Admin Endpoints (Require Valid Token + Write Permission)
 
-#### 10. Get Configuration
+#### 10. Get Preferences
 ```
-GET /admin/config
+GET /admin/pref
 ```
 
-Returns current service configuration.
+Returns current service preferences.
 
 **Response (200):**
 ```json
@@ -810,14 +810,14 @@ Returns current service configuration.
 
 **Example:**
 ```bash
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/admin/config
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/admin/pref
 ```
 
 ---
 
 #### 11. Update Read Authentication Config
 ```
-PUT /admin/config/read-auth
+PUT /admin/pref/read-auth
 ```
 
 **Request Body (JSON):**
@@ -827,14 +827,23 @@ PUT /admin/config/read-auth
 }
 ```
 
-**Response (200):**
-```json
-{
-  "read_auth_enabled": true,
-  "updated_at": 1704070800000,
-  "updated_by": "admin"
-}
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/admin/pref
 ```
+
+---
+
+#### 11. Update Guest Mode
+```
+PUT /admin/pref/guest-mode
+```
+
+Updates whether authentication is required for read operations.
+
+**Request Body (multipart/form-data):**
+- `guest_mode`: boolean string ("true" or "false")
+
+**Response (200):**
+Returns updated preferences.
 
 **Status Codes:**
 - `200 OK` - Configuration updated
@@ -843,10 +852,9 @@ PUT /admin/config/read-auth
 
 **Example:**
 ```bash
-curl -X PUT http://localhost:8001/admin/config/read-auth \
+curl -X PUT http://localhost:8001/admin/pref/guest-mode \
   -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": true}'
+  -F "guest_mode=false"
 ```
 
 ---
