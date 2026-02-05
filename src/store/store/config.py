@@ -55,6 +55,12 @@ class StoreConfig(BaseConfig):
         parser.add_argument(
             "--dino-collection", default="dino_embeddings", help="Qdrant collection for DINOv2 embeddings"
         )
+        parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+        parser.add_argument(
+            "--log-level",
+            default="info",
+            choices=["critical", "error", "warning", "info", "debug", "trace"],
+        )
 
         # Parse arguments - ignoring unknown args to be safe when running under reloaders/tests
         args, _ = parser.parse_known_args()

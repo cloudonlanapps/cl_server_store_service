@@ -37,8 +37,7 @@ async def lifespan(app: FastAPI):
         app.state.broadcaster = get_broadcaster(url=config.mqtt_url)
         logger.info(f"MQTT Broadcaster initialized (url={config.mqtt_url})")
     else:
-        app.state.broadcaster = get_broadcaster(broadcast_type="none")
-        logger.warning("MQTT Broadcaster initialized as No-Op due to missing config")
+        raise Exception("MQTT Broadcaster not initialized")
 
     # Initialize MInsight Monitor
     monitor = MInsightMonitor(config)
@@ -50,6 +49,7 @@ async def lifespan(app: FastAPI):
     try:
         yield  # ---- application runs here ----
     finally:
+        print("Finally")
         # -------- Shutdown --------
         monitor = cast(MInsightMonitor, getattr(app.state, "monitor", None))
         if monitor:
