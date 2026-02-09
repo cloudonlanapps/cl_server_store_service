@@ -192,7 +192,8 @@ GET /
 {
   "status": "healthy",
   "service": "CoLAN Store Server",
-  "version": "v1"
+  "version": "v1",
+  "guestMode": "on"
 }
 ```
 
@@ -520,16 +521,17 @@ All fields are optional. Only provided fields will be updated.
 ```bash
 curl -X PATCH http://localhost:8001/entities/2 \
   -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"label": "Patched Label"}'
+  -F "label=Patched Label"
 ```
 
 ---
 
-#### 8. Delete Entity
+#### 8. Delete Entity (Hard Delete)
 ```
 DELETE /entities/{entity_id}
 ```
+
+**Note:** The entity **MUST** be soft-deleted first (using PATCH with `is_deleted=true`) before it can be hard deleted. Hard deletion permanently removes the entity, its files, faces, and embeddings.
 
 **Response (204):**
 No content returned on success
@@ -566,6 +568,27 @@ No content returned on success
 **Example:**
 ```bash
 curl -X DELETE http://localhost:8001/entities/collection \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+#### 10. Delete Face
+```
+DELETE /faces/{face_id}
+```
+
+Deletes a face record, its vector embedding, and cropped image file.
+
+**Status Codes:**
+- `204 No Content` - Face deleted successfully
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - User lacks write permission
+- `404 Not Found` - Face does not exist
+
+**Example:**
+```bash
+curl -X DELETE http://localhost:8001/faces/1 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -753,6 +776,65 @@ curl -X DELETE "http://localhost:8001/admin/compute/jobs/cleanup?days=30" \
 
 ---
 
+#### Admin: System Audit
+```
+GET /system/audit
+```
+
+Generate a comprehensive audit report of data integrity issues (orphaned files, vectors, records).
+
+**Response (200):**
+```json
+{
+  "orphaned_files": [],
+  "orphaned_faces": [],
+  "orphaned_vectors": [],
+  "orphaned_mqtt": []
+}
+```
+
+**Status Codes:**
+- `200 OK` - Audit completed
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - User lacks admin permission
+
+**Example:**
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/system/audit
+```
+
+---
+
+#### Admin: Clear Orphans
+```
+POST /system/clear-orphans
+```
+
+Remove all orphaned resources identified by the audit system.
+
+**Response (200):**
+```json
+{
+  "files_deleted": 12,
+  "faces_deleted": 0,
+  "vectors_deleted": 5,
+  "mqtt_cleared": 2
+}
+```
+
+**Status Codes:**
+- `200 OK` - Cleanup completed
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - User lacks admin permission
+
+**Example:**
+```bash
+curl -X POST http://localhost:8001/system/clear-orphans \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
 #### Job: Get Worker Capabilities
 ```
 GET /compute/capabilities
@@ -810,23 +892,6 @@ Returns current service preferences.
 
 **Example:**
 ```bash
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/admin/pref
-```
-
----
-
-#### 11. Update Read Authentication Config
-```
-PUT /admin/pref/read-auth
-```
-
-**Request Body (JSON):**
-```json
-{
-  "enabled": true
-}
-```
-
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/admin/pref
 ```
 
