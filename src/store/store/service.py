@@ -57,7 +57,6 @@ class EntityService:
         """
         self.db: Session = db
         self.config: StoreConfig = config
-        # Use media_storage_dir from config for entity files (organized by date)
         self.file_storage: StorageService = StorageService(base_dir=str(config.media_storage_dir))
         # Initialize metadata extractor
         self.metadata_extractor: MediaMetadataExtractor = MediaMetadataExtractor()
@@ -66,6 +65,26 @@ class EntityService:
         self.clip_store: QdrantVectorStore | None = clip_store
         self.dino_store: QdrantVectorStore | None = dino_store
         self.broadcaster: MInsightBroadcaster | None = broadcaster
+
+    def get_media_path(self, entity: EntitySchema) -> str | None:
+        """Get absolute path to the media file."""
+        if not entity.file_path:
+            return None
+        return str(self.file_storage.get_absolute_path(entity.file_path))
+
+    def get_stream_path(self, entity: EntitySchema, filename: str = "adaptive.m3u8") -> str | None:
+        """Get absolute path to a stream file."""
+        if not entity.mime_type:
+            return None
+            
+        # Structure matches media_repo: streams/mime/type/media_{id}/filename
+        # e.g. streams/video/mp4/media_123/adaptive.m3u8
+        # We assume stream_storage_dir is set in config
+        stream_dir = self.config.stream_storage_dir
+        if not stream_dir:
+            return None
+            
+        return str(stream_dir / entity.mime_type / f"media_{entity.id}" / filename)
 
     @staticmethod
     def _now_timestamp() -> int:
@@ -236,62 +255,99 @@ class EntityService:
         filter_param: str | None = None,
         search_query: str | None = None,
         exclude_deleted: bool = False,
+        # New filters
+        md5: str | None = None,
+        mime_type: str | None = None,
+        type_: str | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        file_size_min: int | None = None,
+        file_size_max: int | None = None,
+        date_from: int | None = None,
+        date_to: int | None = None,
     ) -> tuple[list[EntitySchema], int]:
         """
-        Retrieve all entities with optional pagination and versioning.
+        Retrieve all entities with optional pagination, versioning, and filtering.
 
         Args:
             page: Page number (1-indexed)
             page_size: Number of items per page
             version: Optional version number to retrieve for all entities
-            filter_param: Optional filter string (not implemented yet)
-            search_query: Optional search query (not implemented yet)
-            exclude_deleted: Whether to exclude soft-deleted entities (default: False)
+            filter_param: Optional filter string
+            search_query: Optional search query
+            exclude_deleted: Whether to exclude soft-deleted entities
+            md5: Filter by MD5
+            mime_type: Filter by MIME type
+            type_: Filter by media type (image, video)
+            width: Filter by exact width
+            height: Filter by exact height
+            file_size_min: Filter by min file size
+            file_size_max: Filter by max file size
+            date_from: Filter by added date from (timestamp ms)
+            date_to: Filter by added date to (timestamp ms)
 
         Returns:
             Tuple of (items, total_count)
         """
-        _ = filter_param
-        _ = search_query
-        # Query entities directly (JSON status is already on the entity)
         query = self.db.query(Entity)
 
-        # Apply deleted filter
         if exclude_deleted:
             query = query.filter(Entity.is_deleted == False)  # noqa: E712
 
-        # Apply search query filter if provided
         if search_query:
-            search_pattern = f"%{search_query}%"
-            query = query.filter(
-                (Entity.label.ilike(search_pattern)) | (Entity.description.ilike(search_pattern))
-            )
+            search = f"%{search_query}%"
+            query = query.filter(Entity.label.ilike(search))
 
-        # TODO: Implement complex filtering logic if needed
+        # Apply specific filters
+        if md5:
+            query = query.filter(Entity.md5 == md5)
+        
+        if mime_type:
+            query = query.filter(Entity.mime_type == mime_type)
 
-        # Get total count before pagination
-        total_count = query.count()
+        if type_:
+            query = query.filter(Entity.type == type_)
+
+        if width is not None:
+            query = query.filter(Entity.width == width)
+
+        if height is not None:
+            query = query.filter(Entity.height == height)
+
+        if file_size_min is not None:
+            query = query.filter(Entity.file_size >= file_size_min)
+
+        if file_size_max is not None:
+            query = query.filter(Entity.file_size <= file_size_max)
+
+        if date_from is not None:
+            query = query.filter(Entity.added_date >= date_from)
+            
+        if date_to is not None:
+            query = query.filter(Entity.added_date <= date_to)
+
+        # Count total before pagination
+        total_items = query.count()
 
         # Apply pagination
         offset = (page - 1) * page_size
-        query = query.order_by(Entity.id.asc()).offset(offset).limit(page_size)
-
+        query = query.order_by(Entity.added_date.desc()).offset(offset).limit(page_size)
         results = query.all()
 
-        # If version is specified, get that version of each entity
+        # Hande versioning if requested
         if version is not None:
             items_list: list[EntitySchema] = []
             for entity in results:
                 versioned_item = self.get_entity_version(entity.id, version)
                 if versioned_item:  # Only include if version exists
                     items_list.append(versioned_item)
-            return items_list, total_count
+            return items_list, total_items
 
         items: list[EntitySchema] = []
         for entity in results:
             items.append(self._entity_to_item(entity))
 
-        return items, total_count
+        return items, total_items
 
     def get_entity_by_id(self, entity_id: int, version: int | None = None) -> EntitySchema | None:
         """

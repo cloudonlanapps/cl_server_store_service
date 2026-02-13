@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import time
 from typing import Any, cast
 
@@ -19,6 +20,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import FileResponse
 from loguru import logger
 from pydantic import BaseModel
 
@@ -70,6 +72,16 @@ async def get_entities(
     exclude_deleted: bool = Query(
         False, title="Exclude Deleted", description="Whether to exclude soft-deleted entities"
     ),
+    # New filters
+    md5: str | None = Query(None, description="Filter by MD5"),
+    mime_type: str | None = Query(None, description="Filter by MIME type"),
+    type: str | None = Query(None, description="Filter by media type (image, video)"),
+    width: int | None = Query(None, description="Filter by exact width"),
+    height: int | None = Query(None, description="Filter by exact height"),
+    file_size_min: int | None = Query(None, description="Filter by min file size"),
+    file_size_max: int | None = Query(None, description="Filter by max file size"),
+    date_from: int | None = Query(None, description="Filter by added date from (timestamp ms)"),
+    date_to: int | None = Query(None, description="Filter by added date to (timestamp ms)"),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: EntityService = Depends(get_entity_service),
 ) -> db_schemas.PaginatedResponse:
@@ -84,6 +96,15 @@ async def get_entities(
         filter_param=filter_param,
         search_query=search_query,
         exclude_deleted=exclude_deleted,
+        md5=md5,
+        mime_type=mime_type,
+        type_=type,
+        width=width,
+        height=height,
+        file_size_min=file_size_min,
+        file_size_max=file_size_max,
+        date_from=date_from,
+        date_to=date_to,
     )
 
     # Calculate pagination metadata
@@ -493,7 +514,142 @@ async def get_m_insight_status(
     """Get MInsight process status."""
     if monitor:
         return monitor.get_status()
+    if monitor:
+        return monitor.get_status()
     return None
+
+
+# ============================================================================
+# Multimedia Endpoints
+# ============================================================================
+
+
+@router.get(
+    "/entities/{entity_id}/media",
+    tags=["entity"],
+    summary="Download Media",
+    description="Download the original media file.",
+    operation_id="download_media",
+    response_class=FileResponse,
+)
+async def download_media(
+    entity_id: int = Path(..., title="Entity Id"),
+    service: EntityService = Depends(get_entity_service),
+):
+    entity = service.get_entity_by_id(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    if entity.is_collection:
+        raise HTTPException(status_code=400, detail="Entity is a collection")
+
+    path = service.get_media_path(entity)
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Media file not found")
+
+    return FileResponse(
+        path=path, 
+        media_type=entity.mime_type, 
+        filename=f"{entity.md5}{entity.extension}"
+    )
+
+
+@router.get(
+    "/entities/{entity_id}/preview",
+    tags=["entity"],
+    summary="Download Preview",
+    description="Download the preview image.",
+    operation_id="download_preview",
+    response_class=FileResponse,
+)
+async def download_preview(
+    entity_id: int = Path(..., title="Entity Id"),
+    service: EntityService = Depends(get_entity_service),
+):
+    entity = service.get_entity_by_id(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    if entity.is_collection:
+        raise HTTPException(status_code=400, detail="Entity is a collection")
+
+    # Preview path logic (assumes .tn.jpeg convention from media_repo)
+    media_path = service.get_media_path(entity)
+    if not media_path:
+        raise HTTPException(status_code=404, detail="Media file not found")
+        
+    preview_path = f"{media_path}.tn.jpeg"
+    if not os.path.exists(preview_path):
+        # Fallback to media file if it is an image? Or raise 404?
+        # media_repo returns 404 if preview missing
+        raise HTTPException(status_code=404, detail="Preview file not found")
+
+    return FileResponse(
+        path=preview_path, 
+        media_type="image/jpeg",
+        filename=f"{entity.md5}.tn.jpeg"
+    )
+
+
+@router.get(
+    "/entities/{entity_id}/stream/adaptive.m3u8",
+    tags=["entity"],
+    summary="Get HLS Manifest",
+    description="Get the adaptive HLS manifest.",
+    operation_id="get_hls_manifest",
+    response_class=FileResponse,
+)
+async def get_hls_manifest(
+    entity_id: int = Path(..., title="Entity Id"),
+    service: EntityService = Depends(get_entity_service),
+):
+    entity = service.get_entity_by_id(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+        
+    if entity.is_collection:
+        raise HTTPException(status_code=400, detail="Entity is a collection")
+        
+    stream_path = service.get_stream_path(entity, "adaptive.m3u8")
+    if not stream_path or not os.path.exists(stream_path):
+        raise HTTPException(status_code=404, detail="Stream not found")
+        
+    return FileResponse(
+        path=stream_path,
+        media_type="application/vnd.apple.mpegurl",
+        filename="adaptive.m3u8"
+    )
+
+
+@router.get(
+    "/entities/{entity_id}/stream/{filename}",
+    tags=["entity"],
+    summary="Get Stream Segment",
+    description="Get a segment or key file for HLS streaming.",
+    operation_id="get_stream_segment",
+    response_class=FileResponse,
+)
+async def get_stream_segment(
+    entity_id: int = Path(..., title="Entity Id"),
+    filename: str = Path(..., title="Filename"),
+    service: EntityService = Depends(get_entity_service),
+):
+    entity = service.get_entity_by_id(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+        
+    if entity.is_collection:
+        raise HTTPException(status_code=400, detail="Entity is a collection")
+
+    # Security check: filename should not be a path
+    if "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    stream_path = service.get_stream_path(entity, filename)
+    if not stream_path or not os.path.exists(stream_path):
+        raise HTTPException(status_code=404, detail="Stream file not found")
+        
+    return FileResponse(path=stream_path)
 
 
 # ============================================================================

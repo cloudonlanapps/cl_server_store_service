@@ -1,5 +1,6 @@
 from __future__ import annotations
 from argparse import ArgumentParser
+from pathlib import Path
 from typing import ClassVar
 
 from ..common import utils
@@ -19,6 +20,12 @@ class StoreConfig(BaseConfig):
     reload: bool
     log_level: str
     no_migrate: bool
+
+    # Calculated Fields
+    cl_server_dir: Path
+    media_storage_dir: Path
+    stream_storage_dir: Path
+    public_key_path: Path
 
     @classmethod
     def get_config(cls) -> StoreConfig:
@@ -78,6 +85,7 @@ class StoreConfig(BaseConfig):
         config_dict = vars(args).copy()
         config_dict["cl_server_dir"] = cl_dir
         config_dict["media_storage_dir"] = cl_dir / "media"
+        config_dict["stream_storage_dir"] = cl_dir / "media" / "streams"
         config_dict["public_key_path"] = cl_dir / "keys" / "public_key.pem"
         
         # Ensure no_auth is present even if not in args (though it should be from store_true)
