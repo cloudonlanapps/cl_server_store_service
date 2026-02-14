@@ -265,6 +265,8 @@ class EntityService:
         file_size_max: int | None = None,
         date_from: int | None = None,
         date_to: int | None = None,
+        parent_id: int | None = None,
+        is_collection: bool | None = None,
     ) -> tuple[list[EntitySchema], int]:
         """
         Retrieve all entities with optional pagination, versioning, and filtering.
@@ -285,6 +287,8 @@ class EntityService:
             file_size_max: Filter by max file size
             date_from: Filter by added date from (timestamp ms)
             date_to: Filter by added date to (timestamp ms)
+            parent_id: Filter by parent collection ID (0 = root-level items)
+            is_collection: Filter by collection (true) vs media item (false)
 
         Returns:
             Tuple of (items, total_count)
@@ -326,6 +330,16 @@ class EntityService:
         if date_to is not None:
             query = query.filter(Entity.added_date <= date_to)
 
+        if parent_id is not None:
+            if parent_id == 0:
+                # Special value: root-level items (no parent)
+                query = query.filter(Entity.parent_id == None)  # noqa: E711
+            else:
+                query = query.filter(Entity.parent_id == parent_id)
+
+        if is_collection is not None:
+            query = query.filter(Entity.is_collection == is_collection)
+
         # Count total before pagination
         total_items = query.count()
 
@@ -348,6 +362,47 @@ class EntityService:
             items.append(self._entity_to_item(entity))
 
         return items, total_items
+
+    def lookup_entity(
+        self,
+        md5: str | None = None,
+        label: str | None = None,
+    ) -> EntitySchema | None:
+        """Lookup a single entity by MD5 (media) or label (collection).
+
+        Args:
+            md5: MD5 to lookup (implies is_collection=false)
+            label: Label to lookup (implies is_collection=true)
+
+        Returns:
+            EntitySchema if found, None otherwise
+
+        Raises:
+            HTTPException(409) if multiple matches found (data integrity issue)
+        """
+        query = self.db.query(Entity)
+        query = query.filter(Entity.is_deleted == False)  # noqa: E712
+
+        if md5:
+            query = query.filter(Entity.md5 == md5)
+            query = query.filter(Entity.is_collection == False)  # noqa: E712
+        elif label:
+            query = query.filter(Entity.label == label)
+            query = query.filter(Entity.is_collection == True)  # noqa: E712
+
+        results = query.all()
+
+        if not results:
+            return None
+
+        if len(results) > 1:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=409,
+                detail=f"Multiple matches found ({len(results)} entities). Data integrity issue.",
+            )
+
+        return self._entity_to_item(results[0])
 
     def get_entity_by_id(self, entity_id: int, version: int | None = None) -> EntitySchema | None:
         """

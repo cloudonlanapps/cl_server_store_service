@@ -82,6 +82,8 @@ async def get_entities(
     file_size_max: int | None = Query(None, description="Filter by max file size"),
     date_from: int | None = Query(None, description="Filter by added date from (timestamp ms)"),
     date_to: int | None = Query(None, description="Filter by added date to (timestamp ms)"),
+    parent_id: int | None = Query(None, description="Filter by parent collection ID (0 = root-level items)"),
+    is_collection: bool | None = Query(None, description="Filter by collection (true) vs media item (false)"),
     user: UserPayload | None = Depends(require_permission("media_store_read")),
     service: EntityService = Depends(get_entity_service),
 ) -> db_schemas.PaginatedResponse:
@@ -105,6 +107,8 @@ async def get_entities(
         file_size_max=file_size_max,
         date_from=date_from,
         date_to=date_to,
+        parent_id=parent_id,
+        is_collection=is_collection,
     )
 
     # Calculate pagination metadata
@@ -123,6 +127,45 @@ async def get_entities(
     )
 
     return db_schemas.PaginatedResponse(items=items, pagination=pagination)
+
+
+@router.get(
+    "/entities/lookup",
+    tags=["entity"],
+    summary="Lookup Entity",
+    description="Find entity by MD5 (media) or label (collection). Returns first match.",
+    operation_id="lookup_entity",
+    responses={
+        200: {"model": db_schemas.EntitySchema, "description": "Entity found"},
+        400: {"description": "Must provide either md5 or label"},
+        404: {"description": "No matching entity found"},
+        409: {"description": "Multiple matches found (data integrity issue)"},
+    },
+)
+async def lookup_entity(
+    md5: str | None = Query(None, description="MD5 to lookup (searches media items)"),
+    label: str | None = Query(None, description="Label to lookup (searches collections)"),
+    user: UserPayload | None = Depends(require_permission("media_store_read")),
+    service: EntityService = Depends(get_entity_service),
+) -> db_schemas.EntitySchema:
+    """Lookup entity by MD5 (media) or label (collection)."""
+    _ = user
+
+    if not md5 and not label:
+        raise HTTPException(
+            status_code=400,
+            detail="Must provide either md5 or label parameter",
+        )
+
+    result = service.lookup_entity(md5=md5, label=label)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No matching entity found",
+        )
+
+    return result
 
 
 @router.post(
