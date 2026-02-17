@@ -35,6 +35,8 @@ class EntitySchema(BaseModel):
     label: str | None = None
     description: str | None = None
     parent_id: int | None = None
+    children_count: int = 0
+
 
     added_date: int | None = None
     updated_date: int | None = None

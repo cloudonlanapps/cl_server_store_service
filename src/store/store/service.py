@@ -4,8 +4,10 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 
 from loguru import logger
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
 
 from store.db_service import EntitySchema
 from store.db_service.db_internals import Entity
@@ -211,16 +213,18 @@ class EntityService:
 
         return False
 
-    def _entity_to_item(self, entity: Entity) -> EntitySchema:
+    def _entity_to_item(self, entity: Entity, children_count: int = 0) -> EntitySchema:
         """
         Convert SQLAlchemy Entity to Pydantic Item schema.
 
         Args:
             entity: SQLAlchemy Entity instance (or version object from SQLAlchemy-Continuum)
+            children_count: Number of children (only relevant for collections)
 
         Returns:
             Pydantic EntitySchema instance
         """
+
 
 
         return EntitySchema(
@@ -245,7 +249,9 @@ class EntityService:
             file_path=entity.file_path,
             is_deleted=entity.is_deleted,
             is_indirectly_deleted=self._check_ancestor_deleted(entity),
+            children_count=children_count,
         )
+
 
     def get_entities(
         self,
@@ -357,11 +363,27 @@ class EntityService:
                     items_list.append(versioned_item)
             return items_list, total_items
 
+        # Get children counts for the results
+        entity_ids = [e.id for e in results]
+        counts = {}
+        if entity_ids:
+            count_query = self.db.query(
+                Entity.parent_id, func.count(Entity.id)
+            ).filter(
+                Entity.parent_id.in_(entity_ids)
+            )
+            if exclude_deleted:
+                count_query = count_query.filter(Entity.is_deleted == False)
+            
+            # Execute and convert to dict {parent_id: count}
+            counts = dict(count_query.group_by(Entity.parent_id).all())
+
         items: list[EntitySchema] = []
         for entity in results:
-            items.append(self._entity_to_item(entity))
+            items.append(self._entity_to_item(entity, children_count=counts.get(entity.id, 0)))
 
         return items, total_items
+
 
     def lookup_entity(
         self,
@@ -425,8 +447,10 @@ class EntityService:
         )
 
         if result:
-            return self._entity_to_item(result)
+            children_count = self.db.query(Entity).filter(Entity.parent_id == entity_id, Entity.is_deleted == False).count()
+            return self._entity_to_item(result, children_count=children_count)
         return None
+
 
     def get_entity_version(self, entity_id: int, version: int) -> EntitySchema | None:
         """
