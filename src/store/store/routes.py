@@ -184,6 +184,7 @@ async def create_entity(
     label: str | None = Form(None, title="Label"),
     description: str | None = Form(None, title="Description"),
     parent_id: int | None = Form(None, title="Parent Id"),
+    image: UploadFile | None = File(None, title="Image"),
     media_file: UploadFile | None = File(None, title="Media File"),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
@@ -195,12 +196,16 @@ async def create_entity(
     user_id = user.id if user else None
 
     # Read file bytes and filename if provided
-
     file_bytes = None
     filename = "file"
-    if media_file:
-        file_bytes = await media_file.read()
-        filename = media_file.filename or "file"
+    
+    # Support both image (legacy) and media_file (new) parameters
+    # If both are provided, media_file takes precedence
+    upload = media_file or image
+    
+    if upload:
+        file_bytes = await upload.read()
+        filename = upload.filename or "file"
 
     try:
         item, is_duplicate = service.create_entity(
@@ -208,7 +213,7 @@ async def create_entity(
             label=label,
             description=description,
             parent_id=parent_id,
-            media_file=file_bytes,
+            image=file_bytes,
             filename=filename,
             user_id=user_id
         )
