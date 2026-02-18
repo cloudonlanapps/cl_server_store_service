@@ -723,6 +723,31 @@ async def get_stream_segment(
     return FileResponse(path=stream_path)
 
 
+@router.delete(
+    "/entities/{entity_id}/stream",
+    tags=["entity"],
+    summary="Remove HLS Stream",
+    description="Deletes HLS assets from disk and resets the streaming status.",
+    operation_id="delete_hls_stream",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        204: {"description": "Stream successfully removed"},
+        404: {"description": "Entity not found"},
+    },
+)
+async def delete_hls_stream(
+    entity_id: int = Path(..., title="Entity Id"),
+    user: UserPayload | None = Depends(require_permission("media_store_write")),
+    service: EntityService = Depends(get_entity_service),
+):
+    """Remove HLS stream for an entity."""
+    _ = user
+    success = await service.remove_hls_stream(entity_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # ============================================================================
 # Deletion & Audit Endpoints (DEL-01 to DEL-10)
 # ============================================================================

@@ -111,87 +111,81 @@ class EntityService:
             logger.error(f"Cannot ensure HLS stream for entity {entity_id}: not found or is collection")
             return "failed"
 
-        async def check_status() -> str:
-            # 1. Check if manifest exists (best indicator)
-            manifest_path = self.get_stream_path(entity)
-            if manifest_path and os.path.exists(manifest_path):
-                return "ready"
+        # 1. Check if manifest exists (best indicator)
+        manifest_path = self.get_stream_path(entity)
+        if manifest_path and os.path.exists(manifest_path):
+            return "ready"
 
-            # 2. Check current status in DB
-            db_entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
-            if not db_entity:
-                return "failed"
+        if not self.job_service:
+            logger.error("JobSubmissionService not available in EntityService")
+            return "failed"
 
-            status = "none"
-            if db_entity.intelligence_rel and db_entity.intelligence_rel.intelligence_data:
-                intel_data = cast(dict[str, Any], db_entity.intelligence_rel.intelligence_data)
-                inf_status = cast(dict[str, Any], intel_data.get("inference_status", {}))
-                status = str(inf_status.get("hls_streaming", "none"))
+        # 2. Submit job using unified logic
+        input_path = self.get_media_path(entity)
+        stream_dir = self.config.stream_storage_dir
+        if not stream_dir or not input_path:
+            logger.error(f"Cannot trigger HLS job: input/output path invalid for entity {entity_id}")
+            return "failed"
 
-            if status == "available":
-                return "ready"
+        output_path = str(stream_dir / (entity.mime_type or "unknown") / f"media_{entity.id}")
 
-            if status in ("pending", "running"):
-                return "processing"
+        # The JobSubmissionService handles the logic of "should I skip?" internally
+        job_id = await self.job_service.submit_hls_streaming(
+            entity=entity,
+            input_absolute_path=input_path,
+            output_absolute_path=output_path,
+            priority=1,
+        )
 
-            if status == "failed":
-                return "failed"
+        if job_id == "ready":
+            return "ready"
 
-            return "none"
+        status = "processing" if job_id else "failed"
 
-        status = await check_status()
-
-        # 3. Submit job if needed
-        if status == "none":
-            if self.job_service:
-                input_path = self.get_media_path(entity)
-                stream_dir = self.config.stream_storage_dir
-                if not stream_dir:
-                    logger.error("stream_storage_dir not configured in StoreConfig")
-                    return "failed"
-
-                # Output path is the directory where manifest will be stored
-                mime_part = entity.mime_type or "unknown"
-                output_path = str(stream_dir / mime_part / f"media_{entity.id}")
-
-                if input_path:
-                    logger.info(f"Triggering HLS streaming job for entity {entity_id}")
-                    job_id = await self.job_service.submit_hls_streaming(
-                        entity=entity,
-                        input_absolute_path=input_path,
-                        output_absolute_path=output_path,
-                        priority=1,
-                    )
-                    if job_id:
-                        status = "processing"
-                    else:
-                        status = "failed"
-                else:
-                    logger.error(f"Cannot trigger HLS job: input_path is None for entity {entity_id}")
-                    status = "failed"
-            else:
-                logger.error("JobSubmissionService not available in EntityService")
-                status = "failed"
-
-        # 4. Wait if requested
+        # 3. Wait if requested
         if wait and status == "processing":
             logger.info(f"Waiting for HLS stream readiness for entity {entity_id}...")
             import asyncio
             import time
             start_time = time.time()
-            timeout = 30.0 # 30 seconds max
+            timeout = 30.0  # 30 seconds max
             while (time.time() - start_time) < timeout:
                 await asyncio.sleep(1.0)
-                status = await check_status()
-                if status == "ready":
+                if manifest_path and os.path.exists(manifest_path):
                     logger.info(f"HLS stream ready after waiting for entity {entity_id}")
                     return "ready"
-                if status == "failed":
-                    return "failed"
-            
+
             logger.warning(f"Timeout waiting for HLS stream for entity {entity_id}")
 
         return status
+
+    async def remove_hls_stream(self, entity_id: int) -> bool:
+        """
+        Remove HLS stream for the given entity.
+        Deletes files from disk and resets intelligence status via JobSubmissionService.
+        """
+        entity = self.get_entity_by_id(entity_id)
+        if not entity:
+            return False
+
+        # 1. Delete from storage
+        stream_dir = self.config.stream_storage_dir
+        if stream_dir:
+            mime_part = entity.mime_type or "unknown"
+            entity_stream_dir = stream_dir / mime_part / f"media_{entity.id}"
+            if entity_stream_dir.exists():
+                import shutil
+                try:
+                    shutil.rmtree(entity_stream_dir)
+                    logger.info(f"Deleted HLS stream directory: {entity_stream_dir}")
+                except Exception as e:
+                    logger.error(f"Failed to delete HLS directory {entity_stream_dir}: {e}")
+
+        # 2. Reset intelligence status in DB and broadcast via JobSubmissionService
+        if self.job_service:
+            self.job_service.reset_task_status(entity_id, "hls_streaming")
+
+        return True
 
     @staticmethod
     def _now_timestamp() -> int:

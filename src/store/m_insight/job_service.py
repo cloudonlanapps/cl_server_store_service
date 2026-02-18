@@ -308,6 +308,7 @@ class JobSubmissionService:
         # Now atomically update to add the job
         def add_job(data: EntityIntelligenceData):
             """Add job to active_jobs."""
+            # Track current MD5 to prevent race conditions if file changes during processing
             data.active_processing_md5 = db_entity.md5
             data.overall_status = "processing"
 
@@ -320,12 +321,14 @@ class JobSubmissionService:
             elif task_type == "hls_streaming":
                 data.inference_status.hls_streaming = "processing"
 
-            data.active_jobs.append(JobInfo(
-                job_id=job_id,
-                task_type=task_type,
-                started_at=now,
-                status="queued"
-            ))
+            # Check if this job is already in active_jobs (to avoid duplicates if called twice rapidly)
+            if not any(j.job_id == job_id for j in data.active_jobs):
+                data.active_jobs.append(JobInfo(
+                    job_id=job_id,
+                    task_type=task_type,
+                    started_at=now,
+                    status="queued"
+                ))
             data.last_updated = now
 
         _ = self.db.intelligence.atomic_update_intelligence_data(entity.id, add_job)
@@ -399,6 +402,67 @@ class JobSubmissionService:
             face_embeddings=data.inference_status.face_embeddings,
         )
 
+    def _should_skip_submission_locked(
+        self,
+        entity: EntitySchema | EntityVersionSchema,
+        task_type: str,
+    ) -> str | None:
+        """Centralized check to see if a job should be skipped.
+        
+        Must be called with entity lock held.
+        
+        Returns:
+            Job ID if an active job already exists.
+            'ready' if the task is already completed for the current MD5.
+            None if submission should proceed.
+        """
+        entity_id = entity.id
+        intel_data = self.db.intelligence.get_intelligence_data(entity_id)
+        
+        if not intel_data:
+            return None
+
+        # 1. Check current status for this task type
+        # Special handling for face_embedding as it's a list of statuses
+        if task_type == "face_embedding":
+            # If there are any face embeddings, and all are completed/failed, consider it done
+            if intel_data.inference_status.face_embeddings and \
+               all(s in ("completed", "failed") for s in intel_data.inference_status.face_embeddings):
+                if intel_data.last_processed_md5 == entity.md5:
+                    logger.info(f"{task_type} already completed for MD5 {entity.md5}, skipping.")
+                    return "ready"
+            # If any face embedding is still processing, consider it active
+            if intel_data.inference_status.face_embeddings and \
+               any(s in ("pending", "processing", "running") for s in intel_data.inference_status.face_embeddings):
+                for job in intel_data.active_jobs:
+                    if job.task_type == task_type:
+                        logger.info(f"{task_type} job already active for entity {entity_id}: {job.job_id}")
+                        return job.job_id
+            # If no face embeddings, or all are terminal but MD5 changed, proceed
+            return None
+        
+        status = getattr(intel_data.inference_status, task_type, None)
+        
+        # Mapping statuses that count as "already being handled"
+        if status in ("pending", "processing", "running", "available"):
+            # Check if there is an actual active job
+            for job in intel_data.active_jobs:
+                if job.task_type == task_type:
+                    logger.info(f"{task_type} job already active for entity {entity_id}: {job.job_id}")
+                    return job.job_id
+            
+            # Special case for available status: it means work is done enough for consumption
+            if status == "available":
+                logger.debug(f"{task_type} already available/ready for entity {entity_id}")
+                return "ready"
+
+        # 2. Check if already completed for same MD5
+        if status == "completed" and intel_data.last_processed_md5 == entity.md5:
+            logger.info(f"{task_type} already completed for MD5 {entity.md5}, skipping.")
+            return "ready"
+
+        return None
+
     def broadcast_entity_status(self, entity_id: int) -> None:
         """Public method to force a status broadcast for an entity."""
         if not self.broadcaster:
@@ -426,47 +490,52 @@ class JobSubmissionService:
             Job ID if successful, None if failed
         """
 
-        try:
-            if not entity.file_path:
-                logger.warning(f"Entity {entity.id} has no file_path")
-                return None
+        entity_id = entity.id
+        lock = self._get_entity_lock(entity_id)
 
-            file_path = self.storage_service.get_absolute_path(entity.file_path)
+        with lock:
+            skip_id = self._should_skip_submission_locked(entity, "face_detection")
+            if skip_id:
+                return skip_id
 
-            if not file_path.exists():
-                logger.warning(f"File not found for entity {entity.id}: {file_path}")
-                return None
-
-            # Wrap callback to ensure it only executes once (prevents race condition)
-            wrapped_callback, callback_lock = make_once_only_callback(on_complete_callback)
-
-            job_response = await self.compute_client.face_detection.detect(
-                image=file_path,
-                wait=False,
-                on_complete=wrapped_callback,
-            )
-
-            self._register_job(entity, job_response.job_id, "face_detection")
-            logger.info(f"Submitted face_detection job {job_response.job_id} for entity {entity.id}")
-
-            self.broadcast_entity_status(entity.id)
-
-            # RACE CONDITION FIX: Check if job already completed (for very fast jobs)
             try:
-                await asyncio.sleep(0.05)  # Small delay to allow MQTT to propagate
-                full_job = await self.compute_client.get_job(job_response.job_id)
-                if full_job and full_job.status in ("completed", "failed"):
-                    logger.debug(f"Job {job_response.job_id} already completed, invoking callback manually")
-                    await wrapped_callback(full_job)  # Use wrapped callback
-            except Exception as e_check:
-                logger.warning(f"Failed to check job status for {job_response.job_id}: {e_check}")
+                if not entity.file_path:
+                    logger.warning(f"Entity {entity_id} has no file_path")
+                    return None
 
-            return job_response.job_id
+                file_path = self.storage_service.get_absolute_path(entity.file_path)
+                if not file_path.exists():
+                    logger.warning(f"File not found for entity {entity_id}: {file_path}")
+                    return None
 
-        except Exception as e:
-            logger.error(f"Failed to submit face_detection job for entity {entity.id}: {e}")
-            self._register_failed_job(entity, "face_detection", str(e))
-            return None
+                wrapped_callback, _ = make_once_only_callback(on_complete_callback)
+
+                job_response = await self.compute_client.face_detection.detect(
+                    image=file_path,
+                    wait=False,
+                    on_complete=wrapped_callback,
+                )
+
+                self._register_job(entity, job_response.job_id, "face_detection")
+                logger.info(f"Submitted face_detection job {job_response.job_id} for entity {entity_id}")
+
+                self.broadcast_entity_status(entity_id)
+
+                # RACE CONDITION FIX: Check if job already completed (for very fast jobs)
+                try:
+                    await asyncio.sleep(0.05)
+                    full_job = await self.compute_client.get_job(job_response.job_id)
+                    if full_job and full_job.status in ("completed", "failed"):
+                        await wrapped_callback(full_job)
+                except Exception:
+                    pass
+
+                return job_response.job_id
+
+            except Exception as e:
+                logger.error(f"Failed to submit face_detection job for entity {entity_id}: {e}")
+                self._register_failed_job(entity, "face_detection", str(e))
+                return None
 
     @timed
     async def submit_hls_streaming(
@@ -479,46 +548,47 @@ class JobSubmissionService:
     ) -> str | None:
         """Submit HLS streaming manifest generation job using absolute paths.
 
-        Args:
-            entity: EntitySchema or EntityVersionSchema object
-            input_absolute_path: Absolute path to input video
-            output_absolute_path: Absolute path to output directory
-            priority: Job priority (0-10, lower is higher)
-            on_complete_callback: Callback to invoke when job completes
-
-        Returns:
-            Job ID if successful, None if failed
+        Thread-safe: Uses per-entity locks and atomic DB checks to prevent duplicate submissions.
         """
+        entity_id = entity.id
+        lock = self._get_entity_lock(entity_id)
 
-        try:
-            # Wrap callback if provided
-            wrapped_callback = None
-            if on_complete_callback:
-                wrapped_callback, _ = make_once_only_callback(on_complete_callback)
+        # 1. Acquire lock to serialize submission for this entity
+        with lock:
+            # 2. Re-check status inside the lock
+            skip_id = self._should_skip_submission_locked(entity, "hls_streaming")
+            if skip_id:
+                return skip_id
 
-            async def on_progress(job: JobResponse):
-                self.update_job_progress(entity.id, job.job_id, job.progress)
+            # 3. Proceed with submission if truly needed
+            try:
+                wrapped_callback = None
+                if on_complete_callback:
+                    wrapped_callback, _ = make_once_only_callback(on_complete_callback)
 
-            job_response = await self.compute_client.hls_streaming.generate_manifest(
-                input_absolute_path=input_absolute_path,
-                output_absolute_path=output_absolute_path,
-                priority=priority,
-                wait=False,
-                on_progress=on_progress,
-                on_complete=wrapped_callback,
-            )
+                async def on_progress(job: JobResponse):
+                    self.update_job_progress(entity_id, job.job_id, job.progress)
 
-            self._register_job(entity, job_response.job_id, "hls_streaming")
-            logger.info(f"Submitted hls_streaming job {job_response.job_id} for entity {entity.id}")
+                logger.info(f"Triggering new HLS streaming job for entity {entity_id}")
+                job_response = await self.compute_client.hls_streaming.generate_manifest(
+                    input_absolute_path=input_absolute_path,
+                    output_absolute_path=output_absolute_path,
+                    priority=priority,
+                    wait=False,
+                    on_progress=on_progress,
+                    on_complete=wrapped_callback,
+                )
 
-            self.broadcast_entity_status(entity.id)
+                self._register_job(entity, job_response.job_id, "hls_streaming")
+                logger.info(f"Submitted hls_streaming job {job_response.job_id} for entity {entity_id}")
+                
+                self.broadcast_entity_status(entity_id)
+                return job_response.job_id
 
-            return job_response.job_id
-
-        except Exception as e:
-            logger.error(f"Failed to submit hls_streaming job for entity {entity.id}: {e}")
-            self._register_failed_job(entity, "hls_streaming", str(e))
-            return None
+            except Exception as e:
+                logger.error(f"Failed to submit hls_streaming job for entity {entity_id}: {e}")
+                self._register_failed_job(entity, "hls_streaming", str(e))
+                return None
 
     @timed
     async def submit_clip_embedding(
@@ -526,50 +596,47 @@ class JobSubmissionService:
         entity: EntitySchema | EntityVersionSchema,
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
-        """Submit CLIP embedding job.
+        """Submit CLIP embedding job."""
+        entity_id = entity.id
+        lock = self._get_entity_lock(entity_id)
 
-        Args:
-            entity: EntitySchema or EntityVersionSchema object
-            on_complete_callback: Callback to invoke when job completes
+        with lock:
+            skip_id = self._should_skip_submission_locked(entity, "clip_embedding")
+            if skip_id:
+                return skip_id
 
-        Returns:
-            Job ID if successful, None if failed
-        """
-
-        try:
-            if not entity.file_path:
-                return None
-            file_path = self.storage_service.get_absolute_path(entity.file_path)
-
-            # Wrap callback to ensure it only executes once (prevents race condition)
-            wrapped_callback, callback_lock = make_once_only_callback(on_complete_callback)
-
-            job_response = await self.compute_client.clip_embedding.embed_image(
-                image=file_path,
-                wait=False,
-                on_complete=wrapped_callback,
-            )
-
-            self._register_job(entity, job_response.job_id, "clip_embedding")
-            logger.info(f"Submitted clip_embedding job {job_response.job_id} for entity {entity.id}")
-
-            self.broadcast_entity_status(entity.id)
-
-            # RACE CONDITION FIX: Check if job already completed (for very fast jobs)
             try:
-                await asyncio.sleep(0.05)  # Small delay to allow MQTT to propagate
-                full_job = await self.compute_client.get_job(job_response.job_id)
-                if full_job and full_job.status in ("completed", "failed"):
-                    logger.debug(f"Job {job_response.job_id} already completed, invoking callback manually")
-                    await wrapped_callback(full_job)  # Use wrapped callback
-            except Exception as e_check:
-                logger.warning(f"Failed to check job status for {job_response.job_id}: {e_check}")
+                if not entity.file_path:
+                    return None
+                file_path = self.storage_service.get_absolute_path(entity.file_path)
 
-            return job_response.job_id
-        except Exception as e:
-            logger.error(f"Failed to submit clip_embedding job for entity {entity.id}: {e}")
-            self._register_failed_job(entity, "clip_embedding", str(e))
-            return None
+                wrapped_callback, _ = make_once_only_callback(on_complete_callback)
+
+                job_response = await self.compute_client.clip_embedding.embed_image(
+                    image=file_path,
+                    wait=False,
+                    on_complete=wrapped_callback,
+                )
+
+                self._register_job(entity, job_response.job_id, "clip_embedding")
+                logger.info(f"Submitted clip_embedding job {job_response.job_id} for entity {entity_id}")
+
+                self.broadcast_entity_status(entity_id)
+
+                # RACE CONDITION FIX
+                try:
+                    await asyncio.sleep(0.05)
+                    full_job = await self.compute_client.get_job(job_response.job_id)
+                    if full_job and full_job.status in ("completed", "failed"):
+                        await wrapped_callback(full_job)
+                except Exception:
+                    pass
+
+                return job_response.job_id
+            except Exception as e:
+                logger.error(f"Failed to submit clip_embedding job for entity {entity_id}: {e}")
+                self._register_failed_job(entity, "clip_embedding", str(e))
+                return None
 
     @timed
     async def submit_dino_embedding(
@@ -577,50 +644,47 @@ class JobSubmissionService:
         entity: EntitySchema | EntityVersionSchema,
         on_complete_callback: OnJobResponseCallback,
     ) -> str | None:
-        """Submit DINOv2 embedding job.
+        """Submit DINOv2 embedding job."""
+        entity_id = entity.id
+        lock = self._get_entity_lock(entity_id)
 
-        Args:
-            entity: EntitySchema or EntityVersionSchema object
-            on_complete_callback: Callback to invoke when job completes
+        with lock:
+            skip_id = self._should_skip_submission_locked(entity, "dino_embedding")
+            if skip_id:
+                return skip_id
 
-        Returns:
-            Job ID if successful, None if failed
-        """
-
-        try:
-            if not entity.file_path:
-                return None
-            file_path = self.storage_service.get_absolute_path(entity.file_path)
-
-            # Wrap callback to ensure it only executes once (prevents race condition)
-            wrapped_callback, callback_lock = make_once_only_callback(on_complete_callback)
-
-            job_response = await self.compute_client.dino_embedding.embed_image(
-                image=file_path,
-                wait=False,
-                on_complete=wrapped_callback,
-            )
-
-            self._register_job(entity, job_response.job_id, "dino_embedding")
-            logger.info(f"Submitted dino_embedding job {job_response.job_id} for entity {entity.id}")
-
-            self.broadcast_entity_status(entity.id)
-
-            # RACE CONDITION FIX: Check if job already completed (for very fast jobs)
             try:
-                await asyncio.sleep(0.05)  # Small delay to allow MQTT to propagate
-                full_job = await self.compute_client.get_job(job_response.job_id)
-                if full_job and full_job.status in ("completed", "failed"):
-                    logger.debug(f"Job {job_response.job_id} already completed, invoking callback manually")
-                    await wrapped_callback(full_job)  # Use wrapped callback
-            except Exception as e_check:
-                logger.warning(f"Failed to check job status for {job_response.job_id}: {e_check}")
+                if not entity.file_path:
+                    return None
+                file_path = self.storage_service.get_absolute_path(entity.file_path)
 
-            return job_response.job_id
-        except Exception as e:
-            logger.error(f"Failed to submit dino_embedding job for entity {entity.id}: {e}")
-            self._register_failed_job(entity, "dino_embedding", str(e))
-            return None
+                wrapped_callback, _ = make_once_only_callback(on_complete_callback)
+
+                job_response = await self.compute_client.dino_embedding.embed_image(
+                    image=file_path,
+                    wait=False,
+                    on_complete=wrapped_callback,
+                )
+
+                self._register_job(entity, job_response.job_id, "dino_embedding")
+                logger.info(f"Submitted dino_embedding job {job_response.job_id} for entity {entity_id}")
+
+                self.broadcast_entity_status(entity_id)
+
+                # RACE CONDITION FIX
+                try:
+                    await asyncio.sleep(0.05)
+                    full_job = await self.compute_client.get_job(job_response.job_id)
+                    if full_job and full_job.status in ("completed", "failed"):
+                        await wrapped_callback(full_job)
+                except Exception:
+                    pass
+
+                return job_response.job_id
+            except Exception as e:
+                logger.error(f"Failed to submit dino_embedding job for entity {entity_id}: {e}")
+                self._register_failed_job(entity, "dino_embedding", str(e))
+                return None
 
     @timed
     async def submit_face_embedding(
@@ -679,3 +743,19 @@ class JobSubmissionService:
             # Tracking validation: face_embeddings status is a list.
             # For now, relying on log for face embedding specific failure to avoid complexity with list indices.
             return None
+
+    def reset_task_status(self, entity_id: int, task_type: str) -> None:
+        """Reset the status of a specific task type to None.
+        
+        This is used when a job fails terminaly or when assets are manually removed (e.g. remove stream).
+        """
+        def reset(data: EntityIntelligenceData):
+            if task_type == "face_embedding":
+                data.inference_status.face_embeddings = []
+            elif hasattr(data.inference_status, task_type):
+                setattr(data.inference_status, task_type, None)
+            
+            data.last_updated = self._now_timestamp()
+        
+        self.db.intelligence.atomic_update_intelligence_data(entity_id, reset)
+        self.broadcast_entity_status(entity_id)
