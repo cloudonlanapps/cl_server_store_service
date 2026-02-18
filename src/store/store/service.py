@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 from sqlalchemy import func
@@ -94,68 +94,104 @@ class EntityService:
             
         return str(stream_dir / entity.mime_type / f"media_{entity.id}" / filename)
 
-    async def ensure_hls_stream(self, entity_id: int) -> str:
-        """Ensure HLS stream exists for the given entity.
+    async def ensure_hls_stream(self, entity_id: int, wait: bool = False) -> str:
+        """
+        Ensure HLS stream is available for the given entity.
+        Triggers transcoding job if manifest is missing and not already processing.
 
-        If manifest is missing and no job is running, it submits a new job.
+        Args:
+            entity_id: Entity ID to check/generate HLS for
+            wait: If True, block until stream is ready (max 30s)
 
         Returns:
-            Status of the HLS stream: "ready", "processing", or "failed"
+            "ready" if stream is available, "processing" if generating, "failed" otherwise.
         """
         entity = self.get_entity_by_id(entity_id)
         if not entity or entity.is_collection:
             logger.error(f"Cannot ensure HLS stream for entity {entity_id}: not found or is collection")
             return "failed"
 
-        # 1. Check if manifest exists
-        manifest_path = self.get_stream_path(entity)
-        if manifest_path and os.path.exists(manifest_path):
-            return "ready"
+        async def check_status() -> str:
+            # 1. Check if manifest exists (best indicator)
+            manifest_path = self.get_stream_path(entity)
+            if manifest_path and os.path.exists(manifest_path):
+                return "ready"
 
-        # 2. Check current status in DB
-        db_entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
-        if not db_entity:
-            return "failed"
-
-        status = "none"
-        if db_entity.intelligence_rel and db_entity.intelligence_rel.intelligence_data:
-            inf_status = db_entity.intelligence_rel.intelligence_data.get("inference_status", {})
-            status = inf_status.get("hls_streaming", "none")
-
-        if status == "available":
-            return "ready"
-
-        if status in ("pending", "running"):
-            logger.info(f"HLS streaming job already {status} for entity {entity_id}")
-            return "processing"
-
-        # 3. Submit job if needed
-        if self.job_service:
-            input_path = self.get_media_path(entity)
-            stream_dir = self.config.stream_storage_dir
-            if not stream_dir:
-                logger.error("stream_storage_dir not configured in StoreConfig")
+            # 2. Check current status in DB
+            db_entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
+            if not db_entity:
                 return "failed"
 
-            # Output path is the directory where manifest will be stored
-            output_path = str(stream_dir / entity.mime_type / f"media_{entity.id}")
+            status = "none"
+            if db_entity.intelligence_rel and db_entity.intelligence_rel.intelligence_data:
+                intel_data = cast(dict[str, Any], db_entity.intelligence_rel.intelligence_data)
+                inf_status = cast(dict[str, Any], intel_data.get("inference_status", {}))
+                status = str(inf_status.get("hls_streaming", "none"))
 
-            if input_path:
-                logger.info(f"Triggering HLS streaming job for entity {entity_id}")
-                job_id = await self.job_service.submit_hls_streaming(
-                    entity=entity,
-                    input_absolute_path=input_path,
-                    output_absolute_path=output_path,
-                    priority=1,
-                )
-                if job_id:
-                    return "processing"
+            if status == "available":
+                return "ready"
+
+            if status in ("pending", "running"):
+                return "processing"
+
+            if status == "failed":
+                return "failed"
+
+            return "none"
+
+        status = await check_status()
+
+        # 3. Submit job if needed
+        if status == "none":
+            if self.job_service:
+                input_path = self.get_media_path(entity)
+                stream_dir = self.config.stream_storage_dir
+                if not stream_dir:
+                    logger.error("stream_storage_dir not configured in StoreConfig")
+                    return "failed"
+
+                # Output path is the directory where manifest will be stored
+                mime_part = entity.mime_type or "unknown"
+                output_path = str(stream_dir / mime_part / f"media_{entity.id}")
+
+                if input_path:
+                    logger.info(f"Triggering HLS streaming job for entity {entity_id}")
+                    job_id = await self.job_service.submit_hls_streaming(
+                        entity=entity,
+                        input_absolute_path=input_path,
+                        output_absolute_path=output_path,
+                        priority=1,
+                    )
+                    if job_id:
+                        status = "processing"
+                    else:
+                        status = "failed"
+                else:
+                    logger.error(f"Cannot trigger HLS job: input_path is None for entity {entity_id}")
+                    status = "failed"
             else:
-                logger.error(f"Cannot trigger HLS job: input_path is None for entity {entity_id}")
-        else:
-            logger.error("JobSubmissionService not available in EntityService")
+                logger.error("JobSubmissionService not available in EntityService")
+                status = "failed"
 
-        return "failed"
+        # 4. Wait if requested
+        if wait and status == "processing":
+            logger.info(f"Waiting for HLS stream readiness for entity {entity_id}...")
+            import asyncio
+            import time
+            start_time = time.time()
+            timeout = 30.0 # 30 seconds max
+            while (time.time() - start_time) < timeout:
+                await asyncio.sleep(1.0)
+                status = await check_status()
+                if status == "ready":
+                    logger.info(f"HLS stream ready after waiting for entity {entity_id}")
+                    return "ready"
+                if status == "failed":
+                    return "failed"
+            
+            logger.warning(f"Timeout waiting for HLS stream for entity {entity_id}")
+
+        return status
 
     @staticmethod
     def _now_timestamp() -> int:

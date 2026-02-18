@@ -667,9 +667,10 @@ async def download_preview(
 )
 async def get_hls_manifest(
     entity_id: int = Path(..., title="Entity Id"),
+    wait: bool = Query(False, title="Wait for readiness"),
     service: EntityService = Depends(get_entity_service),
 ):
-    hls_status = await service.ensure_hls_stream(entity_id)
+    hls_status = await service.ensure_hls_stream(entity_id, wait=wait)
 
     if hls_status == "processing":
         raise HTTPException(status_code=status.HTTP_202_ACCEPTED, detail="hls_generating")
