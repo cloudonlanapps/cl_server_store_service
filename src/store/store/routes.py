@@ -213,7 +213,7 @@ async def create_entity(
             label=label,
             description=description,
             parent_id=parent_id,
-            image=file_bytes,
+            media_file=file_bytes,
             filename=filename,
             user_id=user_id
         )
