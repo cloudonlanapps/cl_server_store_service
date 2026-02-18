@@ -661,7 +661,7 @@ async def download_preview(
     "/entities/{entity_id}/stream/adaptive.m3u8",
     tags=["entity"],
     summary="Get HLS Manifest",
-    description="Get the adaptive HLS manifest.",
+    description="Get the adaptive HLS manifest. Triggers generation if missing.",
     operation_id="get_hls_manifest",
     response_class=FileResponse,
 )
@@ -669,21 +669,25 @@ async def get_hls_manifest(
     entity_id: int = Path(..., title="Entity Id"),
     service: EntityService = Depends(get_entity_service),
 ):
+    hls_status = await service.ensure_hls_stream(entity_id)
+
+    if hls_status == "processing":
+        raise HTTPException(status_code=status.HTTP_202_ACCEPTED, detail="hls_generating")
+    elif hls_status == "failed":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="hls_failed")
+
+    # If ready, get entity to get path
     entity = service.get_entity_by_id(entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
-        
-    if entity.is_collection:
-        raise HTTPException(status_code=400, detail="Entity is a collection")
-        
+
     stream_path = service.get_stream_path(entity, "adaptive.m3u8")
     if not stream_path or not os.path.exists(stream_path):
-        raise HTTPException(status_code=404, detail="Stream not found")
-        
+        # This shouldn't happen if status was "ready", but handle as 404
+        raise HTTPException(status_code=404, detail="Stream manifest not found on disk")
+
     return FileResponse(
-        path=stream_path,
-        media_type="application/vnd.apple.mpegurl",
-        filename="adaptive.m3u8"
+        path=stream_path, media_type="application/vnd.apple.mpegurl", filename="adaptive.m3u8"
     )
 
 

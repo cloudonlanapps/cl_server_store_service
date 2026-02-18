@@ -67,6 +67,7 @@ class JobInfo(BaseModel):
     task_type: str  # clip_embedding, dino_embedding, face_detection, etc.
     started_at: int
     status: str = "queued"
+    progress: int = 0
     completed_at: int | None = None
     error_message: str | None = None
 
@@ -77,6 +78,7 @@ class InferenceStatus(BaseModel):
     face_detection: str = "pending"
     clip_embedding: str = "pending"
     dino_embedding: str = "pending"
+    hls_streaming: str = "pending"
     face_embeddings: list[str] | None = None  # Status for each face
 
 

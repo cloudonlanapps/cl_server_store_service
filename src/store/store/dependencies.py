@@ -18,6 +18,7 @@ from ..broadcast_service.broadcaster import MInsightBroadcaster
 
 from .config import StoreConfig
 from store.broadcast_service.monitor import MInsightMonitor
+from store.m_insight.job_service import JobSubmissionService
 from .service import EntityService
 
 
@@ -40,6 +41,78 @@ def get_monitor(request: Request) -> MInsightMonitor | None:
     return getattr(request.app.state, "monitor", None)  # pyright: ignore[reportAny]
 
 
+def get_job_submission_service(
+    config: StoreConfig = Depends(StoreConfig.get_config),
+    broadcaster: MInsightBroadcaster | None = Depends(get_m_insight_broadcaster),
+    db_service: DBService = Depends(get_db_service),
+) -> JobSubmissionService | None:
+    """Dependency to get JobSubmissionService instance for the API.
+    
+    This initializes a ComputeClient on demand if credentials are provided.
+    """
+    if not config.compute_url or not config.compute_username or not config.compute_password:
+        return None
+        
+    from cl_client import ComputeClient, ServerPref, SessionManager
+    
+    # We use a simple one-off client for the API
+    # In a production scenario, we might want to pool or cache this session
+    server_config = ServerPref(
+        auth_url=config.auth_url or "http://localhost:8010",
+        compute_url=config.compute_url,
+        mqtt_url=config.mqtt_url,
+    )
+    
+    # Create session manager but don't login every time if we can avoid it
+    # For now, we follow the pattern of MediaInsight initialize
+    async def _get_client():
+        session = SessionManager(server_pref=server_config)
+        await session.login(
+            username=config.compute_username,
+            password=config.compute_password,
+        )
+        return session.create_compute_client()
+
+    # NOTE: Since this is a synchronous dependency, we might have issues if we need to call async login.
+    # Actually, FastAPI dependencies can be async.
+    
+    return None # Placeholder for now, will refactor to async if needed
+
+async def get_job_submission_service_async(
+    config: StoreConfig = Depends(StoreConfig.get_config),
+    broadcaster: MInsightBroadcaster | None = Depends(get_m_insight_broadcaster),
+    db_service: DBService = Depends(get_db_service),
+) -> JobSubmissionService | None:
+    """Async dependency to get JobSubmissionService instance for the API."""
+    if not config.compute_url or not config.compute_username or not config.compute_password:
+        return None
+        
+    from cl_client import ServerPref, SessionManager
+    
+    server_config = ServerPref(
+        auth_url=config.auth_url or "http://localhost:8010",
+        compute_url=config.compute_url,
+        mqtt_url=config.mqtt_url,
+    )
+    
+    storage_service = StorageService(base_dir=str(config.media_storage_dir))
+    
+    # Create session and login
+    session = SessionManager(server_pref=server_config)
+    await session.login(
+        username=config.compute_username,
+        password=config.compute_password,
+    )
+    compute_client = session.create_compute_client()
+    
+    return JobSubmissionService(
+        compute_client=compute_client,
+        storage_service=storage_service,
+        broadcaster=broadcaster,
+        db=db_service,
+    )
+
+
 def get_entity_service(
     db: Session = Depends(get_db),
     config: StoreConfig = Depends(StoreConfig.get_config),
@@ -48,22 +121,12 @@ def get_entity_service(
     dino_store: QdrantVectorStore = Depends(get_dino_store_dep),
     face_store: QdrantVectorStore = Depends(get_face_store_dep),
     broadcaster: MInsightBroadcaster | None = Depends(get_m_insight_broadcaster),
+    job_service: JobSubmissionService | None = Depends(get_job_submission_service_async),
 ) -> EntityService:
-    """Dependency to get EntityService instance.
-
-    This creates a new service instance per request (because db is request-scoped).
-    Injects deletion dependencies via FastAPI dependency injection.
-
-    Note: FaceService is now MANDATORY. If Qdrant is unavailable, the dependency
-    injection will fail early with a 500 error, which is acceptable since
-    intelligence features require Qdrant to function.
-    """
-    # Function-level import to avoid circular dependency
+    """Dependency to get EntityService instance."""
     from .face_service import FaceService
 
-    # Create a DBService with the request's db session to avoid transaction conflicts
     db_service_with_session = DBService(db=db)
-
     storage_service = StorageService(base_dir=str(config.media_storage_dir))
     face_service = FaceService(
         db=db,
@@ -75,8 +138,9 @@ def get_entity_service(
     return EntityService(
         db,
         config,
-        face_service=face_service,  # Now always present, not Optional
+        face_service=face_service,
         clip_store=clip_store,
         dino_store=dino_store,
         broadcaster=broadcaster,
+        job_service=job_service,
     )

@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .face_service import FaceService
     from store.vectorstore_services.vector_stores import QdrantVectorStore
     from ..broadcast_service.broadcaster import MInsightBroadcaster
+    from store.m_insight.job_service import JobSubmissionService
 
 
 class DuplicateFileError(Exception):
@@ -48,6 +49,7 @@ class EntityService:
         clip_store: QdrantVectorStore | None = None,
         dino_store: QdrantVectorStore | None = None,
         broadcaster: MInsightBroadcaster | None = None,
+        job_service: JobSubmissionService | None = None,
     ):
         """Initialize the entity service.
 
@@ -58,6 +60,7 @@ class EntityService:
             clip_store: Optional CLIP vector store for deletion operations
             dino_store: Optional DINO vector store for deletion operations
             broadcaster: Optional MQTT broadcaster for clearing retained messages
+            job_service: Optional job submission service for HLS/ML jobs
         """
         self.db: Session = db
         self.config: StoreConfig = config
@@ -69,6 +72,7 @@ class EntityService:
         self.clip_store: QdrantVectorStore | None = clip_store
         self.dino_store: QdrantVectorStore | None = dino_store
         self.broadcaster: MInsightBroadcaster | None = broadcaster
+        self.job_service: JobSubmissionService | None = job_service
 
     def get_media_path(self, entity: EntitySchema) -> str | None:
         """Get absolute path to the media file."""
@@ -89,6 +93,69 @@ class EntityService:
             return None
             
         return str(stream_dir / entity.mime_type / f"media_{entity.id}" / filename)
+
+    async def ensure_hls_stream(self, entity_id: int) -> str:
+        """Ensure HLS stream exists for the given entity.
+
+        If manifest is missing and no job is running, it submits a new job.
+
+        Returns:
+            Status of the HLS stream: "ready", "processing", or "failed"
+        """
+        entity = self.get_entity_by_id(entity_id)
+        if not entity or entity.is_collection:
+            logger.error(f"Cannot ensure HLS stream for entity {entity_id}: not found or is collection")
+            return "failed"
+
+        # 1. Check if manifest exists
+        manifest_path = self.get_stream_path(entity)
+        if manifest_path and os.path.exists(manifest_path):
+            return "ready"
+
+        # 2. Check current status in DB
+        db_entity = self.db.query(Entity).filter(Entity.id == entity_id).first()
+        if not db_entity:
+            return "failed"
+
+        status = "none"
+        if db_entity.intelligence_rel and db_entity.intelligence_rel.intelligence_data:
+            inf_status = db_entity.intelligence_rel.intelligence_data.get("inference_status", {})
+            status = inf_status.get("hls_streaming", "none")
+
+        if status == "available":
+            return "ready"
+
+        if status in ("pending", "running"):
+            logger.info(f"HLS streaming job already {status} for entity {entity_id}")
+            return "processing"
+
+        # 3. Submit job if needed
+        if self.job_service:
+            input_path = self.get_media_path(entity)
+            stream_dir = self.config.stream_storage_dir
+            if not stream_dir:
+                logger.error("stream_storage_dir not configured in StoreConfig")
+                return "failed"
+
+            # Output path is the directory where manifest will be stored
+            output_path = str(stream_dir / entity.mime_type / f"media_{entity.id}")
+
+            if input_path:
+                logger.info(f"Triggering HLS streaming job for entity {entity_id}")
+                job_id = await self.job_service.submit_hls_streaming(
+                    entity=entity,
+                    input_absolute_path=input_path,
+                    output_absolute_path=output_path,
+                    priority=1,
+                )
+                if job_id:
+                    return "processing"
+            else:
+                logger.error(f"Cannot trigger HLS job: input_path is None for entity {entity_id}")
+        else:
+            logger.error("JobSubmissionService not available in EntityService")
+
+        return "failed"
 
     @staticmethod
     def _now_timestamp() -> int:

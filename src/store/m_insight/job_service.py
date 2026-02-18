@@ -138,7 +138,7 @@ class JobSubmissionService:
         completed_at: int | None = None
     ) -> None:
         """Internal method that performs the actual update (called with lock held)."""
-        def update_fn(data):
+        def update_fn(data: EntityIntelligenceData):
             """Update function for atomic update."""
             logger.debug(
                 f"[update_job_status] START - Entity {entity_id}, Job {job_id}: "
@@ -160,6 +160,8 @@ class JobSubmissionService:
                         data.inference_status.clip_embedding = status
                     elif job.task_type == "dino_embedding":
                         data.inference_status.dino_embedding = status
+                    elif job.task_type == "hls_streaming":
+                        data.inference_status.hls_streaming = status
                     elif job.task_type == "face_embedding":
                         # Individual face_embeddings in data.inference_status.face_embeddings 
                         # are updated via JobCallbackHandler.handle_face_embedding_complete.
@@ -191,21 +193,21 @@ class JobSubmissionService:
                 f"face_embeddings={inf.face_embeddings}, "
                 f"face_detection={inf.face_detection}, "
                 f"clip={inf.clip_embedding}, "
-                f"dino={inf.dino_embedding}"
+                f"dino={inf.dino_embedding}, "
+                f"hls={inf.hls_streaming}"
             )
 
             # 1. Collect all status fields that must be terminal
             all_statuses: list[str] = [
                 inf.face_detection,
                 inf.clip_embedding,
-                inf.dino_embedding
+                inf.dino_embedding,
+                inf.hls_streaming
             ]
             if inf.face_embeddings is not None and len(inf.face_embeddings) > 0:
                 all_statuses.extend(inf.face_embeddings)
 
             # 2. Check terminal states
-            # If we just finished face detection but haven't sent face embeddings yet,
-            # face_embeddings list will be configured but all will be 'pending'.
             is_terminal = all(s in ("completed", "failed") for s in all_statuses)
             any_failed = any(s == "failed" for s in all_statuses)
 
@@ -234,6 +236,35 @@ class JobSubmissionService:
 
         except Exception as e:
             logger.error(f"Failed to update job {job_id} status for entity {entity_id}: {e}")
+
+    def update_job_progress(self, entity_id: int, job_id: str, progress: int) -> None:
+        """Update job progress in Entity.intelligence_data.
+        
+        Args:
+            entity_id: Entity ID being processed
+            job_id: Job ID to update
+            progress: New progress (0-100)
+        """
+        lock = self._get_entity_lock(entity_id)
+        with lock:
+            self._update_job_progress_locked(entity_id, job_id, progress)
+
+    def _update_job_progress_locked(self, entity_id: int, job_id: str, progress: int) -> None:
+        """Internal method for updating job progress (called with lock held)."""
+        def update_fn(data: EntityIntelligenceData):
+            for job in data.active_jobs:
+                if job.job_id == job_id:
+                    job.progress = progress
+                    # SIGNAL EARLY AVAILABILITY:
+                    # If HLS streaming reports ANY progress, it means the manifest is ready.
+                    if job.task_type == "hls_streaming" and progress > 0:
+                        # Only set to available if not already completed/failed
+                        if data.inference_status.hls_streaming not in ("completed", "failed"):
+                            data.inference_status.hls_streaming = "available"
+                    break
+        
+        self.db.intelligence.atomic_update_intelligence_data(entity_id, update_fn)
+        self.broadcast_entity_status(entity_id)
 
 
     def delete_job_record(self, entity_id: int, job_id: str) -> None:
@@ -286,6 +317,8 @@ class JobSubmissionService:
                 data.inference_status.clip_embedding = "processing"
             elif task_type == "dino_embedding":
                 data.inference_status.dino_embedding = "processing"
+            elif task_type == "hls_streaming":
+                data.inference_status.hls_streaming = "processing"
 
             data.active_jobs.append(JobInfo(
                 job_id=job_id,
@@ -433,6 +466,58 @@ class JobSubmissionService:
         except Exception as e:
             logger.error(f"Failed to submit face_detection job for entity {entity.id}: {e}")
             self._register_failed_job(entity, "face_detection", str(e))
+            return None
+
+    @timed
+    async def submit_hls_streaming(
+        self,
+        entity: EntitySchema | EntityVersionSchema,
+        input_absolute_path: str,
+        output_absolute_path: str,
+        priority: int = 1,  # Default to high priority for HLS
+        on_complete_callback: OnJobResponseCallback | None = None,
+    ) -> str | None:
+        """Submit HLS streaming manifest generation job using absolute paths.
+
+        Args:
+            entity: EntitySchema or EntityVersionSchema object
+            input_absolute_path: Absolute path to input video
+            output_absolute_path: Absolute path to output directory
+            priority: Job priority (0-10, lower is higher)
+            on_complete_callback: Callback to invoke when job completes
+
+        Returns:
+            Job ID if successful, None if failed
+        """
+
+        try:
+            # Wrap callback if provided
+            wrapped_callback = None
+            if on_complete_callback:
+                wrapped_callback, _ = make_once_only_callback(on_complete_callback)
+
+            async def on_progress(job: JobResponse):
+                self.update_job_progress(entity.id, job.job_id, job.progress)
+
+            job_response = await self.compute_client.hls_streaming.generate_manifest(
+                input_absolute_path=input_absolute_path,
+                output_absolute_path=output_absolute_path,
+                priority=priority,
+                wait=False,
+                on_progress=on_progress,
+                on_complete=wrapped_callback,
+            )
+
+            self._register_job(entity, job_response.job_id, "hls_streaming")
+            logger.info(f"Submitted hls_streaming job {job_response.job_id} for entity {entity.id}")
+
+            self.broadcast_entity_status(entity.id)
+
+            return job_response.job_id
+
+        except Exception as e:
+            logger.error(f"Failed to submit hls_streaming job for entity {entity.id}: {e}")
+            self._register_failed_job(entity, "hls_streaming", str(e))
             return None
 
     @timed

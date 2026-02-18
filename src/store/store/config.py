@@ -20,6 +20,12 @@ class StoreConfig(BaseConfig):
     reload: bool
     log_level: str
     no_migrate: bool
+    
+    # Compute Service (for HLS generation)
+    compute_url: str | None = None
+    compute_username: str | None = None
+    compute_password: str | None = None
+    auth_url: str | None = None
 
     # Calculated Fields
     cl_server_dir: Path
@@ -62,6 +68,13 @@ class StoreConfig(BaseConfig):
         parser.add_argument(
             "--dino-collection", default="dino_embeddings", help="Qdrant collection for DINOv2 embeddings"
         )
+        
+        # Compute connectivity
+        parser.add_argument("--auth-url", default="http://localhost:8010", help="Auth service URL")
+        parser.add_argument("--compute-url", default="http://localhost:8012", help="Compute service URL")
+        parser.add_argument("--compute-username", default="admin", help="Compute service username")
+        parser.add_argument("--compute-password", default="admin", help="Compute service password")
+        
         parser.add_argument("--debug", action="store_true", help="Enable debug mode")
         parser.add_argument(
             "--log-level",
