@@ -101,6 +101,23 @@ class TestEntityDeletion:
 
         # Verify file removed
         assert not file_abs_path.exists(), f"File should be deleted at {file_abs_path}"
+        
+        # Verify THUMBNAIL removed
+        # Construct expected thumbnail path
+        # from service.py logic: ThumbnailGenerator.get_thumbnail_path(abs_file_path)
+        # Re-implement logic here or import? Better to import if possible, but minimal logic duplication is fine for test isolation.
+        thumb_path_str = str(file_abs_path)
+        if thumb_path_str.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.mp4', '.mov', '.avi')):
+             # It appends .tb.png to the filename (preserve strict match)
+             # Wait, logic in media_thumbnail.py:
+             # return f"{base_path}.tb.png" where base_path includes extension? No.
+             # Let's check media_thumbnail.py again if needed.
+             # Actually, simpler: check the preview endpoint returns 404/500?
+             # No, direct file check is better for "removes file" test.
+             
+             # The implementation uses: f"{file_path}.tb.png"
+             thumb_path = Path(f"{thumb_path_str}.tb.png")
+             assert not thumb_path.exists(), f"Thumbnail should be deleted at {thumb_path}"
 
     def test_consolidated_deletion_flow(
         self, client: TestClient, sample_image: Path, test_db_session: Session

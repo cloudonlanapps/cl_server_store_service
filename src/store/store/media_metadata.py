@@ -341,10 +341,7 @@ class MediaMetadataExtractor:
                 # Ensure it's a string (sha512hash_image returns tuple[str, int])
                 return str(file_hash)
             elif media_type == MediaType.VIDEO:
-                # Perceptual hash for videos
-                file_hash, _ = sha512hash_video2(bytes_io)
-                # Ensure it's a string (sha512hash_video2 returns tuple[str, int])
-                return str(file_hash)
+                return get_md5_hexdigest(bytes_io)
             else:
                 # MD5 for other files
                 return get_md5_hexdigest(bytes_io)

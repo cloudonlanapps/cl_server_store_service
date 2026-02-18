@@ -45,6 +45,7 @@ from .service import DuplicateFileError, EntityService, EntityNotSoftDeletedErro
 from .audit_service import AuditReport, AuditService, CleanupReport
 from ..common.storage import StorageService
 from ..broadcast_service.broadcaster import MInsightBroadcaster
+from .media_thumbnail import ThumbnailGenerator
 
 router = APIRouter()
 
@@ -232,12 +233,15 @@ async def create_entity(
         return item
     except ValueError as e:
         # Validation errors or invalid file format
+        logger.warning(f"Validation error during entity creation: {e}")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
     except RuntimeError as e:
         # Tool execution failure (ExifTool, ffprobe)
+        logger.error(f"Runtime error during entity creation: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     except Exception as e:
         # General extraction failure
+        logger.exception(f"Unexpected error during entity creation: {e}")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e))
 
 
@@ -601,12 +605,13 @@ async def download_media(
     "/entities/{entity_id}/preview",
     tags=["entity"],
     summary="Download Preview",
-    description="Download the preview image.",
+    description="Download the preview image. Use ?force=1 to generate if missing.",
     operation_id="download_preview",
     response_class=FileResponse,
 )
 async def download_preview(
     entity_id: int = Path(..., title="Entity Id"),
+    force: bool = Query(False, description="Force generation if missing"),
     service: EntityService = Depends(get_entity_service),
 ):
     entity = service.get_entity_by_id(entity_id)
@@ -616,21 +621,33 @@ async def download_preview(
     if entity.is_collection:
         raise HTTPException(status_code=400, detail="Entity is a collection")
 
-    # Preview path logic (assumes .tn.jpeg convention from media_repo)
+    # Preview path logic
     media_path = service.get_media_path(entity)
     if not media_path:
         raise HTTPException(status_code=404, detail="Media file not found")
         
-    preview_path = f"{media_path}.tn.jpeg"
+    # Use ThumbnailGenerator to get expected path
+    # Note: get_media_path returns the absolute path
+    preview_path = ThumbnailGenerator.get_thumbnail_path(media_path)
+    
     if not os.path.exists(preview_path):
-        # Fallback to media file if it is an image? Or raise 404?
-        # media_repo returns 404 if preview missing
-        raise HTTPException(status_code=404, detail="Preview file not found")
+        if force:
+            # Generate on demand
+            generated_path = service.ensure_thumbnail(entity)
+            if generated_path:
+                preview_path = generated_path
+            else:
+                # Failed to generate
+                raise HTTPException(status_code=500, detail="Failed to generate preview")
+        else:
+            # Fallback to media file if it is an image? Or raise 404?
+            # Existing behavior was 404
+            raise HTTPException(status_code=404, detail="Preview file not found")
 
     return FileResponse(
         path=preview_path, 
-        media_type="image/jpeg",
-        filename=f"{entity.md5}.tn.jpeg"
+        media_type="image/png",  # .tb.png is PNG
+        filename=f"{entity.md5}.tb.png"
     )
 
 

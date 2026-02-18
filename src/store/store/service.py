@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 
@@ -16,6 +17,7 @@ from store.db_service.schemas import VersionInfo
 from ..common.storage import StorageService
 from .config import StoreConfig
 from .media_metadata import MediaMetadataExtractor
+from .media_thumbnail import ThumbnailGenerator
 
 if TYPE_CHECKING:
     from .face_service import FaceService
@@ -627,6 +629,16 @@ class EntityService:
         max_retries = 5
         retry_delay = 0.1
 
+        # Generate thumbnail if file was saved
+        thumbnail_path = None
+        if file_path:
+            try:
+                # Get absolute path for thumbnail generation
+                abs_file_path = self.file_storage.get_absolute_path(file_path)
+                thumbnail_path = ThumbnailGenerator.generate(str(abs_file_path), mime_type)
+            except Exception as e:
+                logger.error(f"Thumbnail generation failed (non-critical): {e}")
+
         for attempt in range(max_retries):
             try:
                 self.db.add(entity)
@@ -635,9 +647,19 @@ class EntityService:
                 break  # Success, exit retry loop
             except IntegrityError as _:
                 self.db.rollback()
-                # Clean up file if database insert failed
+                # Clean up file AND thumbnail if database insert failed
                 if file_path:
                     _ = self.file_storage.delete_file(file_path)
+                    # Cleanup thumbnail if generated
+                    if thumbnail_path:
+                        # thumbnail function returns partial path? No, docstring says output file path as string.
+                        # Wait, ThumbnailGenerator.generate returns the OUTPUT PATH.
+                        # So we need to delete that path directly.
+                        # But wait, ThumbnailGenerator.delete takes the INPUT path and recalculates the thumbnail path.
+                        # Let's use that for consistency.
+                        abs_file_path = self.file_storage.get_absolute_path(file_path)
+                        ThumbnailGenerator.delete(str(abs_file_path))
+
                 raise DuplicateFileError(
                     f"Duplicate MD5 detected: {file_meta.md5 if file_meta else 'unknown'}"
                 )
@@ -653,9 +675,19 @@ class EntityService:
                         retry_delay *= 2  # Exponential backoff
                     else:
                         logger.error(f"Database locked after {max_retries} retries, giving up")
+                        # Clean up file AND thumbnail if all retries failed
+                        if file_path:
+                            _ = self.file_storage.delete_file(file_path)
+                            abs_file_path = self.file_storage.get_absolute_path(file_path)
+                            ThumbnailGenerator.delete(str(abs_file_path))
                         raise
                 else:
                     # Re-raise if it's not a lock error
+                    # Clean up file AND thumbnail if database error
+                    if file_path:
+                        _ = self.file_storage.delete_file(file_path)
+                        abs_file_path = self.file_storage.get_absolute_path(file_path)
+                        ThumbnailGenerator.delete(str(abs_file_path))
                     raise
 
         return (self._entity_to_item(entity), False)  # is_duplicate=False
@@ -710,7 +742,9 @@ class EntityService:
         # This allows updating metadata without changing the file
         file_path = None
         file_meta = None
+        old_file_path = None
         if image:
+            old_file_path = entity.file_path
             # Validation: parent_id must follow hierarchy rules
             self._validate_parent_id(
                 parent_id=parent_id,
@@ -735,13 +769,15 @@ class EntityService:
             # Currently we continue with saving for simplicity, but MD5 check above 
             # ensures we don't duplicate *across* entities.
 
-            # Delete old file if exists
-            old_file_path = entity.file_path
-            if old_file_path:
-                _ = self.file_storage.delete_file(old_file_path)
-
             # Save new file (convert Pydantic model to dict for storage)
             file_path = self.file_storage.save_file(image, file_meta.model_dump(), filename)
+            
+            # Generate thumbnail for NEW file
+            try:
+                abs_file_path = self.file_storage.get_absolute_path(file_path)
+                ThumbnailGenerator.generate(str(abs_file_path), file_meta.mime_type)
+            except Exception as e:
+                logger.error(f"Thumbnail generation failed for updated file (non-critical): {e}")
 
             # Update file metadata from Pydantic model
             entity.file_size = file_meta.file_size
@@ -763,19 +799,74 @@ class EntityService:
         entity.updated_date = now
         entity.updated_by = user_id
 
+        # Preserve old path for cleanup ON SUCCESS
+        # If image was provided, old_file_path is set above (lines ~740 range in prev code), 
+        # but I need to make sure I capture it BEFORE updating entity.file_path
+        # Wait, I already updated entity.file_path above.
+        # Check logic:
+        # Line 739: old_file_path = entity.file_path
+        # Line 741: if old_file_path: _ = self.file_storage.delete_file(old_file_path)
+        # ^ This was the OLD logic (delete immediately).
+        # We need to change that.
+        
+        # CORRECT LOGIC:
+        # capture old_file_path at the beginning of "if image:" block? Yes.
+        
+        # Oh, in the original code, old_file_path was captured at line 739.
+        # But wait, my "TargetContent" block below starts from line 733.
+        # So I need to structure the Replacement properly.
+        
+        # Let's be careful. The original code DELETES the old file at line 741.
+        # I must DELETE that line from the original code and move the deletion to AFTER commit.
+
         try:
             self.db.commit()
             self.db.refresh(entity)
+            
+            # SUCCESS: Clean up OLD file and OLD thumbnail if file was replaced
+            if old_file_path:
+                try:
+                    _ = self.file_storage.delete_file(old_file_path)
+                    # Also delete OLD thumbnail
+                    abs_old_path = self.file_storage.get_absolute_path(old_file_path)
+                    ThumbnailGenerator.delete(str(abs_old_path))
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup old file: {e}")
+
         except IntegrityError:
             self.db.rollback()
-            # Clean up new file if database update failed
+            # Clean up NEW file and NEW thumbnail if database update failed
             if file_path:
                 _ = self.file_storage.delete_file(file_path)
+                abs_file_path = self.file_storage.get_absolute_path(file_path)
+                ThumbnailGenerator.delete(str(abs_file_path))
+            
             raise DuplicateFileError(
                 f"Duplicate MD5 detected: {file_meta.md5 if file_meta else ''}"
             )
 
         return (self._entity_to_item(entity), False)  # is_duplicate=False
+
+    def ensure_thumbnail(self, entity: EntitySchema) -> str | None:
+        """
+        Ensure thumbnail exists for the entity. If not, generate it.
+        Returns the absolute path to the thumbnail if allowed/generated.
+        """
+        if not entity.file_path:
+            return None
+            
+        try:
+            abs_file_path = self.file_storage.get_absolute_path(entity.file_path)
+            thumb_path = ThumbnailGenerator.get_thumbnail_path(str(abs_file_path))
+            
+            if os.path.exists(thumb_path):
+                return thumb_path
+                
+            # Generate if missing
+            return ThumbnailGenerator.generate(str(abs_file_path), entity.mime_type)
+        except Exception as e:
+            logger.error(f"Failed to ensure thumbnail for entity {entity.id}: {e}")
+            return None
 
     def patch_entity(
         self,
@@ -912,6 +1003,11 @@ class EntityService:
             if entity.file_path:
                 try:
                     deleted = self.file_storage.delete_file(entity.file_path)
+                    
+                    # Also delete thumbnail
+                    abs_file_path = self.file_storage.get_absolute_path(entity.file_path)
+                    ThumbnailGenerator.delete(str(abs_file_path))
+
                     if deleted:
                         logger.debug(f"Deleted entity file: {entity.file_path}")
                     else:
