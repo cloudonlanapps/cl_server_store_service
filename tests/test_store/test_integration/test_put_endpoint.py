@@ -23,7 +23,7 @@ class TestPutEndpoint:
         with open(image1, "rb") as f:
             create_response = client.post(
                 "/entities/",
-                files={"image": (image1.name, f, "image/jpeg")},
+                files={"media_file": (image1.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
                     "label": "Original",
@@ -88,7 +88,7 @@ class TestPutEndpoint:
         with open(image1, "rb") as f:
             create_response = client.post(
                 "/entities/",
-                files={"image": (image1.name, f, "image/jpeg")},
+                files={"media_file": (image1.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test"}
             )
 
@@ -154,7 +154,7 @@ class TestPutEndpoint:
         with open(image1, "rb") as f:
             create_response = client.post(
                 "/entities/",
-                files={"image": (image1.name, f, "image/jpeg")},
+                files={"media_file": (image1.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Original"}
             )
 
@@ -235,7 +235,7 @@ class TestPutEndpoint:
         with open(image1, "rb") as f:
             create_resp = client.post(
                 "/entities/",
-                files={"image": (image1.name, f, "image/jpeg")},
+                files={"media_file": (image1.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Thumbnail Test"}
             )
         entity_id = create_resp.json()["id"]

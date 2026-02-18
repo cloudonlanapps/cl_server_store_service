@@ -16,7 +16,7 @@ class TestFileUpload:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
                     "label": f"Test: {sample_image.name}",
@@ -107,7 +107,7 @@ class TestFileUpload:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Metadata test"}
             )
 

@@ -40,7 +40,7 @@ class TestEntityCRUD:
         with open(sample_image, "rb") as f:
             create_response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test Entity"}
             )
 
@@ -63,7 +63,7 @@ class TestEntityCRUD:
         with open(sample_image, "rb") as f:
             resp = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Intel Test"}
             )
         item = EntitySchema.model_validate(resp.json())
@@ -127,7 +127,7 @@ class TestEntityCRUD:
             with open(image_path, "rb") as f:
                 client.post(
                     "/entities/",
-                    files={"image": (image_path.name, f, "image/jpeg")},
+                    files={"media_file": (image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": f"Entity {image_path.name}"},
                 )
 
@@ -236,7 +236,7 @@ class TestEntityCRUD:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Orphan File"},
             )
         assert response.status_code == 201
@@ -256,7 +256,7 @@ class TestEntityCRUD:
         with open(sample_image, "rb") as f:
             child_resp = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
                     "label": "Child File",
@@ -301,7 +301,7 @@ class TestEntityCRUD:
         with open(sample_image, "rb") as f:
             c_resp = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
                     "label": "Child",
@@ -347,7 +347,7 @@ class TestEntityCRUD:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
                     "label": "Delete Test",
@@ -388,7 +388,7 @@ class TestEntityCRUD:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
                     "label": "Soft Delete Test",
@@ -442,7 +442,7 @@ class TestEntityCRUD:
         with open(sample_image, "rb") as f:
             response = client.put(
                 "/entities/99999",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test"},
             )
         # Should be 404 Not Found (Entity not found), not 422 Parent Invalid
@@ -502,7 +502,7 @@ class TestEntityCRUD:
             with open(image, "rb") as f:
                 client.post(
                     "/entities/",
-                    files={"image": (image.name, f, "image/jpeg")},
+                    files={"media_file": (image.name, f, "image/jpeg")},
                     data={
                         "is_collection": "false",
                         "label": f"Entity {i}",
@@ -566,7 +566,7 @@ class TestEntityCRUD:
         with sample_image.open("rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": ("test.jpg", f, "image/jpeg")},
+                files={"media_file": ("test.jpg", f, "image/jpeg")},
                 data={
                     "is_collection": "false",
                     "label": "Child Image",
@@ -661,7 +661,7 @@ class TestEntityCRUD:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Thumbnail Test"},
             )
         assert response.status_code == 201

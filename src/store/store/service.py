@@ -520,7 +520,7 @@ class EntityService:
         label: str | None = None,
         description: str | None = None,
         parent_id: int | None = None,
-        image: bytes | None = None,
+        media_file: bytes | None = None,
         filename: str = "file",
         user_id: str | None = None,
     ) -> tuple[EntitySchema, bool]:
@@ -532,7 +532,7 @@ class EntityService:
             label: Entity label
             description: Entity description
             parent_id: Parent entity ID
-            image: Optional image file bytes
+            media_file: Optional media file bytes
             filename: Original filename
             user_id: Optional user identifier from JWT (None in demo mode)
 
@@ -543,16 +543,16 @@ class EntityService:
             DuplicateFileError: If file with same MD5 already exists
         """
         now = self._now_timestamp()
-        file_meta = None
+        media_meta = None
         file_path = None
 
-        # Validation: image is required if is_collection is False
-        if not is_collection and not image:
-            raise ValueError("Image is required when is_collection is False")
+        # Validation: media_file is required if is_collection is False
+        if not is_collection and not media_file:
+            raise ValueError("Media file is required when is_collection is False")
 
-        # Validation: image should not be present if is_collection is True
-        if is_collection and image:
-            raise ValueError("Image should not be provided when is_collection is True")
+        # Validation: media_file should not be present if is_collection is True
+        if is_collection and media_file:
+            raise ValueError("Media file should not be provided when is_collection is True")
 
         # Validation: parent_id must follow hierarchy rules
         self._validate_parent_id(
@@ -562,32 +562,32 @@ class EntityService:
         )
 
         # Extract metadata and save file if provided
-        if image:
+        if media_file:
             # Extract metadata using MediaMetadataExtractor
-            file_meta = self.metadata_extractor.extract_metadata(image, filename)
+            media_meta = self.metadata_extractor.extract_metadata(media_file, filename)
 
             # Check for duplicate MD5
-            duplicate = self._check_duplicate_md5(file_meta.md5)
+            duplicate = self._check_duplicate_md5(media_meta.md5)
             if duplicate:
                 # Return the existing item instead of raising an error
                 return (self._entity_to_item(duplicate), True)  # is_duplicate=True
 
             # Save file to storage (convert Pydantic model to dict for storage)
-            logger.debug(f"{filename} is sent for saving with metadata {file_meta.model_dump()}")
-            file_path = self.file_storage.save_file(image, file_meta.model_dump(), filename)
+            logger.debug(f"{filename} is sent for saving with metadata {media_meta.model_dump()}")
+            file_path = self.file_storage.save_file(media_file, media_meta.model_dump(), filename)
             logger.debug(f"filepath received: {file_path}")
             logger.debug(self.file_storage.base_dir)
 
         # Extract metadata values from Pydantic model (or None for collections)
-        if file_meta:
-            file_size = file_meta.file_size
-            height = file_meta.height
-            width = file_meta.width
-            duration = file_meta.duration
-            mime_type = file_meta.mime_type
-            type_str = file_meta.type
-            extension = file_meta.extension
-            md5 = file_meta.md5
+        if media_meta:
+            file_size = media_meta.file_size
+            height = media_meta.height
+            width = media_meta.width
+            duration = media_meta.duration
+            mime_type = media_meta.mime_type
+            type_str = media_meta.type
+            extension = media_meta.extension
+            md5 = media_meta.md5
         else:
             # No file metadata for collections
             file_size = None
@@ -661,7 +661,7 @@ class EntityService:
                         ThumbnailGenerator.delete(str(abs_file_path))
 
                 raise DuplicateFileError(
-                    f"Duplicate MD5 detected: {file_meta.md5 if file_meta else 'unknown'}"
+                    f"Duplicate MD5 detected: {media_meta.md5 if media_meta else 'unknown'}"
                 )
             except OperationalError as e:
                 self.db.rollback()
@@ -699,7 +699,7 @@ class EntityService:
         label: str | None,
         description: str | None,
         parent_id: int | None,
-        image: bytes | None,
+        media_file: bytes | None,
         filename: str = "file",
         user_id: str | None = None,
     ) -> tuple[EntitySchema, bool] | None:
@@ -712,7 +712,7 @@ class EntityService:
             label: Entity label
             description: Entity description
             parent_id: Parent entity ID
-            image: Image file bytes (optional - if None, only metadata is updated)
+            media_file: Media file bytes (optional - if None, only metadata is updated)
             filename: Original filename
             user_id: Optional user identifier from JWT (None in demo mode)
 
@@ -734,16 +734,16 @@ class EntityService:
                 + "is_collection is immutable after entity creation."
             )
 
-        # Validation: image should not be present if is_collection is True
-        if entity.is_collection and image:
-            raise ValueError("Image should not be provided when is_collection is True")
+        # Validation: media_file should not be present if is_collection is True
+        if entity.is_collection and media_file:
+            raise ValueError("Media file should not be provided when is_collection is True")
 
-        # Note: image is optional if is_collection is False (for PUT operations)
+        # Note: media_file is optional if is_collection is False (for PUT operations)
         # This allows updating metadata without changing the file
         file_path = None
-        file_meta = None
+        media_meta = None
         old_file_path = None
-        if image:
+        if media_file:
             old_file_path = entity.file_path
             # Validation: parent_id must follow hierarchy rules
             self._validate_parent_id(
@@ -753,10 +753,10 @@ class EntityService:
             )
 
             # Extract metadata from new file
-            file_meta = self.metadata_extractor.extract_metadata(image, filename)
+            media_meta = self.metadata_extractor.extract_metadata(media_file, filename)
 
             # Check for duplicate MD5 (excluding current entity)
-            duplicate = self._check_duplicate_md5(file_meta.md5, exclude_entity_id=entity_id)
+            duplicate = self._check_duplicate_md5(media_meta.md5, exclude_entity_id=entity_id)
             if duplicate:
                 # Raise error if this content already exists as a DIFFERENT entity
                 raise DuplicateFileError(
@@ -770,24 +770,24 @@ class EntityService:
             # ensures we don't duplicate *across* entities.
 
             # Save new file (convert Pydantic model to dict for storage)
-            file_path = self.file_storage.save_file(image, file_meta.model_dump(), filename)
+            file_path = self.file_storage.save_file(media_file, media_meta.model_dump(), filename)
             
             # Generate thumbnail for NEW file
             try:
                 abs_file_path = self.file_storage.get_absolute_path(file_path)
-                ThumbnailGenerator.generate(str(abs_file_path), file_meta.mime_type)
+                ThumbnailGenerator.generate(str(abs_file_path), media_meta.mime_type)
             except Exception as e:
                 logger.error(f"Thumbnail generation failed for updated file (non-critical): {e}")
 
             # Update file metadata from Pydantic model
-            entity.file_size = file_meta.file_size
-            entity.height = file_meta.height
-            entity.width = file_meta.width
-            entity.duration = file_meta.duration
-            entity.mime_type = file_meta.mime_type
-            entity.type = file_meta.type
-            entity.extension = file_meta.extension
-            entity.md5 = file_meta.md5
+            entity.file_size = media_meta.file_size
+            entity.height = media_meta.height
+            entity.width = media_meta.width
+            entity.duration = media_meta.duration
+            entity.mime_type = media_meta.mime_type
+            entity.type = media_meta.type
+            entity.extension = media_meta.extension
+            entity.md5 = media_meta.md5
             entity.file_path = file_path
 
         # Update entity with new metadata and client-provided fields
@@ -800,7 +800,7 @@ class EntityService:
         entity.updated_by = user_id
 
         # Preserve old path for cleanup ON SUCCESS
-        # If image was provided, old_file_path is set above (lines ~740 range in prev code), 
+        # If media_file was provided, old_file_path is set above 
         # but I need to make sure I capture it BEFORE updating entity.file_path
         # Wait, I already updated entity.file_path above.
         # Check logic:
@@ -808,14 +808,13 @@ class EntityService:
         # Line 741: if old_file_path: _ = self.file_storage.delete_file(old_file_path)
         # ^ This was the OLD logic (delete immediately).
         # We need to change that.
-        
+
         # CORRECT LOGIC:
-        # capture old_file_path at the beginning of "if image:" block? Yes.
-        
+        # capture old_file_path at the beginning of "if media_file:" block? Yes.
         # Oh, in the original code, old_file_path was captured at line 739.
         # But wait, my "TargetContent" block below starts from line 733.
         # So I need to structure the Replacement properly.
-        
+
         # Let's be careful. The original code DELETES the old file at line 741.
         # I must DELETE that line from the original code and move the deletion to AFTER commit.
 
@@ -842,7 +841,7 @@ class EntityService:
                 ThumbnailGenerator.delete(str(abs_file_path))
             
             raise DuplicateFileError(
-                f"Duplicate MD5 detected: {file_meta.md5 if file_meta else ''}"
+                f"Duplicate MD5 detected: {media_meta.md5 if media_meta else ''}"
             )
 
         return (self._entity_to_item(entity), False)  # is_duplicate=False

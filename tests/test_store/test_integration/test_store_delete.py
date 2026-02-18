@@ -30,7 +30,7 @@ class TestEntityDeletion:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test Entity"},
             )
         assert response.status_code == 201
@@ -70,7 +70,7 @@ class TestEntityDeletion:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test Entity"},
             )
         assert response.status_code == 201
@@ -156,7 +156,7 @@ class TestEntityDeletion:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Multi-Face Entity"},
             )
         assert response.status_code == 201
@@ -278,7 +278,7 @@ class TestEntityDeletion:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test Entity"},
             )
         assert response.status_code == 201
@@ -345,7 +345,7 @@ class TestEntityDeletion:
             with open(sample_image, "rb") as f:
                 response = client.post(
                     "/entities/",
-                    files={"image": (sample_image.name, f, "image/jpeg")},
+                    files={"media_file": (sample_image.name, f, "image/jpeg")},
                     data={"is_collection": "false", "label": "MQTT Test Entity"},
                 )
             assert response.status_code == 201
@@ -413,7 +413,7 @@ class TestEntityDeletion:
         with open(sample_image, "rb") as f:
             child_response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
                     "label": "Child Entity",
@@ -474,7 +474,7 @@ class TestEntityDeletion:
         with open(sample_image, "rb") as f:
             leaf_response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={
                     "is_collection": "false",
                     "label": "Leaf Entity",
@@ -521,7 +521,7 @@ class TestEntityDeletion:
         with open(sample_image, "rb") as f:
             response = client.post(
                 "/entities/",
-                files={"image": (sample_image.name, f, "image/jpeg")},
+                files={"media_file": (sample_image.name, f, "image/jpeg")},
                 data={"is_collection": "false", "label": "Test Entity"},
             )
         assert response.status_code == 201

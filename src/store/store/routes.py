@@ -184,7 +184,7 @@ async def create_entity(
     label: str | None = Form(None, title="Label"),
     description: str | None = Form(None, title="Description"),
     parent_id: int | None = Form(None, title="Parent Id"),
-    image: UploadFile | None = File(None, title="Image"),
+    media_file: UploadFile | None = File(None, title="Media File"),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
     broadcaster: MInsightBroadcaster | None = Depends(get_m_insight_broadcaster),
@@ -195,11 +195,12 @@ async def create_entity(
     user_id = user.id if user else None
 
     # Read file bytes and filename if provided
+
     file_bytes = None
     filename = "file"
-    if image:
-        file_bytes = await image.read()
-        filename = image.filename or "file"
+    if media_file:
+        file_bytes = await media_file.read()
+        filename = media_file.filename or "file"
 
     try:
         item, is_duplicate = service.create_entity(
@@ -207,7 +208,7 @@ async def create_entity(
             label=label,
             description=description,
             parent_id=parent_id,
-            image=file_bytes,
+            media_file=file_bytes,
             filename=filename,
             user_id=user_id
         )
@@ -290,7 +291,7 @@ async def put_entity(
     label: str = Form(..., title="Label"),
     description: str | None = Form(None, title="Description"),
     parent_id: int | None = Form(None, title="Parent Id"),
-    image: UploadFile | None = File(None, title="Image"),
+    media_file: UploadFile | None = File(None, title="Media File"),
     user: UserPayload | None = Depends(require_permission("media_store_write")),
     service: EntityService = Depends(get_entity_service),
     broadcaster: MInsightBroadcaster | None = Depends(get_m_insight_broadcaster),
@@ -303,9 +304,9 @@ async def put_entity(
     # Read file bytes and filename if provided
     file_bytes: bytes | None = None
     filename = "file"
-    if image:
-        file_bytes = await image.read()
-        filename = image.filename or "file"
+    if media_file:
+        file_bytes = await media_file.read()
+        filename = media_file.filename or "file"
 
     try:
         # Update entity (file is optional - None updates only metadata)
@@ -315,7 +316,7 @@ async def put_entity(
             label=label,
             description=description,
             parent_id=parent_id,
-            image=file_bytes,
+            media_file=file_bytes,
             filename=filename,
             user_id=user_id,
         )
@@ -325,14 +326,14 @@ async def put_entity(
         item, _ = result
 
         # CRITICAL: Clear retained MQTT status if we are updating with a new file (re-processing)
-        if broadcaster and image:
+        if broadcaster and media_file:
             status_topic = f"mInsight/{config.port}/entity_item_status/{item.id}"
             _ = broadcaster.clear_retained(status_topic)
             logger.debug(f"Cleared retained status for entity {item.id} on {status_topic}")
 
         # Broadcast MQTT event only if file was actually updated
         # Note: Broadcaster only emits if file was updated (item.md5 not None for media)
-        if broadcaster and item.md5 and image:
+        if broadcaster and item.md5 and media_file:
             topic = f"store/{config.port}/items"
             payload = {"id": item.id, "md5": item.md5, "timestamp": int(time.time() * 1000)}
             _ = broadcaster.publish_event(topic=topic, payload=json.dumps(payload))
