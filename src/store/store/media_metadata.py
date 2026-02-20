@@ -17,6 +17,7 @@ from cl_ml_tools.algorithms import (
     MediaType,
     MetadataExtractor,
     determine_mime,
+    get_extension_from_mime, # Added
     get_md5_hexdigest,
     sha512hash_image,
     sha512hash_video2,
@@ -120,20 +121,15 @@ class MediaMetadataExtractor:
         # Step 1: Determine MIME type and media type
         bytes_io = BytesIO(file_bytes)
         try:
-            media_type = determine_mime(bytes_io)
+            # This now does robust magic detection with fallback and returns (mime_str, media_type)
+            mime_type_str, media_type = determine_mime(bytes_io)
         except Exception as e:
             raise ValueError(f"Failed to determine MIME type: {e}") from e
 
-        # Get MIME type string using python-magic
-        mime = magic.Magic(mime=True)
-        mime_type_str = mime.from_buffer(file_bytes)
-        if not mime_type_str:
-            mime_type_str = "application/octet-stream"
-
-        # Step 2: Extract extension from MIME type
+        # Step 2: Extract extension from MIME type using consolidated logic
         try:
-            extension = self._determine_extension(mime_type_str, media_type)
-        except ValueError as e:
+            extension = get_extension_from_mime(mime_type_str, media_type)
+        except Exception as e:
             raise ValueError(f"Cannot determine extension: {e}") from e
 
         # Step 3: Set file size
@@ -250,72 +246,6 @@ class MediaMetadataExtractor:
             create_date=create_date_ms,
         )
 
-    def _determine_extension(self, mime_type: str, media_type: MediaType) -> str:
-        """Determine file extension from MIME type.
-
-        Args:
-            mime_type: MIME type string (e.g., "image/jpeg")
-            media_type: MediaType enum value
-
-        Returns:
-            File extension without dot (e.g., "jpg")
-
-        Raises:
-            ValueError: If extension cannot be determined
-        """
-        # Common MIME type to extension mappings
-        mime_to_ext: dict[str, str] = {
-            # Images
-            "image/jpeg": "jpg",
-            "image/png": "png",
-            "image/gif": "gif",
-            "image/webp": "webp",
-            "image/bmp": "bmp",
-            "image/tiff": "tiff",
-            "image/svg+xml": "svg",
-            "image/heic": "heic",
-            "image/heif": "heif",
-            # Videos
-            "video/mp4": "mp4",
-            "video/mpeg": "mpeg",
-            "video/quicktime": "mov",
-            "video/x-msvideo": "avi",
-            "video/x-matroska": "mkv",
-            "video/webm": "webm",
-            "video/3gpp": "3gp",
-            # Audio
-            "audio/mpeg": "mp3",
-            "audio/wav": "wav",
-            "audio/ogg": "ogg",
-            "audio/flac": "flac",
-            "audio/aac": "aac",
-            # Documents
-            "application/pdf": "pdf",
-            "text/plain": "txt",
-        }
-
-        if mime_type in mime_to_ext:
-            return mime_to_ext[mime_type]
-
-        # Try to extract from mime_type pattern (e.g., "image/jpeg" → "jpeg")
-        if "/" in mime_type:
-            subtype = mime_type.split("/")[1]
-            # Remove any parameters (e.g., "jpeg; charset=utf-8" → "jpeg")
-            subtype = subtype.split(";")[0].strip()
-            if subtype:
-                return subtype
-
-        # Fallback based on media type
-        if media_type == MediaType.IMAGE:
-            return "jpg"
-        elif media_type == MediaType.VIDEO:
-            return "mp4"
-        elif media_type == MediaType.AUDIO:
-            return "mp3"
-        elif media_type == MediaType.TEXT:
-            return "txt"
-        else:
-            return "bin"
 
     def _compute_hash(self, file_bytes: bytes, media_type: MediaType) -> str:
         """Compute hash based on media type.
