@@ -205,6 +205,7 @@ class JobCallbackHandler:
             entity_id: Image (Entity) ID
             job: Job response from MQTT callback (minimal data, needs full fetch)
         """
+        logger.info(f"[TRACE] handle_face_detection_complete called: entity_id={entity_id}, job_id={job.job_id}")
 
         try:
             # Phase 1: Download face images and create/update Face records
@@ -233,6 +234,7 @@ class JobCallbackHandler:
             try:
                 task_output = FaceDetectionOutput.model_validate(full_job.task_output)
                 faces_data = task_output.faces
+                logger.info(f"[TRACE] Job {job.job_id} has {len(faces_data)} faces, will save to entity_id={entity_id}")
             except ValidationError as e:
                 logger.error(f"Invalid task_output format for job {job.job_id}: {e}")
                 return
@@ -282,8 +284,9 @@ class JobCallbackHandler:
                 )
 
             # 3. Batch DB Transaction
+            logger.info(f"[TRACE] Saving {len(face_schemas)} faces to DB for entity_id={entity_id}, face_ids={[f.id for f in face_schemas]}")
             self.db.face.create_many(face_schemas, ignore_exception=True)
-            logger.info(f"Successfully saved {len(face_schemas)} faces for image {entity_id}")
+            logger.info(f"[TRACE] Successfully saved {len(face_schemas)} faces for entity_id={entity_id}")
 
             # Update intelligence_data before submitting next jobs (atomically)
             face_count = len(face_schemas)

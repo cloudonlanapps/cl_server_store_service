@@ -228,6 +228,8 @@ class MediaInsight:
     @timed
     async def _trigger_async_jobs(self, entity_version: EntityVersionSchema) -> None:
         """Trigger face detection, CLIP, and DINO embedding jobs."""
+        logger.info(f"[TRACE] _trigger_async_jobs called with entity_version.id={entity_version.id}")
+
         if not self._initialized or not self.job_service or not self.callback_handler:
             await self.initialize()
             if not self.job_service or not self.callback_handler:
@@ -239,36 +241,72 @@ class MediaInsight:
             logger.error(f"Entity {entity_version.id} not found for job trigger")
             return
 
-        # Define callbacks
-        async def face_detection_callback(job: JobResponse) -> None:
+        # IMPORTANT: Capture entity_id value immediately to avoid closure bug.
+        # If we use `entity.id` directly in callbacks, all callbacks will reference
+        # the same `entity` variable which may have been reassigned by the time
+        # the async callback executes (when processing multiple entities in a loop).
+        entity_id = entity.id
+        entity_md5 = entity.md5
+        entity_file_path = entity.file_path
+        logger.info(
+            f"[TRACE] Captured for callbacks: entity_id={entity_id}, "
+            f"md5={entity_md5}, file_path={entity_file_path}"
+        )
+
+        # Define callbacks with captured entity_id value
+        # Use default argument to force capture by value (Python closure trick)
+        async def face_detection_callback(
+            job: JobResponse,
+            _captured_entity_id: int = entity_id,
+            _captured_md5: str = entity_md5,
+            _captured_file: str = entity_file_path,
+        ) -> None:
+            logger.info(
+                f"[TRACE] face_detection_callback EXECUTING:\n"
+                f"  captured_entity_id={_captured_entity_id}\n"
+                f"  captured_md5={_captured_md5}\n"
+                f"  captured_file={_captured_file}\n"
+                f"  job_id={job.job_id}, status={job.status}"
+            )
             if job.status == "completed" and self.callback_handler:
-                await self.callback_handler.handle_face_detection_complete(entity.id, job)
+                logger.info(f"[TRACE] Calling handle_face_detection_complete with entity_id={_captured_entity_id}")
+                await self.callback_handler.handle_face_detection_complete(_captured_entity_id, job)
             if self.job_service:
                 self.job_service.update_job_status(
-                    entity.id, job.job_id, job.status, job.error_message
+                    _captured_entity_id, job.job_id, job.status, job.error_message
                 )
 
-        async def clip_embedding_callback(job: JobResponse) -> None:
+        async def clip_embedding_callback(
+            job: JobResponse,
+            _captured_entity_id: int = entity_id,
+        ) -> None:
+            logger.info(f"[TRACE] clip_embedding_callback EXECUTING: captured_entity_id={_captured_entity_id}, job_id={job.job_id}, status={job.status}")
             if job.status == "completed" and self.callback_handler:
-                await self.callback_handler.handle_clip_embedding_complete(entity.id, job)
+                await self.callback_handler.handle_clip_embedding_complete(_captured_entity_id, job)
             if self.job_service:
                 self.job_service.update_job_status(
-                    entity.id, job.job_id, job.status, job.error_message
+                    _captured_entity_id, job.job_id, job.status, job.error_message
                 )
 
-        async def dino_embedding_callback(job: JobResponse) -> None:
+        async def dino_embedding_callback(
+            job: JobResponse,
+            _captured_entity_id: int = entity_id,
+        ) -> None:
+            logger.info(f"[TRACE] dino_embedding_callback EXECUTING: captured_entity_id={_captured_entity_id}, job_id={job.job_id}, status={job.status}")
             if job.status == "completed" and self.callback_handler:
-                await self.callback_handler.handle_dino_embedding_complete(entity.id, job)
+                await self.callback_handler.handle_dino_embedding_complete(_captured_entity_id, job)
             if self.job_service:
                 self.job_service.update_job_status(
-                    entity.id, job.job_id, job.status, job.error_message
+                    _captured_entity_id, job.job_id, job.status, job.error_message
                 )
 
         # Submit jobs
+        logger.info(f"[TRACE] Submitting face_detection job for entity_id={entity_id}")
         face_job_id = await self.job_service.submit_face_detection(
             entity=entity,
             on_complete_callback=face_detection_callback,
         )
+        logger.info(f"[TRACE] face_detection job submitted: job_id={face_job_id} for entity_id={entity_id}")
 
         clip_job_id = await self.job_service.submit_clip_embedding(
             entity=entity,
@@ -281,7 +319,7 @@ class MediaInsight:
         )
 
         logger.info(
-            f"Submitted jobs for entity {entity.id}: "
+            f"[TRACE] All jobs submitted for entity_id={entity_id}: "
             + f"face_detection={face_job_id}, clip_embedding={clip_job_id}, dino_embedding={dino_job_id}"
         )
 
@@ -376,7 +414,12 @@ class MediaInsight:
 
         # Process each image
         processed_count = 0
-        for entity_version in entity_deltas.values():
+        logger.info(f"[TRACE] Starting to process {len(entity_deltas)} entities")
+        for idx, entity_version in enumerate(entity_deltas.values()):
+            logger.info(
+                f"[TRACE] Processing entity {idx+1}/{len(entity_deltas)}: "
+                f"id={entity_version.id}, md5={entity_version.md5}, file_path={entity_version.file_path}"
+            )
             if await self.process(entity_version):
                 processed_count += 1
 

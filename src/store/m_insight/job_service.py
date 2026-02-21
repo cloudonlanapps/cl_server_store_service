@@ -41,12 +41,14 @@ def make_once_only_callback(callback: OnJobResponseCallback) -> tuple[OnJobRespo
 
     async def wrapper(job: JobResponse) -> None:
         nonlocal executed
+        logger.info(f"[TRACE] make_once_only_callback wrapper invoked: job_id={job.job_id}, status={job.status}")
         async with lock:
             if executed:
                 logger.debug(f"Callback for job {job.job_id} already executed, skipping duplicate call")
                 return
             executed = True
         # Execute outside the lock to avoid holding it during callback execution
+        logger.info(f"[TRACE] Executing callback for job_id={job.job_id}")
         await callback(job)
 
     return wrapper, lock
@@ -289,12 +291,16 @@ class JobSubmissionService:
 
     def _register_job(self, entity: EntitySchema | EntityVersionSchema, job_id: str, task_type: str) -> None:
         """Helper to register an active job in the denormalized intelligence_data."""
+        logger.info(f"[TRACE] _register_job: entity_id={entity.id}, job_id={job_id}, task_type={task_type}")
         now = self._now_timestamp()
 
         # Check if entity exists first
         db_entity = self.db.entity.get(entity.id)
         if not db_entity:
+            logger.warning(f"[TRACE] _register_job: entity {entity.id} not found in DB!")
             return
+
+        logger.info(f"[TRACE] _register_job: DB entity found - id={db_entity.id}, md5={db_entity.md5}, file_path={db_entity.file_path}")
 
         # If no intelligence_data exists, create it first
         if not self.db.intelligence.get_intelligence_data(entity.id):
@@ -303,6 +309,7 @@ class JobSubmissionService:
                 active_processing_md5=db_entity.md5,
                 overall_status="processing"
             )
+            logger.info(f"[TRACE] _register_job: Creating initial intelligence_data for entity_id={entity.id}")
             _ = self.db.intelligence.update_intelligence_data(entity.id, initial_data)
 
         # Now atomically update to add the job
@@ -491,11 +498,13 @@ class JobSubmissionService:
         """
 
         entity_id = entity.id
+        logger.info(f"[TRACE] submit_face_detection called: entity_id={entity_id}, file_path={entity.file_path}")
         lock = self._get_entity_lock(entity_id)
 
         with lock:
             skip_id = self._should_skip_submission_locked(entity, "face_detection")
             if skip_id:
+                logger.info(f"[TRACE] Skipping face_detection for entity_id={entity_id}, already has job={skip_id}")
                 return skip_id
 
             try:
@@ -508,6 +517,7 @@ class JobSubmissionService:
                     logger.warning(f"File not found for entity {entity_id}: {file_path}")
                     return None
 
+                logger.info(f"[TRACE] Submitting face_detection to compute for entity_id={entity_id}, file={file_path}")
                 wrapped_callback, _ = make_once_only_callback(on_complete_callback)
 
                 job_response = await self.compute_client.face_detection.detect(
@@ -516,8 +526,9 @@ class JobSubmissionService:
                     on_complete=wrapped_callback,
                 )
 
+                logger.info(f"[TRACE] face_detection job created: job_id={job_response.job_id} -> entity_id={entity_id}")
                 self._register_job(entity, job_response.job_id, "face_detection")
-                logger.info(f"Submitted face_detection job {job_response.job_id} for entity {entity_id}")
+                logger.info(f"[TRACE] Registered job mapping: job_id={job_response.job_id} -> entity_id={entity_id}")
 
                 self.broadcast_entity_status(entity_id)
 
