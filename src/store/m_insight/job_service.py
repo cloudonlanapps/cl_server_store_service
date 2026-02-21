@@ -531,16 +531,6 @@ class JobSubmissionService:
                 logger.info(f"[TRACE] Registered job mapping: job_id={job_response.job_id} -> entity_id={entity_id}")
 
                 self.broadcast_entity_status(entity_id)
-
-                # RACE CONDITION FIX: Check if job already completed (for very fast jobs)
-                try:
-                    await asyncio.sleep(0.05)
-                    full_job = await self.compute_client.get_job(job_response.job_id)
-                    if full_job and full_job.status in ("completed", "failed"):
-                        await wrapped_callback(full_job)
-                except Exception:
-                    pass
-
                 return job_response.job_id
 
             except Exception as e:
@@ -633,16 +623,6 @@ class JobSubmissionService:
                 logger.info(f"Submitted clip_embedding job {job_response.job_id} for entity {entity_id}")
 
                 self.broadcast_entity_status(entity_id)
-
-                # RACE CONDITION FIX
-                try:
-                    await asyncio.sleep(0.05)
-                    full_job = await self.compute_client.get_job(job_response.job_id)
-                    if full_job and full_job.status in ("completed", "failed"):
-                        await wrapped_callback(full_job)
-                except Exception:
-                    pass
-
                 return job_response.job_id
             except Exception as e:
                 logger.error(f"Failed to submit clip_embedding job for entity {entity_id}: {e}")
@@ -681,16 +661,6 @@ class JobSubmissionService:
                 logger.info(f"Submitted dino_embedding job {job_response.job_id} for entity {entity_id}")
 
                 self.broadcast_entity_status(entity_id)
-
-                # RACE CONDITION FIX
-                try:
-                    await asyncio.sleep(0.05)
-                    full_job = await self.compute_client.get_job(job_response.job_id)
-                    if full_job and full_job.status in ("completed", "failed"):
-                        await wrapped_callback(full_job)
-                except Exception:
-                    pass
-
                 return job_response.job_id
             except Exception as e:
                 logger.error(f"Failed to submit dino_embedding job for entity {entity_id}: {e}")
@@ -734,18 +704,6 @@ class JobSubmissionService:
             logger.info(f"Submitted face_embedding job {job_response.job_id} for face {face.id}")
 
             self.broadcast_entity_status(entity.id)
-
-            # RACE CONDITION FIX: Check if job already completed (for very fast jobs)
-            # to avoid missing MQTT callback
-            try:
-                await asyncio.sleep(0.05)  # Small delay to allow MQTT to propagate
-                full_job = await self.compute_client.get_job(job_response.job_id)
-                if full_job and full_job.status in ("completed", "failed"):
-                    logger.debug(f"Job {job_response.job_id} already completed, invoking callback manually")
-                    await wrapped_callback(full_job)  # Use wrapped callback
-            except Exception as e:
-                logger.warning(f"Failed to check job status for {job_response.job_id}: {e}")
-
             return job_response.job_id
         except Exception as e:
             logger.error(f"Failed to submit face_embedding job for face {face.id}: {e}")

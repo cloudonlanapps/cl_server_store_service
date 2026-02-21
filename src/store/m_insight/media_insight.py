@@ -220,10 +220,12 @@ class MediaInsight:
         """
         entity_id = entity_version.id
         try:
+            logger.info(f"[TRACE] _enqueue_image: calling _trigger_async_jobs for entity_id={entity_id}")
             await self._trigger_async_jobs(entity_version)
+            logger.info(f"[TRACE] _enqueue_image: _trigger_async_jobs returned for entity_id={entity_id}")
             logger.info(f"Image intelligence jobs triggered for {entity_id}")
         except Exception as e:
-            logger.error(f"Failed to trigger jobs for image {entity_id}: {e}")
+            logger.error(f"Failed to trigger jobs for image {entity_id}: {e}", exc_info=True)
 
     @timed
     async def _trigger_async_jobs(self, entity_version: EntityVersionSchema) -> None:
@@ -308,15 +310,19 @@ class MediaInsight:
         )
         logger.info(f"[TRACE] face_detection job submitted: job_id={face_job_id} for entity_id={entity_id}")
 
+        logger.info(f"[TRACE] Submitting clip_embedding job for entity_id={entity_id}")
         clip_job_id = await self.job_service.submit_clip_embedding(
             entity=entity,
             on_complete_callback=clip_embedding_callback,
         )
+        logger.info(f"[TRACE] clip_embedding job submitted: job_id={clip_job_id} for entity_id={entity_id}")
 
+        logger.info(f"[TRACE] Submitting dino_embedding job for entity_id={entity_id}")
         dino_job_id = await self.job_service.submit_dino_embedding(
             entity=entity,
             on_complete_callback=dino_embedding_callback,
         )
+        logger.info(f"[TRACE] dino_embedding job submitted: job_id={dino_job_id} for entity_id={entity_id}")
 
         logger.info(
             f"[TRACE] All jobs submitted for entity_id={entity_id}: "
@@ -324,7 +330,9 @@ class MediaInsight:
         )
 
         # Trigger initial status update
+        logger.info(f"[TRACE] Broadcasting entity status for entity_id={entity_id}")
         self.job_service.broadcast_entity_status(entity.id)
+        logger.info(f"[TRACE] _trigger_async_jobs completed for entity_id={entity_id}")
 
     def _get_last_version(self) -> int:
         """Get last processed version from sync state."""
@@ -422,10 +430,13 @@ class MediaInsight:
             )
             if await self.process(entity_version):
                 processed_count += 1
+            logger.info(f"[TRACE] Finished processing entity {idx+1}/{len(entity_deltas)}, id={entity_version.id}")
+
+        logger.info(f"[TRACE] Entity processing loop completed, processed_count={processed_count}")
 
         # Atomic write: Update last version
         self._update_last_version(max_transaction_id)
-        logger.debug(f"Advanced version to {max_transaction_id}")
+        logger.info(f"[TRACE] Advanced version to {max_transaction_id}")
 
         if self.broadcaster:
             self.broadcaster.publish_end(processed_count=processed_count)
